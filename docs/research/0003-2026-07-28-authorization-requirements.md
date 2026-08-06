@@ -4,6 +4,8 @@
 
 **Date:** 2026-08-06
 
+**Related:** [`0004-mcp-client-landscape.md`](0004-mcp-client-landscape.md) and [ADR-0001](../adr/0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md) cover the *client* side of the same revision. This document answers "can an authorization server do it"; those answer "can anything talk to us." Read together — the client findings materially qualify the demo story here.
+
 **Method note:** The `2026-07-28` revision postdates the author's training data. Everything below was fetched live on 2026-08-06. Where a source could not be fetched, or where a quote came through a summarising fetch rather than raw page text, it is flagged in [Confidence notes](#confidence-notes).
 
 ---
@@ -61,14 +63,17 @@ RFC 7591, RFC 6749/6750, RFC 9207, RFC 9700 and OAuth 2.1 `draft-ietf-oauth-v2-1
 
 ## Verdict — does an off-the-shelf IdP exist?
 
-**Yes. Several, and the end-to-end path with a real client is already proven in production.** A self-authored authorization server is **not** forced by the client-identity mechanism.
+**Yes — several authorization servers ship CIMD today.** A self-authored authorization server is **not** forced by the client-identity mechanism.
+
+> **Scope correction, added after [ADR-0001](../adr/0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md) landed.** An earlier draft of this section claimed the end-to-end path was "already proven in production." That overstated the evidence by conflating two independent axes: **whether a client speaks CIMD** and **whether it can talk to a `2026-07-28` server at all**. They are not the same, and most clients that do the first fail the second. Nothing in this document was executed against a live server; the same caveat applies to [`0004-mcp-client-landscape.md`](0004-mcp-client-landscape.md). See §"Client-side reality check" below.
 
 The short version:
 
 - CIMD is **SHOULD**, not MUST, for both authorization servers and MCP clients. DCR is **MAY** and is formally *deprecated*. So even an AS with no CIMD at all is spec-conformant — the *hard* MUSTs land on the resource server (RFC 9728, audience validation), not on client identity.
 - At least six authorization servers ship CIMD today: **Authlete** (since 3.0.22, implementation completed Nov 2025), **Stytch** (Oct 2025, beta), **WorkOS AuthKit** (Dec 2025), **Descope** (GA, Jan 2026), **Scalekit**, and **Keycloak** behind the `--features=cimd` flag. oauth.net's roster lists Auth0 as "coming soon" while Auth0's own docs already describe a `Client ID Metadata Document Registration` tenant toggle — treat Auth0 as in-flight, not settled.
 - **Keycloak is the free, self-hostable option that works.** Issue [#45106](https://github.com/keycloak/keycloak/issues/45106) ("Experimental Support for OAuth Client ID Metadata Document") closed 2026-06-23; the one known blocker for real clients — [#49730](https://github.com/keycloak/keycloak/issues/49730), where the discovery document advertised `client_id_metadata_document_supported: true` but omitted `"none"` from `token_endpoint_auth_methods_supported`, which made Claude fall back to DCR — closed 2026-06-16 and shipped in **26.7.0 on 2026-07-09**. Keycloak ≥ 26.7.0 with `--features=cimd` is the concrete recommendation.
-- **The real client already speaks it.** Anthropic's connector docs list `oauth_cimd` as "Supported out of the box" across Claude.ai, Desktop, mobile, Claude Code and Cowork. Claude Code publishes its own CIMD at `https://claude.ai/oauth/claude-code-client-metadata`. oauth.net additionally lists VS Code, MCPJam and ChatGPT as CIMD clients.
+- **A real client speaks CIMD — but read the next bullet before planning a demo around it.** Anthropic's connector docs list `oauth_cimd` as "Supported out of the box" across Claude.ai, Desktop, mobile, Claude Code and Cowork, and Claude Code publishes its own CIMD at `https://claude.ai/oauth/claude-code-client-metadata`. oauth.net additionally lists VS Code, MCPJam and ChatGPT as CIMD clients.
+- **Client-side reality check (from [ADR-0001](../adr/0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md), Accepted).** CIMD support is an *authorization* property; running a `2026-07-28` server is a *transport* property. Almost every client in the list above has the first and lacks the second. Claude Desktop, VS Code, Cursor, Windsurf, Zed, JetBrains, `mcp-remote` and every `mcp-cli` are **legacy-era** and fail against a modern-only server — `initialize` returns `400`, and per the spec's own compatibility matrix legacy clients have no fall-forward mechanism. Exactly two off-the-shelf tools clear the bar, **both behind a non-default setting**: **MCP Inspector 2.1.0** (Server Settings → Protocol Era → **Modern**) and **Claude Code 2.1.223** (undocumented `MCP_PROTOCOL_NEGOTIATION=auto`; HTTP negotiation is otherwise gated off by the server-controlled flag `tengu_mcp_protocol_negotiation_http`, default `false`). So the IdP verdict stands, but the *client* half of any end-to-end demo needs that env var set — it is not an out-of-the-box path.
 - **The one hard gate to get right:** Claude selects CIMD *only* when AS metadata advertises **both** `"client_id_metadata_document_supported": true` **and** `"none"` in `token_endpoint_auth_methods_supported`. Miss either and Claude silently falls back to DCR.
 
 **Where an off-the-shelf IdP does *not* help:** Microsoft Entra ID supports neither CIMD nor DCR (pre-registration only, and community analysis reports this as a deliberate SSRF/attestation posture, not an oversight). Okta has DCR but no CIMD. **Ory Hydra has an open, unimplemented feature request** ([#4061](https://github.com/ory/hydra/issues/4061), opened 2026-01-17, still open 2026-07-30). If the exhibit were pinned to Entra, Okta or Hydra, CIMD would have to be proxied or self-authored.
@@ -172,6 +177,8 @@ Draft `-01` (2026-03-02) added: mandated HTTP 200 responses when fetching metada
 > Deprecate the OAuth 2.0 Dynamic Client Registration Protocol ([RFC7591]) as a client registration mechanism in favor of [Client ID Metadata Documents] ([PR #2858](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2858)). It remains available for backwards compatibility with authorization servers that do not support Client ID Metadata Documents.
 
 Under the [feature lifecycle policy](https://modelcontextprotocol.io/community/feature-lifecycle), a Deprecated feature remains in the spec for **at least twelve months** (or ninety days under expedited removal) before becoming eligible for removal. So DCR is safe through at least 2027-07-28.
+
+**Do not read "deprecated" as "drop it."** [ADR-0001](../adr/0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md) reaches the opposite practical conclusion from the same facts and it is the one to follow: **keep `registration_endpoint`**, because CIMD-only locks out most of the ecosystem — including MCP Inspector, which does DCR out of the box but needs an operator-hosted metadata URL before it will do CIMD. Deprecation here is a direction of travel for the spec, not a deployment instruction for this server.
 
 One durable advantage the spec calls out for CIMD:
 
@@ -480,6 +487,8 @@ Full diff link the spec itself provides: <https://github.com/modelcontextprotoco
 
 ### Authorization-specific delta
 
+Worth stating explicitly, because it is easy to misread this section: **CIMD was not introduced by `2026-07-28`.** It arrived in `2025-11-25`; this revision only *deprecated DCR* in its favour ([ADR-0001](../adr/0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md)). A client already doing CIMD against a `2025-11-25` server therefore needs no authorization-side change — its breakage is entirely in the transport rows above.
+
 | Change | SEP/PR | Direction |
 | --- | --- | --- |
 | RFC 9207 `iss`: AS **SHOULD** emit; clients **MUST** validate a present `iss` before redeeming | [SEP-2468](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2468) | New MUST for clients |
@@ -521,7 +530,7 @@ For a compatibility section: dual-era support means implementing *both* the hand
 
 **The asymmetry that matters for this project.** CIMD documents are hosted by the **client**, not the resource server, and the *authorization server* is what dereferences them. `redirect_uris` inside a CIMD document are separately allowed to be loopback — the spec's own example lists `http://127.0.0.1:3000/callback` and `http://localhost:3000/callback`, and OAuth 2.1 permits "either `localhost` or use HTTPS" for redirect URIs. So:
 
-- If your MCP client is **Claude Code**, the CIMD is already published by Anthropic at `https://claude.ai/oauth/claude-code-client-metadata`, and it declares `http://localhost/callback` and `http://127.0.0.1/callback`. You publish nothing.
+- If your MCP client is **Claude Code**, the CIMD is already published by Anthropic at `https://claude.ai/oauth/claude-code-client-metadata`, and it declares `http://localhost/callback` and `http://127.0.0.1/callback`. You publish nothing — **but you must launch it with `MCP_PROTOCOL_NEGOTIATION=auto`**, or its modern-era client never engages and the connection fails before authorization is ever reached ([ADR-0001](../adr/0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md)).
 - Your **authorization server** needs *outbound* HTTPS to `claude.ai` — that works from a laptop behind NAT.
 - Your **MCP server** needs to be *inbound*-reachable only if you use a hosted Claude surface (Claude.ai web/Desktop/mobile), which reaches you from `160.79.104.0/21`. Claude Code running locally can hit `http://localhost:PORT/mcp` directly.
 
