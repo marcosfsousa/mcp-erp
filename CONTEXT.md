@@ -2,6 +2,17 @@
 
 A portfolio exhibit: a Model Context Protocol server exposing a mock enterprise resource planning system, with OAuth 2.0 as a first-class concern. Two vocabularies meet here — the protocol and authorization language the exhibit exists to demonstrate, and the purchase-to-pay language it demonstrates them on. Keep them distinct; conflating them is how the exhibit's point gets lost.
 
+## How this binds
+
+Every entry's _Avoid_ line is a hard rule in **binding text**: the write-up,
+this file, ADRs, and anything that ships — code identifiers, tool and field
+names, scope strings, reason values.
+
+In **working text** — research notes, issue and pull request bodies, commit
+messages, code comments — the _Avoid_ line is advice. Abbreviate freely after
+one spelled-out use. The vocabulary exists so a technical reader meets each
+idea named the same way every time. A tracker has no such reader.
+
 ## Language
 
 ### The exhibit
@@ -30,14 +41,14 @@ _Avoid_: backwards-compatible server
 
 **Authorization server**:
 The party that authenticates a person and issues access tokens.
-_Avoid_: identity provider, IdP, auth server, token service
+_Avoid_: identity provider, IdP, AS, auth server, token service
 
 **Resource server**:
 This server in its token-validating capacity — the party that must reject tokens not audience-bound to it.
 _Avoid_: API server, backend
 
 **Client Identity Metadata Document**:
-A document hosted by a client that identifies it to an authorization server, standing in place of dynamic registration. Always spell it out; never abbreviate to CIMD in prose.
+A document hosted by a client that identifies it to an authorization server, standing in place of dynamic registration.
 _Avoid_: CIMD, client metadata
 
 **Conformance client**:
@@ -71,7 +82,7 @@ Restricting which records a Principal may see to those in their own cost centre.
 _Avoid_: filtering, tenant isolation, multi-tenancy
 
 **Segregation of duties**:
-The requirement that two steps which check each other be performed by different people. Always spell it out on first use in any document.
+The requirement that two steps which check each other be performed by different people.
 _Avoid_: SoD, four-eyes principle, dual control (a distinct and rejected mechanism)
 
 **Approval threshold**:
@@ -115,7 +126,7 @@ _Avoid_: master data, reference data
 ### Purchase-to-pay
 
 **Purchase-to-pay**:
-The domain this exhibit models: raising a request to buy something, approving it, and recording the resulting bill. Always spell it out.
+The domain this exhibit models: raising a request to buy something, approving it, and recording the resulting bill.
 _Avoid_: P2P, procure-to-pay, procurement
 
 **Chain**:
