@@ -1,0 +1,8 @@
+# Machine-specific Claude Code settings. The shared ones — settings.json,
+# skills/, agents/, commands/ — stay tracked deliberately, so this ignores
+# named paths rather than the whole .claude/ directory.
+.claude/settings.local.json
+
+# Claude Code scratch worktrees. Each is an embedded git repository, which
+# `git add -A` will otherwise stage as a gitlink.
+.claude/worktrees/
