@@ -4,6 +4,7 @@
 - **Date:** 2026-08-11
 - **Ticket:** [#7 Choose the authorization server](https://github.com/marcosfsousa/mcp-erp/issues/7)
 - **Evidence:** [ADR-0002](0002-refusal-shape-follows-the-remedy.md) (three denial classes), [ADR-0003](0003-the-schema-is-the-policy-functions-argument-list.md) (the cast, the `sub` join), [ADR-0004](0004-layer-2-is-a-portable-pattern-layer-3-is-ejectable.md), [ADR-0005](0005-the-authorization-server-is-a-dependency-not-a-deliverable.md); RFC 9700 §4.14.2; map constraints #3, #4, #5, #8, #10; live verification against Keycloak 26.7.1, 2026-08-11
+- **Amended:** 2026-08-11 — additive, by [#8](https://github.com/marcosfsousa/mcp-erp/issues/8). This ADR put Keycloak behind a Dockerfile without saying how its version is held still, and `--features=cimd` is a preview flag. See *The base image is pinned by digest*. No decision here is changed.
 
 ## Question
 
@@ -38,6 +39,16 @@ The accepted cost is an asset: an empty database means **fresh signing keys on e
 ### How it runs, and where the file lives
 
 Keycloak runs in **production mode from a pre-built image**: a Dockerfile runs `kc.sh build --features=cimd --db=dev-mem`, and the container runs `start --optimized --import-realm`. This is forced more than chosen — the metadata-document feature is a **build-time** option, so either a Dockerfile pays that cost once or every boot, including every continuous-integration run, pays it. Once the Dockerfile exists, production mode costs three more words.
+
+### The base image is pinned by digest
+
+*Amended 2026-08-11 by [#8](https://github.com/marcosfsousa/mcp-erp/issues/8).*
+
+The Dockerfile's `FROM` names an **exact tag and its digest** — `quay.io/keycloak/keycloak:26.7.1@sha256:…` — and moves only in a pull request that does nothing else.
+
+`--features=cimd` is a **preview** flag. Preview features carry no compatibility guarantee and move between minor versions, which is the whole of the risk: a floating tag turns that into a suite going red one morning for a reason nothing in the repository changed. Pinned, a regression can only arrive inside the pull request that bumped the version, which is where it should be met and where a blocking check is doing its job rather than being a liability.
+
+This is the reason [ADR-0008](0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md) could accept a merge-gating job that depends on this container at all. The general rule outgrew both documents and became a standing map constraint, covering Postgres, the Python runtime and every future image on the same terms.
 
 The realm file is **baked into the image and bind-mounted over it in Compose**, from the same committed path. The mount wins locally, so editing the file and restarting shows the change immediately — which is what makes the pure-function claim something a reader can *try*. The baked copy keeps the image runnable on its own, so #10 stays free to say yes to Cloud Run without reopening this. The two cannot drift: they are the same file in the repository.
 
