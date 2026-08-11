@@ -4,6 +4,7 @@
 - **Date:** 2026-08-11
 - **Ticket:** [#7 Choose the authorization server](https://github.com/marcosfsousa/mcp-erp/issues/7)
 - **Evidence:** [`docs/research/0003-2026-07-28-authorization-requirements.md`](../research/0003-2026-07-28-authorization-requirements.md) (fifteen-clause list, §2.2 path insertion, §2.4 challenge parameters), [`docs/research/0004-mcp-client-landscape.md`](../research/0004-mcp-client-landscape.md); RFC 9728 §3.1, RFC 6750 §3, RFC 9700 §4.14.2; [ADR-0002](0002-refusal-shape-follows-the-remedy.md), [ADR-0005](0005-the-authorization-server-is-a-dependency-not-a-deliverable.md)
+- **Amended:** 2026-08-11 — substantive, by [#8](https://github.com/marcosfsousa/mcp-erp/issues/8). The chain below is **not uniform across both protocol eras**, and one refinement passed to #12 is void. See *The order describes the modern leg* and *Input to other tickets*. No decision here is reversed.
 
 ## Question
 
@@ -107,6 +108,16 @@ The specification says *"MCP servers **MUST** validate access tokens before proc
 
 **Taken naively that is an authentication bypass.** Send `Mcp-Method: server/discover` with `tools/call` in the body; if the exemption is granted on the header and header/body consistency is checked afterwards, the token check never runs on a tool call. The fix is ordering rather than a special case: prove header and body agree **first**, and the attack becomes structurally impossible rather than defended against. We therefore read the `MUST` as *"do not act on the request"*, not *"do not parse it"* — and parsing is unavoidable regardless, since `-32020` is itself a mandated response to an unauthenticated caller.
 
+### The order describes the modern leg
+
+*Amended 2026-08-11 by [#8](https://github.com/marcosfsousa/mcp-erp/issues/8).*
+
+This ADR was written against a modern-only server. [ADR-0008](0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md) chose a substrate that serves **both protocol eras from one endpoint**, routing on `MCP-Protocol-Version` before any handler is reached, with no way to disable an era. The chain above is therefore the **modern leg's** chain, and stating it as though it held everywhere would be the more comfortable description rather than the true one.
+
+A legacy-era request carries none of the headers steps 2 and 3 read — no `MCP-Protocol-Version`, no `Mcp-Method`, no `Mcp-Name`. **Step 2 is a structural no-op on that leg**, and step 3 has nothing to key on. What carries the legacy leg is steps 4, 5 and 6: token, scope, domain. The two legs converge at token validation, not at the front door.
+
+Nothing above is reversed. The ordering argument still holds exactly where the exemption exists, which is the modern leg — the exemption is what step 2 was protecting, and the leg without the exemption does not need the protection. [ADR-0009](0009-not-built-is-not-unreachable.md) owns the consequence, and carries the three assertions that establish whether token validation genuinely spans both legs, which cannot be settled from documentation.
+
 ### `Origin`: absent passes, present must prove itself
 
 A browser attaches `Origin` to cross-origin requests automatically and a page cannot forge it. Non-browser clients send none. The rebinding threat is specifically a malicious page in a victim's browser reaching a server on their machine — the case that *does* carry the header.
@@ -144,6 +155,6 @@ So: absent passes; present is checked against an allow-list that **ships empty**
 
 - **#9 (attack suite)** gains `auth_bypass_via_method_header_mismatch` — the ordering hazard above, which is worth a scenario whichever order had been chosen.
 - **#11 (scope granularity)** owns `scopes_supported`, which the metadata document publishes and must not misrepresent.
-- **#12 (module boundaries)** inherits the pipeline as a seam, and one refinement: a legacy client's `initialize` carries none of the required headers, so under this order it receives `400` + `-32020` rather than the more informative `-32022` with a supported-version list. That is a protocol-layer improvement, not an authorization one.
+- **#12 (module boundaries)** inherits the pipeline as a seam. ~~One refinement: a legacy client's `initialize` carries none of the required headers, so under this order it receives `400` + `-32020` rather than the more informative `-32022` with a supported-version list.~~ **Void, 2026-08-11 ([#8](https://github.com/marcosfsousa/mcp-erp/issues/8)):** era routing precedes this chain entirely, so a legacy `initialize` reaches the legacy transport and never arrives at step 2. The observation was correct for the modern-only server it was written against, and describes a request path that no longer exists.
 
 **Not contradicted:** ADR-0001 (era detection stays reachable), ADR-0004 (`server/discover`'s public face is domain-free by construction).
