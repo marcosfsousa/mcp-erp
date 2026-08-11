@@ -1,6 +1,6 @@
 # ADR-0004: Layer 2 is a portable pattern; layer 3 is ejectable
 
-- **Status:** Proposed — to be decided on the pull request that introduces it
+- **Status:** Accepted
 - **Date:** 2026-08-06
 - **Ticket:** none. A standing constraint, deliberately not raised through the map, so it is argued on its own merits rather than absorbed as a settled premise.
 - **Evidence:** [ADR-0001](0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md), [ADR-0002](0002-refusal-shape-follows-the-remedy.md), [ADR-0003](0003-the-schema-is-the-policy-functions-argument-list.md); map constraints #2, #3, #4, #6
@@ -17,7 +17,7 @@ Should the design *require* that layer 2 survives as a portable pattern and laye
 
 Nothing decided so far forbids either property. Nothing enforces them either, and #12 as currently scoped could produce a defensible module layout that satisfies its own brief while failing this one.
 
-## Decision (proposed)
+## Decision
 
 Adopt both as standing constraints, and hand #12 the acceptance criteria below rather than leaving it to infer them.
 
