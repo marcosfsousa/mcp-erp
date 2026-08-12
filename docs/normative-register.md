@@ -1,6 +1,8 @@
-# Specification deviations
+# Normative statement register
 
-Every deliberate departure from — or non-obvious reading of — a normative statement (`MUST`, `MUST NOT`, `SHOULD`, `SHOULD NOT`) in a specification or RFC this exhibit claims to follow. One row each.
+Every normative statement — `MUST`, `MUST NOT`, `SHOULD`, `SHOULD NOT` — in a specification or RFC this exhibit claims to follow and **does not simply follow**: each deliberate departure, and each non-obvious reading. One row per statement.
+
+Statements we follow plainly are not listed. They are proven instead, in [`attack-suite/scenarios.yaml`](attack-suite/scenarios.yaml), which carries its own citation and normative strength per row.
 
 **Two row types, and they are not the same thing.** A **deviation** does something the statement forbids or omits something it asks for. An **interpretation** follows the statement, under a reading that is not the only available one. Flattening them would misrepresent both — an interpretation listed as a deviation overstates, and an unlisted reading of a `MUST` makes this register look curated rather than complete.
 
@@ -10,7 +12,7 @@ Every deliberate departure from — or non-obvious reading of — a normative st
 
 **This standardises the shape [ADR-0005 §Deviations](adr/0005-the-authorization-server-is-a-dependency-not-a-deliverable.md) invented.** That section already did this job for one ticket, and the pattern was not carried forward — ADR-0003's amendment and ADR-0010 each recorded theirs in a different shape. New ADRs should add a row here rather than inventing a fourth. Keeping the prose in the ADR is correct; this is the index over it, not a replacement.
 
-**Scope is normative statements only.** Departures from this project's own constraints — map constraint #11's floating-major exception for GitHub Actions, for instance — are not specification deviations and stay where the constraint lives.
+**Scope is normative statements only.** Departures from this project's own constraints — map constraint #11's floating-major exception for GitHub Actions, for instance — are not normative statements and stay where the constraint lives.
 
 | # | Type | Spec and clause | Strength | What we do instead / how we read it | Why | Reasoning |
 | --- | --- | --- | --- | --- | --- | --- |
