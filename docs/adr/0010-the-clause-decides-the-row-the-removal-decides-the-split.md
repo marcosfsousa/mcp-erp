@@ -123,6 +123,8 @@ A revision-dated URL — never `/latest/` — the normative sentence quoted verb
 
 A re-fetching freshness check was rejected: map constraint #11 says nothing external floats, and putting `modelcontextprotocol.io` on the critical path would make the citation check less trustworthy than the citations.
 
+**Basis and normative strength are read off the citation, never carried forward from the ticket that proposed the row.** Research 0003 introduced its list as *"'server MUST reject X' clauses"* and handed rows on that description; harvesting the sentences showed two are `SHOULD` and one governs clients rather than servers. A row inherits a claim about its own strength from nothing but the sentence it quotes, and `normative_strength` is a field in the data so the rendered table cannot quietly promote a `SHOULD`.
+
 ## Options considered
 
 1. **Hard cap at ten to twelve**, ranking the pool and defending the line. Preserves constraint #4 literally; requires deliberately not defending twenty enumerated, cited clauses, and the ranking has no honest tie-breaker.
