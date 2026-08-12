@@ -173,14 +173,26 @@ scenarios:
     citation:
       url: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#runtime-insufficient-scope-errors
       also: RFC 6750 §3.1
-      quote: pending_harvest
-      retrieved: null
+      quote: >-
+        When a client makes a request with an access token with insufficient
+        scope during runtime operations, the server SHOULD respond with:
+        HTTP 403 Forbidden status code (per RFC 6750 Section 3.1) …
+        WWW-Authenticate header with the Bearer scheme and additional
+        parameters: error="insufficient_scope" … scope="required_scope1
+        required_scope2" … resource_metadata - the URI of the Protected
+        Resource Metadata document
+      quote_elided: true
+      retrieved: 2026-08-12
     removal: Return the tool result without intersecting granted scope first.
     status: asserted
     floor: true
     note: >-
       Asserts the challenge's shape, not just the 403 — `error="insufficient_scope"`,
       `scope=`, `resource_metadata=`. The scope strings it quotes are #11's to settle.
+      STRENGTH DISCREPANCY: research 0003 characterised the clause list as
+      "server MUST reject X"; the actual text is SHOULD. The row is unchanged —
+      ADR-0006 commits us to this shape regardless — but the table must not
+      render it as a MUST.
 
   - name: header_body_mismatch
     basis: clause
@@ -276,13 +288,22 @@ scenarios:
     basis: clause
     prevents: A standalone server-initiated stream surviving into the modern era.
     citation:
-      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http
-      quote: pending_harvest
-      retrieved: null
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#earlier-streamable-http-revisions
+      quote: >-
+        A server that supports only this revision and receives such traffic from
+        an older client SHOULD respond as follows: … HTTP GET or DELETE to the
+        MCP endpoint: respond with 405 Method Not Allowed.
+      quote_elided: true
+      retrieved: 2026-08-12
     removal: Register a GET route on the MCP endpoint.
     status: asserted
     floor: false
-    note: From ADR-0001's attack-suite input — 405 on GET and DELETE.
+    note: >-
+      From ADR-0001's attack-suite input — 405 on GET and DELETE.
+      STRENGTH DISCREPANCY: SHOULD, not MUST. The hard MUST on this page is
+      narrower — "The server MUST provide a single HTTP endpoint path … that
+      supports POST" — and does not forbid GET. The revision's own change note
+      ("Removal of the GET stream endpoint") is descriptive, not normative.
 
   # ─── basis: clause — the realm we authored ────────────────────────────────
 
@@ -290,9 +311,15 @@ scenarios:
     basis: clause
     prevents: A client downgrading its challenge method to `plain`.
     citation:
-      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization
-      quote: pending_harvest
-      retrieved: null
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations#authorization-code-protection
+      also: >-
+        OAuth 2.1 draft-ietf-oauth-v2-1-13 §4.1.1 — "If the client is capable of
+        using S256, it MUST use S256, as S256 is Mandatory To Implement (MTI) on
+        the server."
+      quote: >-
+        MCP clients MUST use the S256 code challenge method when technically
+        capable, as required by OAuth 2.1 Section 4.1.1.
+      retrieved: 2026-08-12
     removal: Clear the per-client challenge-method pin in the realm file.
     status: asserted
     floor: false
@@ -306,13 +333,20 @@ scenarios:
     basis: clause
     prevents: Username and password going straight to the token endpoint.
     citation:
-      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization
-      quote: pending_harvest
-      retrieved: null
+      url: https://datatracker.ietf.org/doc/html/rfc9700#section-2.4
+      quote: The resource owner password credentials grant [RFC6749] MUST NOT be used.
+      retrieved: 2026-08-12
     removal: Enable Direct Access Grants on any client in the realm file.
     status: asserted
     floor: false
-    note: Turns a flow we did not use into a flow the realm refuses.
+    note: >-
+      Turns a flow we did not use into a flow the realm refuses.
+      SOURCE CHANGED, FLAG FOR REVIEW: the placeholder pointed at the MCP
+      authorization page, which carries no such sentence. Neither does OAuth 2.1
+      draft-13 — it removes the grant by OMISSION, defining it nowhere, so there
+      is no MUST NOT to quote there. RFC 9700 §2.4 is the only pinned document
+      with an explicit prohibition, and ADR-0007 already cites RFC 9700 for
+      refresh rotation. Revert to pending if the source change is unwanted.
 
   - name: refresh_token_replay
     basis: clause
