@@ -1,0 +1,573 @@
+# Attack suite — canonical scenario list.
+#
+# Decided by #9; rules recorded in docs/adr/0010-the-clause-decides-the-row-the-removal-decides-the-split.md
+#
+# This file is the single source of truth. The write-up's table renders from it,
+# and a drift check asserts a bijection against the hand-written tests, which
+# declare the scenario they exercise by name.
+#
+# Fields
+#   name      stable identifier; tests key on it; never reworded
+#   basis     clause | adr | seam
+#   prevents  one line: the attack this stops
+#   citation  clause -> revision-pinned url + verbatim quote + retrieval date
+#             adr    -> the ADR and section that decided the rule. May carry a
+#                       `context` field quoting a real clause that is NOT the
+#                       basis, where one exists but governs a different party.
+#   normative_strength
+#             MUST | MUST NOT | SHOULD | SHOULD NOT for clause rows; null for
+#             adr and seam rows, which have no normative statement behind them.
+#             Read off the quoted sentence, never off the ticket that proposed
+#             the row. Rows citing a SHOULD are legitimate — they just have to
+#             say so, and the rendered table must not print them as MUSTs.
+#   removal   the exact deletion that makes this test pass. Confirmed by hand
+#             when the scenario is written. Also the split rule: two rows merge
+#             if and only if their removals are the same deletion.
+#   status    asserted | documented
+#   floor     true = may never be downgraded to `documented`
+#
+# Invariants
+#   - Exactly one row may carry `status: documented` while the suite is whole.
+#     Today that is threshold_split_evasion, undetectable by construction.
+#   - Floor is 11 rows: one per gate step of ADR-0006, ADR-0009's three seam
+#     assertions, and everything map ship line #8 names (audience binding).
+#   - Below 20 asserted rows the write-up retitles this from "attack suite"
+#     to "clause inventory, N proven".
+#   - Soft ceiling 35. Crossing it reviews the split rule rather than adding
+#     a row: the likely cause is removals differing cosmetically.
+#   - Every clause row carries a non-null normative_strength; every adr and
+#     seam row carries null. No row may assert a strength its quote does not
+#     contain.
+#
+# `pending_harvest` marks a citation whose verbatim sentence has not yet been
+# read from the pinned source. It is not a paraphrase placeholder — the row
+# cannot be published until the sentence is quoted.
+
+meta:
+  ticket: 9
+  decided: 2026-08-12
+  revision: "2026-07-28"
+  total: 31
+  floor: 11
+  basis_split:
+    clause: 19
+    adr: 9
+    seam: 3
+  strength_split:
+    MUST: 11
+    MUST NOT: 6
+    SHOULD: 2
+  held_out:
+    - name: unsupported_protocol_version
+      reason: >-
+        ADR-0009 voided the -32022 observation because era routing precedes the
+        gate chain. Becomes a row only if the seam assertions show a modern-era
+        request declaring an unsupported version still reaches it.
+
+scenarios:
+
+  # ─── basis: clause — resource server ──────────────────────────────────────
+
+  - name: audience_confusion
+    basis: clause
+    prevents: A token legitimately issued for another resource server is replayed at us.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations#access-token-privilege-restriction
+      quote: >-
+        MCP servers MUST only accept tokens specifically intended for themselves
+        and MUST reject tokens that do not include them in the audience claim
+      retrieved: 2026-08-06
+    normative_strength: MUST
+    removal: Delete the `aud` comparison in token validation.
+    status: asserted
+    floor: true
+    note: >-
+      Testable only because ADR-0007 provisions `mcp-conformance-decoy`, a real
+      client for another resource. Keycloak ignores RFC 8707 `resource`, so the
+      resource server's own check is the load-bearing control.
+
+  - name: token_passthrough
+    basis: clause
+    prevents: A token minted by an upstream API's authorization server is presented to us.
+    citation:
+      url: https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices#token-passthrough
+      quote: >-
+        MCP servers MUST NOT accept any tokens that were not explicitly issued
+        for the MCP server.
+      retrieved: 2026-08-12
+    normative_strength: MUST NOT
+    removal: Accept any token that verifies, regardless of which issuer minted it.
+    status: asserted
+    floor: false
+    note: Uses the `mcp-erp-neighbour` realm — a real issuer with its own keys, not an invented token.
+
+  - name: foreign_issuer_token
+    basis: clause
+    prevents: A structurally valid token from an issuer absent from our protected resource metadata.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#token-handling
+      quote: MCP servers MUST NOT accept or transit any other tokens.
+      retrieved: 2026-08-06
+    normative_strength: MUST NOT
+    removal: Skip the `iss` check against the configured issuer.
+    status: asserted
+    floor: false
+
+  - name: token_expired
+    basis: clause
+    prevents: An expired token is accepted after its lifetime ends.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#token-handling
+      quote: Invalid or expired tokens MUST receive a HTTP 401 response.
+      retrieved: 2026-08-06
+    normative_strength: MUST
+    removal: Delete the `exp` comparison.
+    status: asserted
+    floor: true
+    note: >-
+      Real ten-second wait, not a fake clock — ADR-0007's `mcp-expiry-probe`.
+      ADR-0006 pins zero leeway on `exp` precisely so this stays a ten-second test.
+
+  - name: signature_invalid
+    basis: clause
+    prevents: A token whose payload was altered after signing is accepted.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#token-handling
+      quote: Invalid or expired tokens MUST receive a HTTP 401 response.
+      retrieved: 2026-08-06
+    normative_strength: MUST
+    removal: Verify the token's claims without verifying its signature.
+    status: asserted
+    floor: false
+
+  - name: unknown_key
+    basis: clause
+    prevents: A token signed with a key absent from the issuer's key set is accepted.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#token-handling
+      quote: Invalid or expired tokens MUST receive a HTTP 401 response.
+      retrieved: 2026-08-06
+    normative_strength: MUST
+    removal: On an unknown key identifier, fall through to any cached key instead of refetching and failing closed.
+    status: asserted
+    floor: false
+    note: The one scenario exercising ADR-0006's miss-driven key-set refetch and its cooldown.
+
+  - name: malformed_token
+    basis: clause
+    prevents: A structurally invalid credential produces a 500 rather than a 401.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#token-handling
+      quote: Invalid or expired tokens MUST receive a HTTP 401 response.
+      retrieved: 2026-08-06
+    normative_strength: MUST
+    removal: Let the parse error propagate instead of mapping it to a refusal.
+    status: asserted
+    floor: false
+
+  - name: audience_missing
+    basis: adr
+    prevents: A token the authorization server minted with no audience at all is accepted.
+    citation:
+      source: ADR-0006 §Refusals disclose the caller's own token, and nothing else
+      note: >-
+        Deliberately not a clause. Research 0003 ambiguity #5 establishes that
+        nothing in the specification states what a server does with an
+        audience-less token. Fail-closed is our decision, not a conformance tick.
+    normative_strength: null
+    removal: Treat an absent `aud` as "not addressed to anyone else" and allow it.
+    status: asserted
+    floor: true
+    note: Testable because ADR-0007 provisions `mcp-conformance-bare`, a client with no audience mapper.
+
+  - name: token_in_query_string
+    basis: clause
+    prevents: A token supplied as `?access_token=` is honoured, putting it in logs and referrers.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#token-requirements
+      quote: Access tokens MUST NOT be included in the URI query string
+      retrieved: 2026-08-06
+    normative_strength: MUST NOT
+    removal: Read the bearer token from the query string when the header is absent.
+    status: asserted
+    floor: false
+    note: >-
+      ADR-0006 publishes `bearer_methods_supported: ["header"]`, which makes this
+      a contract we keep rather than a behaviour we happen to exhibit.
+
+  - name: insufficient_scope
+    basis: clause
+    prevents: A valid token lacking the operation's scope reaches the operation.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#runtime-insufficient-scope-errors
+      also: RFC 6750 §3.1
+      quote: >-
+        When a client makes a request with an access token with insufficient
+        scope during runtime operations, the server SHOULD respond with:
+        HTTP 403 Forbidden status code (per RFC 6750 Section 3.1) …
+        WWW-Authenticate header with the Bearer scheme and additional
+        parameters: error="insufficient_scope" … scope="required_scope1
+        required_scope2" … resource_metadata - the URI of the Protected
+        Resource Metadata document
+      quote_elided: true
+      retrieved: 2026-08-12
+    normative_strength: SHOULD
+    removal: Return the tool result without intersecting granted scope first.
+    status: asserted
+    floor: true
+    note: >-
+      Asserts the challenge's shape, not just the 403 — `error="insufficient_scope"`,
+      `scope=`, `resource_metadata=`. The scope strings it quotes are #11's to settle.
+      STRENGTH DISCREPANCY: research 0003 characterised the clause list as
+      "server MUST reject X"; the actual text is SHOULD. The row is unchanged —
+      ADR-0006 commits us to this shape regardless — but the table must not
+      render it as a MUST.
+
+  - name: header_body_mismatch
+    basis: clause
+    prevents: A header claiming one method or name while the body carries another.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#server-validation
+      quote: >-
+        Servers … MUST reject requests where the values specified in the headers
+        do not match the corresponding values in the request body.
+      quote_elided: true
+      retrieved: 2026-08-06
+    normative_strength: MUST
+    removal: Route on the header without comparing it to the body.
+    status: asserted
+    floor: true
+    note: Includes the Base64 sentinel form of `Mcp-Name`, which is where a naive comparison passes wrongly.
+
+  - name: missing_required_header
+    basis: clause
+    prevents: A POST omitting a required standard header is processed anyway.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#server-validation
+      quote: >-
+        These headers are REQUIRED for compliance. … When rejecting a request
+        due to header validation failure, servers MUST return HTTP status
+        400 Bad Request and MUST include a JSON-RPC error response … Validation
+        failure conditions include: … A required standard header
+        (MCP-Protocol-Version, Mcp-Method, Mcp-Name) is missing.
+      quote_elided: true
+      retrieved: 2026-08-12
+      quote_corrected: >-
+        Spot-check 2026-08-12: the original quote was the failure-condition
+        bullet alone, which is descriptive rather than normative. Paired with
+        the REQUIRED statement and the MUST-return sentence that make it binding.
+    normative_strength: MUST
+    removal: Default a missing header from the body instead of refusing.
+    status: asserted
+    floor: false
+
+  - name: protocol_version_skew
+    basis: clause
+    prevents: A version header disagreeing with the body's declared protocol version.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#protocol-version-header
+      quote: >-
+        If the values do not match, the server MUST reject the request with
+        400 Bad Request and a HeaderMismatch JSON-RPC error
+      retrieved: 2026-08-06
+    normative_strength: MUST
+    removal: Read the version from the header and ignore `_meta`.
+    status: asserted
+    floor: false
+
+  - name: malformed_meta
+    basis: clause
+    prevents: A POST missing a required `_meta` field is processed as well-formed.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/index#_meta
+      quote: >-
+        A request missing any required field is malformed; the server MUST
+        reject it with JSON-RPC error code -32602 … the response status MUST
+        be 400 Bad Request.
+      quote_elided: true
+      retrieved: 2026-08-06
+    normative_strength: MUST
+    removal: Make `_meta` optional in the request model.
+    status: asserted
+    floor: false
+
+  - name: dns_rebinding_origin
+    basis: clause
+    prevents: A malicious page in a victim's browser reaching a server on their machine.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#security-endpoint
+      quote: >-
+        Servers MUST validate the Origin header on all incoming connections …
+        servers MUST respond with HTTP 403 Forbidden.
+      quote_elided: true
+      retrieved: 2026-08-06
+    normative_strength: MUST
+    removal: Skip the allow-list check when `Origin` is present.
+    status: asserted
+    floor: true
+    note: >-
+      ADR-0006's honest limit — no client in this exhibit sends `Origin`, so this
+      negative scenario is the only thing that exercises the check at all.
+
+  - name: state_handle_hijack
+    basis: clause
+    prevents: Possession of another person's requisition identifier authorizing a write against it.
+    citation:
+      url: https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices#state-handle-hijacking
+      quote: MCP servers MUST NOT treat possession of a state handle as authentication.
+      retrieved: 2026-08-12
+    normative_strength: MUST NOT
+    removal: Look the requisition up by identifier alone, without the cost-centre predicate.
+    status: asserted
+    floor: false
+    note: >-
+      Write path. Asserts the refusal AND that state is unmodified — the only row
+      in the suite asserting a refused write changed nothing. Splits from
+      row_probe_indistinguishable, which is the read path. See ADR-0003's
+      amendment: identifiers are deliberately guessable, so this is reached by
+      guessing rather than by being handed the identifier.
+
+  - name: get_stream_removed
+    basis: clause
+    prevents: A standalone server-initiated stream surviving into the modern era.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#earlier-streamable-http-revisions
+      quote: >-
+        A server that supports only this revision and receives such traffic from
+        an older client SHOULD respond as follows: … HTTP GET or DELETE to the
+        MCP endpoint: respond with 405 Method Not Allowed.
+      quote_elided: true
+      retrieved: 2026-08-12
+    normative_strength: SHOULD
+    removal: Register a GET route on the MCP endpoint.
+    status: asserted
+    floor: false
+    note: >-
+      From ADR-0001's attack-suite input — 405 on GET and DELETE.
+      STRENGTH DISCREPANCY: SHOULD, not MUST. The hard MUST on this page is
+      narrower — "The server MUST provide a single HTTP endpoint path … that
+      supports POST" — and does not forbid GET. The revision's own change note
+      ("Removal of the GET stream endpoint") is descriptive, not normative.
+
+  # ─── basis: clause — the realm we authored ────────────────────────────────
+
+  - name: pkce_downgrade_plain
+    basis: adr
+    prevents: A client downgrading its challenge method to `plain`.
+    citation:
+      source: ADR-0007 §Every client is public, and the weak challenge method is refused
+      context: >-
+        MCP Security Considerations 2026-07-28 §Authorization Code Protection —
+        "MCP clients MUST use the S256 code challenge method when technically
+        capable, as required by OAuth 2.1 Section 4.1.1"; OAuth 2.1
+        draft-ietf-oauth-v2-1-13 §4.1.1 — "If the client is capable of using
+        S256, it MUST use S256, as S256 is Mandatory To Implement (MTI) on the
+        server." Both retrieved 2026-08-12.
+        CITED AS CONTEXT, NOT BASIS: the MUST governs clients, and this row
+        asserts a SERVER refusal. Nothing in either document requires an
+        authorization server to reject `plain`. Rewording the row could not fix
+        the mismatch, because the clause simply does not govern what we assert —
+        the obligation is ADR-0007's per-client realm pin.
+    normative_strength: null
+    removal: Clear the per-client challenge-method pin in the realm file.
+    status: asserted
+    floor: false
+    note: >-
+      ADR-0007's caveat is binding: the realm advertises both `plain` and `S256`
+      because the pin is per client and discovery does not reflect per-client
+      policy. This asserts the server REFUSES a plain challenge for our client —
+      not that the metadata omits `plain`, which it will not.
+
+  - name: password_grant_refused
+    basis: clause
+    prevents: Username and password going straight to the token endpoint.
+    citation:
+      url: https://datatracker.ietf.org/doc/html/rfc9700#section-2.4
+      quote: The resource owner password credentials grant [RFC6749] MUST NOT be used.
+      retrieved: 2026-08-12
+    normative_strength: MUST NOT
+    removal: Enable Direct Access Grants on any client in the realm file.
+    status: asserted
+    floor: false
+    note: >-
+      Turns a flow we did not use into a flow the realm refuses.
+      Source is RFC 9700 rather than the obvious document, deliberately:
+      **OAuth 2.1 draft-13 removes this grant by omission.** It defines the
+      flow nowhere, so there is no sentence in it to quote — an absence cannot
+      be cited. RFC 9700 §2.4 carries the only explicit prohibition at a pinned
+      revision, and ADR-0007 already cites RFC 9700 for refresh rotation.
+      Recorded so a reader does not wonder why OAuth 2.1 was skipped.
+
+  - name: refresh_token_replay
+    basis: clause
+    prevents: A stolen refresh token being redeemed twice.
+    citation:
+      url: https://datatracker.ietf.org/doc/html/rfc9700#section-4.14.2
+      quote: >-
+        Authorization servers MUST utilize one of these methods to detect refresh
+        token replay by malicious actors for public clients: sender-constrained
+        refresh tokens … refresh token rotation.
+      quote_elided: true
+      retrieved: 2026-08-11
+    normative_strength: MUST
+    removal: Turn off refresh token rotation, or allow reuse, in the realm file.
+    status: asserted
+    floor: false
+    note: >-
+      Binding because every client here is public. Asserts that a replayed
+      refresh token revokes the grant. Not in the OAuth 2.1 draft — RFC 9700 is
+      the citation, per ADR-0007's precision note.
+
+  # ─── basis: clause — the conformance client ───────────────────────────────
+
+  - name: mixup_iss_mismatch
+    basis: clause
+    prevents: An attacker-controlled authorization server having our client redeem an honest server's code.
+    citation:
+      url: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#authorization-response-validation
+      also: RFC 9207 §2.4
+      quote: >-
+        MUST NOT act on or display error, error_description, or error_uri
+      retrieved: 2026-08-06
+    normative_strength: MUST NOT
+    removal: Skip comparing the response's `iss` against the issuer recorded before redirecting.
+    status: asserted
+    floor: false
+    note: >-
+      The suite's only client-side row, adopted because we author the conformance
+      client. Rides the `mcp-erp-neighbour` realm. Covers the error-response case,
+      which is the half implementations usually miss. `as_metadata_issuer_spoof`
+      was refused on cost — a hostile metadata host for one row.
+
+  # ─── basis: adr — rules this project invented ─────────────────────────────
+
+  - name: row_probe_indistinguishable
+    basis: adr
+    prevents: Probing for the existence of requisitions in another cost centre.
+    citation:
+      source: ADR-0002 §Disclose the shape of the API; never the contents of the database
+    normative_strength: null
+    removal: Return a distinguishable refusal for "exists but not yours" versus "never existed".
+    status: asserted
+    floor: false
+    note: >-
+      Read path. Asserts byte-identical `not_found` AND indistinguishable timing.
+      Splits from state_handle_hijack, which is the write path.
+
+  - name: auth_bypass_via_method_header_mismatch
+    basis: adr
+    prevents: Claiming `server/discover`'s unauthenticated exemption on a header while the body carries a tool call.
+    citation:
+      source: ADR-0006 §The gate order is a security property, not a style choice
+    normative_strength: null
+    removal: Move the exemption check ahead of header/body validation.
+    status: asserted
+    floor: true
+    note: >-
+      Covers gate step 3, which is a branch rather than a refusal. ADR-0006 says
+      this is worth a scenario whichever order had been chosen — the order makes
+      the attack structurally impossible rather than defended against.
+
+  - name: retry_after_role_denial
+    basis: adr
+    prevents: A refusal that instructs the client to acquire a scope it already holds, looping it.
+    citation:
+      source: ADR-0002 §Refusal shape follows the remedy
+    normative_strength: null
+    removal: Return 403 with a `WWW-Authenticate` challenge for the missing-ERP-role case.
+    status: asserted
+    floor: false
+    note: >-
+      Asserts -31010 and that an identical retry does not help. Reachable only
+      because ADR-0007 gives Priya Raman `approver` in Keycloak and no ERP role.
+
+  - name: retry_after_sod_denial_same_person
+    basis: adr
+    prevents: A segregation-of-duties refusal that a blind retry by the same person satisfies.
+    citation:
+      source: ADR-0002 §Surviving contact with a retrying client
+    normative_strength: null
+    removal: Check segregation of duties against roles held rather than positions occupied on the chain.
+    status: asserted
+    floor: false
+
+  - name: retry_after_sod_denial_other_person
+    basis: adr
+    prevents: A segregation-of-duties refusal whose stated remedy is false.
+    citation:
+      source: ADR-0002 §Surviving contact with a retrying client
+    normative_strength: null
+    removal: Set `retry_as_other_person_helps` from a constant instead of from the decision.
+    status: asserted
+    floor: true
+    note: >-
+      Covers gate step 6. The row that keeps segregation of duties distinct from
+      every other refusal — it asserts the remedy is true by acting on it.
+
+  - name: double_approval_via_batch_retry
+    basis: adr
+    prevents: A model retrying a whole batch and approving an item twice.
+    citation:
+      source: ADR-0002 §Surviving contact with a retrying client
+    normative_strength: null
+    removal: Drop per-item idempotency and decide each item afresh.
+    status: asserted
+    floor: false
+    note: Asserts `already_decided` per item, and that the second decision changed nothing.
+
+  - name: threshold_split_evasion
+    basis: adr
+    prevents: Nothing. Named because it works.
+    citation:
+      source: ADR-0003 §The rules the fields serve — time deliberately left unmodelled
+    normative_strength: null
+    removal: null
+    status: documented
+    floor: false
+    note: >-
+      Splitting €9,000 into two requisitions of €4,500 succeeds. Detection needs
+      aggregation over a window; no entity carries a timestamp and there is no
+      aggregation rule. The control that would stop it: same vendor and cost
+      centre within a period, summed against the threshold. Adopted as a named
+      accepted risk rather than omitted — it is the attack a purchase-to-pay
+      reader thinks of unprompted. THE SUITE'S ONE ROW THAT ASSERTS NOTHING.
+
+  # ─── basis: seam — the legacy era (ADR-0009) ──────────────────────────────
+
+  - name: legacy_unauthenticated_refused
+    basis: seam
+    prevents: The always-on legacy leg accepting calls with no token.
+    citation:
+      source: ADR-0009 §Three assertions, and they exist to falsify rather than to sample
+    normative_strength: null
+    removal: Apply token verification inside the modern request path instead of ahead of era routing.
+    status: asserted
+    floor: true
+    note: >-
+      Value concentrated in the first run. If this goes red, token verification
+      sits behind era routing and ADR-0009 REOPENS — refusing the era at the edge
+      becomes live again.
+
+  - name: legacy_underscoped_same_denial_class
+    basis: seam
+    prevents: The legacy leg producing a weaker refusal than its modern twin.
+    citation:
+      source: ADR-0009 §Three assertions, and they exist to falsify rather than to sample
+    normative_strength: null
+    removal: Resolve scope from the era-specific handler rather than the shared policy function.
+    status: asserted
+    floor: true
+
+  - name: legacy_discover_exemption_unavailable
+    basis: seam
+    prevents: A legacy-era request claiming the unauthenticated `server/discover` exemption.
+    citation:
+      source: ADR-0009 §Three assertions, and they exist to falsify rather than to sample
+    normative_strength: null
+    removal: Key the exemption on a default method name when `Mcp-Method` is absent.
+    status: asserted
+    floor: true
+    note: >-
+      Asserts WHY, not just that. The refusal must follow from the legacy leg not
+      carrying the header — absence — rather than from a default nobody would
+      notice changing.

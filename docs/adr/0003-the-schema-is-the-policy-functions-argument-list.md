@@ -38,6 +38,26 @@ A person who must see more than one centre holds the `auditor` role, which reads
 
 `description` is the **one exception** to the governing rule, granted for the reader's benefit — "40 ergonomic desk chairs" narrates in a way `req_0104` does not, and issue #15's walkthrough has to be readable by a human. Display names on people are part of the same exception. It is recorded here as a single carve-out so a reviewer can check the claim against exactly one place rather than trusting that the rule held everywhere.
 
+### Identifiers are sequential and legible, against a specification SHOULD
+
+*Amended 2026-08-12 by [#9](https://github.com/marcosfsousa/mcp-erp/issues/9).*
+
+This ADR listed `id` on every entity and left its form open. [#9](https://github.com/marcosfsousa/mcp-erp/issues/9) closed it, because the form decides what an attack scenario can assert.
+
+**Identifiers are sequential and human-readable** — `req_0104`, the shape this document already used illustratively above — and the same for the other three entities.
+
+That is a deliberate deviation from the specification. A requisition identifier is a **state handle** by the specification's own definition: an identifier a stateless server mints and *"receive[s] back as an ordinary tool argument on each request"*. The mitigation text carries two halves, and we follow one:
+
+> MCP servers **MUST NOT** treat possession of a state handle as authentication. […] MCP servers **SHOULD** use secure, non-deterministic handles generated with secure random number generators. Avoid predictable or sequential identifiers that could be guessed by an attacker.
+>
+> — [MCP Security Best Practices §State Handle Hijacking](https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices#state-handle-hijacking), fetched 2026-08-12
+
+The `MUST NOT` is honoured and asserted twice over — [ADR-0002](0002-refusal-shape-follows-the-remedy.md)'s indistinguishable `not_found` on the read path, and a refused write that leaves state unmodified. **The `SHOULD` is not followed**, and the reason is that following it would delete the proof of the first.
+
+ADR-0002 made indistinguishability the load-bearing control. Unguessable identifiers would make that control impossible to exercise in its natural form: the probe scenario could no longer *guess* a foreign identifier, it would have to be handed one out of band from the seed — turning a demonstrated defence into an asserted one, which is the failure the attack suite exists to forbid. Legible identifiers also keep #15's walkthrough readable and the matrix's set-equality assertions reviewable by a human.
+
+What is genuinely traded away is defence in depth: an attacker reaches the row-scoping check rather than being stopped before it. The write-up states that rather than presenting the choice as free. Recorded in [ADR-0010](0010-the-clause-decides-the-row-the-removal-decides-the-split.md), which owns the two scenarios that rest on it.
+
 ### The rules the fields serve
 
 1. **Row scoping.** You see requisitions in your own cost centre. `auditor` reads all three and writes nothing.
