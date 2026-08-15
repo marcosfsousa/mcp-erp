@@ -50,7 +50,9 @@ The Dockerfile's `FROM` names an **exact tag and its digest** — `quay.io/keycl
 
 This is the reason [ADR-0008](0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md) could accept a merge-gating job that depends on this container at all. The general rule outgrew both documents and became a standing map constraint, covering Postgres, the Python runtime and every future image on the same terms.
 
-The realm file is **baked into the image and bind-mounted over it in Compose**, from the same committed path. The mount wins locally, so editing the file and restarting shows the change immediately — which is what makes the pure-function claim something a reader can *try*. The baked copy keeps the image runnable on its own, so #10 stays free to say yes to Cloud Run without reopening this. The two cannot drift: they are the same file in the repository.
+The realm file is **baked into the image and bind-mounted over it in Compose**, from the same committed path. The mount wins locally, so editing the file and restarting shows the change immediately — which is what makes the pure-function claim something a reader can *try*. The baked copy keeps the image runnable on its own, wherever it is run. The two cannot drift: they are the same file in the repository.
+
+*Amended 2026-08-15 by [#10](https://github.com/marcosfsousa/mcp-erp/issues/10) — cosmetic.* This passage read *"so #10 stays free to say yes to Cloud Run without reopening this."* That ticket said no ([ADR-0011](0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md)), and the clause was a bonus rather than the justification: the baked copy exists so the image is self-contained and the mount exists so editing the realm and restarting shows the change. Both reasons are untouched.
 
 ### Four clients, one stated job each
 
