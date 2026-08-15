@@ -103,6 +103,12 @@ It is promoted on four instances, not one. That matters: the map's own promotion
 
 `CONTEXT.md` and the research documents are deliberately excluded. Both are sources: ADR-0001 was amended to match `CONTEXT.md`, not the reverse, and research documents are dated primary-source findings that feed ADRs.
 
+**"Same commit" where there is no commit.** Three of the four artifacts are files and move in this ADR's own commit, literally. The map is a GitHub issue and has none, so for it the unit is the **same act** — the working session that lands the ADR, never a later pass.
+
+That distinction surfaced an asymmetry the constraint would otherwise have inherited, and **this ADR is the instance that found it**. A file cannot be updated before the ADR that changes it exists; the map can be, and was — it carried `→ ADR-0011` while this document sat unmerged on a branch. The drift runs in the opposite direction from the four instances above: the derivative ahead of its source rather than behind it, with a shorter window and a visible cause. It is still a pointer that resolves to nothing.
+
+So the constraint runs both directions: **every map reference to an ADR not yet on `main` names the pull request too — pointers and in-sentence attributions alike — and the markers come off at merge.** Enrolled the same way the write-up was: a declared state beats an unexplained absence.
+
 ### The first walk was performed, and the constraint carries its date
 
 A constraint whose first act is a violation is dead on arrival. All four artifacts were walked on **2026-08-15**, and the date is recorded in the constraint — without a last-walked-clean date the next walker cannot separate new drift from inherited and has to re-derive everything, which is the work that does not get done. The baseline is a record of an event, in the same category as a citation's retrieval date, and events do not drift.
@@ -138,7 +144,7 @@ Three fixes fell out, and all three had sources that were individually correct.
 
 **Three documents amended.** [ADR-0005](0005-the-authorization-server-is-a-dependency-not-a-deliverable.md) withdraws the *harness, not design* framing and voids one *Input to other tickets* entry; its audience-mapper sentence also stops calling a local URL *"the real deployment URL"*, which read as though a non-local deployment were the real one. [ADR-0007](0007-the-realm-is-the-exhibit.md) loses a forward reference to a decision now made — cosmetic, since the baked realm copy's own reasons are independent and unchanged. [`docs/normative-register.md`](../normative-register.md) narrows row 2's justification and gains row 5.
 
-**Three map constraints amended, one added, and the ticket record repaired.** #5 no longer says *"Cloud Run is additive"*; #9 loses this ticket's entry, loses a conditional #3 resolved in the negative, and has its remaining entries reconciled against closed ADRs; #4's basis split is corrected; #12 is new. In *Decisions so far*, #7's line stops repeating the withdrawn *harness* framing — it carried the same claim as ADR-0005 and went stale for the same reason — and entries are added for **#9**, which the walk found missing, and for this ticket.
+**Three map constraints amended, one added, and the ticket record repaired.** #5 no longer says *"Cloud Run is additive"*; #9 loses this ticket's entry, loses a conditional #3 resolved in the negative, and has its remaining entries reconciled against closed ADRs; #4's basis split is corrected; #12 is new, and carries the *same act* clause plus the unmerged-pointer rule that this ADR's own landing sequence exposed. In *Decisions so far*, #7's line stops repeating the withdrawn *harness* framing — it carried the same claim as ADR-0005 and went stale for the same reason — and entries are added for **#9**, which the walk found missing, and for this ticket.
 
 **Cut order #9 is reconciled, not re-derived.** Every fact written into it comes from a closed ticket's ADR — transcription, not decision. *Conformance traceability* is left in place and **flagged as undefined**: the phrase appears nowhere else in this repository, and defining it is a real decision that belongs to whoever owns it.
 
