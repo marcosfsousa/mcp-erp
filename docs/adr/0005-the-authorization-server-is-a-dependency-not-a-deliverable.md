@@ -4,6 +4,7 @@
 - **Date:** 2026-08-11
 - **Ticket:** [#7 Choose the authorization server](https://github.com/marcosfsousa/mcp-erp/issues/7)
 - **Evidence:** [`docs/research/0003-2026-07-28-authorization-requirements.md`](../research/0003-2026-07-28-authorization-requirements.md), [`docs/research/0004-mcp-client-landscape.md`](../research/0004-mcp-client-landscape.md); [ADR-0001](0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md); map constraints #1, #5, #8, #9; live verification against Keycloak 26.7.1, 2026-08-11
+- **Amended:** 2026-08-15 — substantive, by [#10](https://github.com/marcosfsousa/mcp-erp/issues/10). Deviation 2's *"property of the local harness, not of the design"* framing is **withdrawn** and replaced with *not closed here*, with the route that would close it named; one *Input to other tickets* entry is void. See *Deviations 2* and *Consequences*. No decision here is reversed.
 
 ## Question
 
@@ -62,7 +63,7 @@ Also verified, and it de-risks the online proof: Claude selects the metadata-doc
 
 ### Audience binding, and the gap underneath it
 
-The audience arrives via an **Audience mapper on a *default* client scope per resource server**, so the audience is a property of the resource rather than of the request. The value is the **real deployment URL**, injected per environment through Keycloak's `${VAR}` placeholder — resolved from operating-system environment variables only, textually, before the realm JSON is parsed.
+The audience arrives via an **Audience mapper on a *default* client scope per resource server**, so the audience is a property of the resource rather than of the request. The value is the **resource's own URL in the environment it is running in**, injected through Keycloak's `${VAR}` placeholder — resolved from operating-system environment variables only, textually, before the realm JSON is parsed.
 
 Deliberately *not* the scope-selected variant, which would mix "what I may do" with "who this token is for" in one vocabulary — a cost #11 and constraint #10 would then have to absorb. And deliberately not a stable abstract identifier: blessed by RFC 8707 §2, but `aud` would stop equalling the `resource` a client sends, which breaks the moment we move to a server that honours it — precisely the phase-two direction.
 
@@ -88,7 +89,15 @@ This is a genuine spec-versus-implementation gap and the exhibit carries it as a
 
 **2. Plain HTTP issuers and resource identifiers.** RFC 8414 §2 requires an issuer identifier to be *"a URL that uses the 'https' scheme"*, and §3 adds that the well-known path *"MUST use the 'https' scheme"*. RFC 9728 §1.2 requires a resource identifier to be *"a URL that uses the https scheme"*. Under Compose we use `http://` for both — the issuer `http://keycloak:8081/realms/{realm}` and the resource identifier `http://localhost:8080/mcp`. No carve-out for localhost, loopback or development exists in either document.
 
-The reason is offline reproducibility: no certificate authority issues a certificate for `keycloak:8081`, and a self-signed authority makes certificate trust a setup step for every third-party client, against constraint #5 and ship line #8. **The deviation is a property of the local harness, not of the design** — a Cloud Run deployment (#10) is genuinely HTTPS and symmetric, and demonstrates the conformant form with no trick.
+The reason is offline reproducibility: no certificate authority issues a certificate for `keycloak:8081`, and a self-signed authority makes certificate trust a setup step for every third-party client, against constraint #5 and ship line #8.
+
+*Amended 2026-08-15 by [#10](https://github.com/marcosfsousa/mcp-erp/issues/10).* The sentence that stood here is **withdrawn**:
+
+> ~~The deviation is a property of the local harness, not of the design — a Cloud Run deployment (#10) is genuinely HTTPS and symmetric, and demonstrates the conformant form with no trick.~~
+
+[ADR-0011](0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md) declined the deployment, so no environment this exhibit ships erases this deviation, and a claim resting on an environment we do not build is a claim we cannot make.
+
+**The deviation is not closed here** — which is a smaller claim than *owned permanently*, and the true one. Declining the deployment removed one route; it did not exhaust them. The surviving route is **option 6 below, as a non-default opt-in profile**: the certificate-trust objection recorded against it is against it as the *default* configuration, and does not reach an opt-in that leaves the zero-setup default untouched. It was put to #10 in that form and **declined for v1 on setup cost, not on impossibility** — a different kind of reason from the ones that killed options 3, 6-as-default and 7, and recorded separately so it is not mistaken for one.
 
 ## Options considered
 
@@ -114,7 +123,7 @@ The reason is offline reproducibility: no certificate authority issues a certifi
 
 - **#8 (what performs the run)** inherits the three tiers and the fact that a programmatic client exists regardless.
 - **#9 (attack suite)** inherits deviation 1 as the reason clause #1 is testable at all, and the citation for it.
-- **#10 (Cloud Run)** inherits a stronger reason to exist: it is where deviation 2 disappears.
+- ~~**#10 (Cloud Run)** inherits a stronger reason to exist: it is where deviation 2 disappears.~~ **Void, 2026-08-15 ([#10](https://github.com/marcosfsousa/mcp-erp/issues/10)):** the deployment was declined, so deviation 2 stays open and is carried rather than erased. The route that would close it is option 6 as an opt-in profile, recorded in *Deviations 2* above and in [ADR-0011](0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md).
 - **#11 (scope granularity)** must keep `scopes_supported` in the protected resource metadata honest.
 
 **Not contradicted:** ADR-0001. Tier 3 depends on its finding that Inspector can reach a modern-only server, and nothing here binds context at connection time.
