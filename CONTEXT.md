@@ -65,8 +65,12 @@ _Avoid_: user, caller, subject, actor
 A permission string carried inside an access token, agreed when a person authorizes an application. It is a ceiling on what the application may do on their behalf, not a statement of what they are allowed to do.
 _Avoid_: permission, entitlement, grant
 
+**Capability**:
+A member of the fixed vocabulary a tool declares, naming what a token must carry to reach it. Joined to a namespace to build a scope string, and never parsed back out of one.
+_Avoid_: permission, action, scope, verb
+
 **Role**:
-A capability assignment held by a Person and resolved server-side per request, never carried in the token. Current names are provisional.
+A standing grant of authority held by a Person and resolved server-side per request, never carried in the token.
 _Avoid_: group, permission, claim
 
 **Effective permission**:
@@ -150,7 +154,7 @@ A party a requisition may be raised against.
 _Avoid_: supplier, merchant, counterparty
 
 **Submitter**, **Approver**, **Invoice recorder**:
-Positions occupied on one chain, as distinct from roles. A role is held standing; a position is occupied once, by one Person, on one chain — which is why segregation of duties is checked against positions and never against roles.
+Positions occupied on one chain, as distinct from roles. A role is held standing; a position is occupied once, by one Person, on one chain — which is why segregation of duties is checked against positions and never against roles. **Approver names both a role and a position, deliberately**: the role is held standing, the position is occupied once on one chain, and it is the position segregation of duties is checked against.
 _Avoid_: requester, authorizer, clerk
 
 ### Proof artifacts

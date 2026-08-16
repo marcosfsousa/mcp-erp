@@ -75,6 +75,16 @@ This matches the shape of every real client the exhibit targets — Inspector an
 
 **Direct Access Grants are disabled on every client**, and the refusal is asserted. That flow — username and password straight to the token endpoint — would make the conformance client trivial, and it is the flow OAuth 2.1 removed. Turning it off and *testing that it is off* converts a thing we did not use into a thing the realm refuses.
 
+### Consent is required on every client
+
+*Added 2026-08-16 by [#11](https://github.com/marcosfsousa/mcp-erp/issues/11); see [ADR-0012](0012-the-token-names-a-capability-never-a-role.md).* This ADR left consent undecided, and it belongs to the realm.
+
+All four clients set **Consent required**. Each capability scope carries consent screen text; the audience-bearing default client scope sets *Display on consent screen* off, because it is infrastructure rather than a permission. The screen therefore shows exactly three lines, one per capability, and no plumbing.
+
+The screen is the only place a human meets the delegation ceiling as a choice rather than as a claim in a write-up. The cost is one more form post in a headless client that already posts the login form, since direct access grants are off above. Fresh state on every boot means continuous integration always takes the first-consent path, which makes it deterministic rather than sometimes-remembered.
+
+**A limitation, stated rather than discovered.** Keycloak's consent screen is grant-or-deny for the whole request; it does not offer per-scope deselection. The screen *displays* the ceiling and does not let the person narrow it — narrowing happens in the client's `scope` parameter. Flagged for assertion at build time rather than trust.
+
 ### Token lifetimes, and rotation as a requirement rather than a nicety
 
 Five minutes realm-wide with refresh tokens issued; `mcp-expiry-probe` overrides its own lifespan to ten seconds. Five minutes keeps ADR-0002's published `ttlMs = min(5 min, remaining token lifetime)` meaningful — sixty seconds would degenerate it to always picking the token, an hour would make the cap decoration — and the override makes expiry a ten-second wait rather than a fake clock.
@@ -89,7 +99,15 @@ Every client here is public, so this binds. Sender-constraining needs mutual TLS
 
 ### Scopes are gated by roles that mirror the ERP's — and one person deliberately does not match
 
-Each scope is an optional client scope carrying a **role scope mapping**, which is Keycloak's one native, no-code, per-user gate: *"when a client scope has role scope mappings defined, the user must be a member of at least one of the roles… If a user is not permitted to use the client scope, no protocol mappers or role scope mappings will be used when generating tokens."*
+Every scope is an optional client scope. The gate is a **role scope mapping**, which is Keycloak's one native, no-code, per-user gate: *"when a client scope has role scope mappings defined, the user must be a member of at least one of the roles… If a user is not permitted to use the client scope, no protocol mappers or role scope mappings will be used when generating tokens."*
+
+*Amended 2026-08-16 by [#11](https://github.com/marcosfsousa/mcp-erp/issues/11).* This passage read *"Each scope is an optional client scope carrying a role scope mapping."* It was written while scope strings were assumed to mirror role names, which [ADR-0012](0012-the-token-names-a-capability-never-a-role.md) ended. Under three coarse capabilities, **only `erp.decide` carries a mapping, and that mapping lists both `approver` and `unlimited_approver`.**
+
+- `erp.write` cannot be gated: ADR-0003 gates submitting by **scope alone, no role**, so a mapping there would lock every submitter out of a scope they are entitled to. Ungated is also what makes the intersection visible on `record_invoice` — the scope is handed out freely and `invoice_clerk` decides whether it achieves anything.
+- `erp.read` has no role behind it either; `auditor` widens which rows are returned, it does not grant reading.
+- The mapping lists **two** roles because Ingrid Holm holds `unlimited_approver`, not `approver`. Gating on `approver` alone would leave her token without `erp.decide`, unlist `approve_requisition` for her, and make the above-threshold branch she exists for unreachable. Listing both uses the *"at least one of these roles"* semantics quoted above exactly as designed, and invents no realm state.
+
+The two-role mapping **strengthens** the separation this section is about: `erp.decide` now maps from two roles that differ on the threshold, which no scope can express, so the scope twins no role name at all.
 
 **Priya Raman holds `approver` in Keycloak and no role in the ERP.**
 
@@ -101,7 +119,7 @@ The opposite drift is not modelled, and that is deliberate: an ERP role with no 
 
 It carries `sub`, `aud` and `scope`. The realm roles are an **issuance-time gate only** and never appear on the wire.
 
-Constraint #10 decides this: `senior_approver` is unambiguously layer-3 vocabulary, and putting it in the token would make the *token contract itself* domain-shaped — clone the repository for another purpose and the wire format still talks about purchasing. Suppression also converts constraint #3's separation from a discipline into a structural impossibility: you cannot accidentally read a role from a token that has none.
+Constraint #10 decides this: `unlimited_approver` is unambiguously layer-3 vocabulary, and putting it in the token would make the *token contract itself* domain-shaped — clone the repository for another purpose and the wire format still talks about purchasing. Suppression also converts constraint #3's separation from a discipline into a structural impossibility: you cannot accidentally read a role from a token that has none.
 
 Note this is **not a removal**. A hand-authored `clientScopes` array suppresses every built-in default scope, including `roles`. Suppression is the default outcome; inclusion would have been the deliberate act.
 
@@ -138,7 +156,9 @@ All seven share a single non-temporary password committed in the seed file, with
 
 - **#6 (data model)** — the seed file owes a **third column** for Keycloak realm roles, and a password field. Priya's row is the one that must diverge.
 - **#9 (attack suite)** inherits `pkce_downgrade_plain` (with the per-client caveat), `token_expired`, `audience_missing`, `password_grant_refused` and `refresh_token_replay`.
-- **#11 (scope granularity)** inherits the optional-client-scope-plus-role-scope-mapping shape as the mechanism its naming has to fit.
+- **#11 (scope granularity)** inherited the optional-client-scope-plus-role-scope-mapping shape as the mechanism its naming has to fit. *Closed 2026-08-16 by [ADR-0012](0012-the-token-names-a-capability-never-a-role.md)*, which fitted it and amended two passages above — the role scope mapping, and consent.
 - **#15 (walkthrough)** gets the drift as its most explainable moment, and should use it.
 
 **A known limitation of the gate.** A role scope mapping can express only "holds at least one of these roles" — no conjunction, no negation, no attribute conditions. It is also **overloaded**: a mapping added to narrow which *roles* appear in a token silently restricts which *users* get that scope at all. And error semantics diverge — a scope not linked to the client at all is a hard `invalid_scope` at the authorization endpoint, while a scope linked but not permitted is **silently omitted** and the flow succeeds. The matrix's *person × scope set* principal will feel that difference.
+
+The silent omission is **conformant, not a quirk**: RFC 6749 §3.3 says the authorization server *"MAY fully or partially ignore the scope requested by the client, based on the authorization server policy or the resource owner's instructions."* The same section then binds Keycloak to a `MUST` — returning the `scope` response parameter whenever the granted scope differs from the requested one — which [ADR-0012](0012-the-token-names-a-capability-never-a-role.md) leaves as an open verification item rather than an assumed gap.
