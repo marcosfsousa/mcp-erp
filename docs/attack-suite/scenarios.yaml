@@ -47,11 +47,11 @@ meta:
   ticket: 9
   decided: 2026-08-12
   revision: "2026-07-28"
-  total: 31
+  total: 32
   floor: 11
   basis_split:
     clause: 19
-    adr: 9
+    adr: 10
     seam: 3
   strength_split:
     MUST: 11
@@ -217,11 +217,39 @@ scenarios:
     floor: true
     note: >-
       Asserts the challenge's shape, not just the 403 — `error="insufficient_scope"`,
-      `scope=`, `resource_metadata=`. The scope strings it quotes are #11's to settle.
+      `scope=`, `resource_metadata=`. The `scope=` strings are `erp.read`,
+      `erp.write` and `erp.decide`, settled by #11 (ADR-0012) on 2026-08-16 and
+      derived from the capability each tool declares — never hand-written here.
       STRENGTH DISCREPANCY: research 0003 characterised the clause list as
       "server MUST reject X"; the actual text is SHOULD. The row is unchanged —
       ADR-0006 commits us to this shape regardless — but the table must not
       render it as a MUST.
+
+  - name: scope_exact_match
+    basis: adr
+    prevents: A token whose scope merely resembles the required one is accepted.
+    citation:
+      source: ADR-0012 §Unrecognised scopes are inert
+      context: >-
+        RFC 6749 §3.3 — "The value of the scope parameter is expressed as a list
+        of space-delimited, case-sensitive strings." (retrieved 2026-08-16)
+      note: >-
+        The RFC sentence is definitional and carries no normative keyword, so it
+        cannot be this row's basis without asserting a strength its quote does not
+        contain. It also governs how the authorization server represents the
+        parameter, not how a resource server compares it. Exact case-sensitive
+        membership is our decision; the clause is context.
+    normative_strength: null
+    removal: Replace exact case-sensitive set membership with any laxer comparison.
+    status: asserted
+    floor: false
+    note: >-
+      One row, not two: the deletion is a single site — the comparison expression —
+      so the test asserts both variants against it. `ERP.READ` must not satisfy
+      `erp.read` (case), and `hr.read` must not satisfy `erp.read` (namespace).
+      Splits from insufficient_scope, whose removal skips the intersection
+      entirely rather than running it wrongly. Testable without new realm state:
+      ADR-0007's `mcp-conformance-decoy` already holds another resource's scope.
 
   - name: header_body_mismatch
     basis: clause

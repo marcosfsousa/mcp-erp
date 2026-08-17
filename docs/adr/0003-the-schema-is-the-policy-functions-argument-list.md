@@ -61,7 +61,7 @@ What is genuinely traded away is defence in depth: an attacker reaches the row-s
 ### The rules the fields serve
 
 1. **Row scoping.** You see requisitions in your own cost centre. `auditor` reads all three and writes nothing.
-2. **Threshold: €5,000.** At or below, `approver` suffices. Above, `senior_approver` — which has no upper limit, so it covers small requisitions too and nobody needs to hold both.
+2. **Threshold: €5,000.** At or below, `approver` suffices. Above, `unlimited_approver` — which, as its name now says, has no upper limit, so it covers small requisitions too and nobody needs to hold both. *(Renamed from `senior_approver` 2026-08-16 by [ADR-0012](0012-the-token-names-a-capability-never-a-role.md): the role was never about seniority, and the old name needed this gloss every time it appeared.)*
 3. **Segregation of duties, two edges.** Submitter ≠ approver, tested against `Requisition.submitted_by`. Approver ≠ invoice recorder, tested against `PurchaseOrder.approved_by`. This is what makes `record_invoice` earn its place; with one edge it would demonstrate no authorization behaviour of its own.
 4. **Terminal states.** A second decision on a decided requisition returns `already_decided`; a second invoice against an order returns `already_invoiced`. Both write paths are idempotent by the same mechanism, which is what ADR-0002's promise — that a model retrying a whole batch cannot double-approve — rests on.
 
@@ -69,7 +69,9 @@ What is genuinely traded away is defence in depth: an attacker reaches the row-s
 
 ### Four roles
 
-`approver`, `senior_approver`, `invoice_clerk`, `auditor`. Submitting is gated by scope alone: anyone who can reach the server may raise a requisition against their own centre, which is true of real organisations and keeps the role set to the tools where a role denial is interesting. Role names remain placeholders owned by #11, as do the scope strings.
+`approver`, `unlimited_approver`, `invoice_clerk`, `auditor`. Submitting is gated by scope alone: anyone who can reach the server may raise a requisition against their own centre, which is true of real organisations and keeps the role set to the tools where a role denial is interesting. *Ratified 2026-08-16 by [ADR-0012](0012-the-token-names-a-capability-never-a-role.md), which renamed `senior_approver` and closed the scope strings.*
+
+The `auditor` line in the cast below reads *"reads 3 of 3, writes nothing"*. That describes the **role**, which confers no write authority — not the reachable surface of the Person holding it. Because submitting is gated by scope alone, a token carrying `erp.write` lets an auditor raise a requisition against their own centre like anyone else. The two statements were always compatible; ADR-0012's split between capability and role is what makes the distinction legible.
 
 ### Identity: one seed file, two renderings
 
@@ -87,7 +89,7 @@ Seven people. Every one reaches a branch nothing else reaches.
 | --- | --- | --- | --- |
 | Priya Raman | CC-4100 | — | Scope-only submit; `role_missing` on approve |
 | Tomas Weber | CC-4100 | `approver` | Approves others' ≤ €5,000; refused above; refused on own — and is the submitter edge 1 tests against |
-| Ingrid Holm | CC-4100 | `senior_approver`, `invoice_clerk` | Approves above threshold; two roles composing on one person; cannot invoice what she approved (edge 2, negative) |
+| Ingrid Holm | CC-4100 | `unlimited_approver`, `invoice_clerk` | Approves above threshold; two roles composing on one person; cannot invoice what she approved (edge 2, negative) |
 | Rafael Costa | CC-4100 | `invoice_clerk` | Edge 2, positive — the counterparty who *can* invoice Ingrid's approvals |
 | Yusuf Demir | CC-4200 | `approver` | Row scoping — CC-4100 rows return `not_found` |
 | Anna Lindqvist | CC-4200 | `auditor` | Breadth by role — reads 3 of 3, writes nothing |

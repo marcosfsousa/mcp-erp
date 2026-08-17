@@ -107,7 +107,7 @@ Filtering is on **granted scope alone**; ERP role is a call-time check. Filterin
 **Input to other tickets.**
 
 - **#9 (attack suite)** inherits five named scenarios: `retry_after_role_denial`, `retry_after_sod_denial_same_person`, `retry_after_sod_denial_other_person`, `row_probe_indistinguishable`, `double_approval_via_batch_retry`.
-- **#11 (scope granularity)** — every scope string here (`erp:requisition:read|submit|approve`, `erp:invoice:record`) is a placeholder, as are the role names (`approver`, `senior_approver`, `invoice_clerk`).
+- **#11 (scope granularity)** — ~~every scope string here (`erp:requisition:read|submit|approve`, `erp:invoice:record`) is a placeholder, as are the role names (`approver`, `senior_approver`, `invoice_clerk`)~~. *Closed 2026-08-16 by [ADR-0012](0012-the-token-names-a-capability-never-a-role.md).* The scopes are **`erp.read`, `erp.write`, `erp.decide`** — coarse, flat, and constructed from a capability each tool declares. The `403` challenge above quotes them in its `scope` parameter. Role names are ratified with one rename: `senior_approver` becomes **`unlimited_approver`**.
 - **#6 (data model)** owns whether a person can hold more than one cost centre. If they can, `submit_requisition` regains a `cost_centre` input and the question of how the model learns its legal values reopens.
 - **#12 (module boundaries)**, which this ticket blocks, inherits a clean seam: the policy function returns a `reason`, and three separate adapters render it as a `403`, a JSON-RPC error, or a tool result. The refusal *decision* and the refusal *shape* are different concerns.
 
