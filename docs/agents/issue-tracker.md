@@ -26,6 +26,8 @@ When set to `yes`, PRs run through the same labels and states as issues, using t
 
 GitHub shares one number space across issues and PRs, so a bare `#42` may be either — resolve with `gh pr view 42` and fall back to `gh issue view 42`.
 
+That shared space is why **map numbers take backticks**: constraint, note, cut-order and ship-line numbers are their own sequence and collide with real issue and PR numbers throughout `#1`–`#16`. A noun prefix does not stop the autolink — writing `constraint` before a bare number still links it to the issue of the same value and injects that issue's title into the sentence. Write `` `#10` `` for a map object; keep bare `#N` for actual issues and pull requests. This binds **every surface GitHub autolinks — issue bodies, pull request bodies, and commit messages, subject lines included.** Markdown files are not autolinked, so `#N` in an ADR or in `scenarios.yaml` is already inert and needs nothing.
+
 ## When a skill says "publish to the issue tracker"
 
 Create a GitHub issue.
