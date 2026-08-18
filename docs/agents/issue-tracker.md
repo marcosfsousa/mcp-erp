@@ -28,6 +28,10 @@ GitHub shares one number space across issues and PRs, so a bare `#42` may be eit
 
 That shared space is why **map numbers take backticks**: constraint, note, cut-order and ship-line numbers are their own sequence and collide with real issue and PR numbers throughout `#1`–`#16`. A noun prefix does not stop the autolink — writing `constraint` before a bare number still links it to the issue of the same value and injects that issue's title into the sentence. Write `` `#10` `` for a map object; keep bare `#N` for actual issues and pull requests. This binds **every surface GitHub autolinks — issue bodies, pull request bodies, and commit messages, subject lines included.** Markdown files are not autolinked, so `#N` in an ADR or in `scenarios.yaml` is already inert and needs nothing.
 
+**In commit messages, drop the `#` entirely — backticks do not work there.** Commit messages are not rendered as Markdown, so a backtick is a literal character and the `#N` inside it still autolinks. Write **`map constraint 13`** or **`constraint no. 13`**; never `` `#13` ``. Bare `#N` for a real issue or pull request stays correct and wanted, including the `Closes #<n>` line.
+
+This is a defect the rule above had, not a case it failed to cover: it named commit messages as a bound surface and prescribed a mechanism that does nothing there, so following it exactly produced the mislink. It was found when the commit establishing map constraint 13 rendered *"map constraint `#13`"* as a link to pull request 13 — an unrelated merged research PR — and *"constraint `#12`"* as a link to issue 12, which is the ticket rather than the constraint and therefore looks right while being wrong. Verify on a rendered commit page, not on `git log`, which shows neither backticks nor links as GitHub does.
+
 ## When a skill says "publish to the issue tracker"
 
 Create a GitHub issue.
