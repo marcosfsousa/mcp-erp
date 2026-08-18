@@ -10,4 +10,7 @@ so nothing in here may import layer 3. These are the unit tests of the policy
 function: the ordered chain, the three entry points, the reason records, the
 directory miss. Docker is not running when they pass.
 
-Lands with #34.
+Landed with #34. The stand-in declarations these run against are in
+`declarations.py`, deliberately in a vocabulary this exhibit does not model —
+a fixture naming a requisition would reintroduce layer 3's words into the layer
+that has to survive without them.

@@ -54,9 +54,11 @@ convention = "google"
 
 [tool.mypy]
 python_version = "3.13"
-# `tests` joins this list when the first suite lands (#34); naming an empty
-# directory is a hard error, not a no-op.
-files = ["src"]
+# `tests` joined this list with the first suite (#34). The two claims the entry
+# points make — a resource that cannot be omitted, and a whole-call permit that
+# cannot be used as an item permit — are type-level, so this job is where a
+# regression in either actually fails.
+files = ["src", "tests"]
 strict = true
 
 [tool.pytest.ini_options]
