@@ -1,0 +1,6 @@
+# The preflight step hashes the fetched document against the committed copy, so
+# the committed copy's bytes must not depend on whose machine checked it out.
+# `-text` disables line-ending conversion outright rather than normalising it,
+# because normalisation is still a rule about what the bytes become — and these
+# bytes are the thing being compared.
+public/clients/**/*.json -text
