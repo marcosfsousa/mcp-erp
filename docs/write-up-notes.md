@@ -126,6 +126,42 @@ rediscover.
   once, by rendering, so it is checkable by re-rendering — where a duplication
   by hand would only be checkable by remembering. — #35, ADR-0003
 
+- **The plain-HTTP deviation reaches further than the register row states, and
+  the extra distance is cookies.** Keycloak marks its authentication-session
+  cookies `Secure; SameSite=None` whatever the scheme, so a conforming cookie
+  jar cannot complete an authorization code flow over plain HTTP — the login
+  post comes back *Restart login cookie not found*, which reads like a rejected
+  password. Browsers do not hit it, because they treat `http://localhost` as a
+  trustworthy origin — and they decide that on the **name**, so a hostname that
+  merely resolves to loopback gets no pass. A `127.0.0.1 keycloak` hosts line
+  fixes resolution and cannot fix this. — #36, ADR-0007, register row 2
+
+- **A foreign issuer has to *assert* a subject, because it cannot own one.** A
+  Keycloak user id is the primary key of `USER_ENTITY` across the whole
+  database rather than per realm, so the neighbour realm cannot hold a user
+  whose id is one of the Cast's subjects. The subject matters: skip the `iss`
+  check with a *foreign* subject and the call still fails, at the principal
+  directory, so `foreign_issuer_token` would go red on its own removal while
+  proving nothing about the issuer. The constraint and the requirement pull in
+  opposite directions, and a claim mapper is what satisfies both. — #36, ADR-0007
+
+- **Readiness is a claim about a process, and what a dependent needs is a claim
+  about state.** Keycloak reports `started in 3.7s` and opens both ports about
+  four seconds before the realm import begins, so `/health/ready` goes green on
+  a server with no realm. Anything waiting on that signal starts against an
+  empty authorization server and fails on something unrelated to what it was
+  asserting. The probe is the realm's own metadata document instead, matched on
+  the exact issuer — which makes it two checks in one. — #36
+
+- **A one-line contradiction between an artifact and three documents survived a
+  full review round.** The seed shipped the issuer as `http://localhost:8081/...`
+  while ADR-0005, ADR-0006 and `docs/normative-register.md` all named
+  `http://keycloak:8081/...`; the review that cleared it quoted the value in
+  passing and read past the hostname. Nothing in the machinery compares a seed
+  to an ADR, and the walk that would have caught it is the one constraint `#12`
+  performs over *derived* artifacts — which the seed, being a source, is not.
+  — #36, #35
+
 ---
 
 ## Findings

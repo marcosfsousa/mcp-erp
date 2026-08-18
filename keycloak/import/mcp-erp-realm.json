@@ -1,0 +1,277 @@
+{
+  "realm": "mcp-erp",
+  "displayName": "mcp-erp",
+  "enabled": true,
+
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "rememberMe": false,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+
+  "accessTokenLifespan": 300,
+  "accessTokenLifespanForImplicitFlow": 300,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+
+  "requiredActions": [
+    {
+      "alias": "VERIFY_PROFILE",
+      "name": "Verify Profile",
+      "providerId": "VERIFY_PROFILE",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 90,
+      "config": {}
+    }
+  ],
+
+  "roles": {
+    "realm": [
+      {
+        "name": "approver",
+        "description": "Decides requisitions at or below the threshold. Issuer-side half of a name the server resolves for itself."
+      },
+      {
+        "name": "unlimited_approver",
+        "description": "Decides requisitions at any amount. Never appears on the wire; it gates issuance of erp.decide and nothing else."
+      },
+      {
+        "name": "invoice_clerk",
+        "description": "Records invoices at the server. Declared here so the user import can assign it; no scope maps from it."
+      },
+      {
+        "name": "auditor",
+        "description": "Reads across every partition at the server. Declared here so the user import can assign it; no scope maps from it."
+      }
+    ]
+  },
+
+  "scopeMappings": [
+    {
+      "clientScope": "erp.decide",
+      "roles": ["approver", "unlimited_approver"]
+    }
+  ],
+
+  "clientScopes": [
+    {
+      "name": "basic",
+      "description": "The subject claim. Declared explicitly because a hand-authored clientScopes array suppresses every built-in default, this one included.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp-erp-audience",
+      "description": "Audience binding for this resource server. Infrastructure rather than a permission, so it does not reach the consent screen.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "mcp-erp-resource",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "${MCP_RESOURCE_URL:http://localhost:8080/mcp}",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hr-audience",
+      "description": "Audience binding for somebody else's resource server, so audience_confusion replays a token that was legitimately issued.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "hr-resource",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "${HR_RESOURCE_URL:http://localhost:9090/hr}",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "erp.read",
+      "description": "Read purchase requisitions in your cost centre",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Read purchase requisitions in your cost centre"
+      },
+      "protocolMappers": []
+    },
+    {
+      "name": "erp.write",
+      "description": "Raise requisitions and record invoices on your behalf",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Raise requisitions and record invoices on your behalf"
+      },
+      "protocolMappers": []
+    },
+    {
+      "name": "erp.decide",
+      "description": "Approve or reject purchase requisitions on your behalf",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Approve or reject purchase requisitions on your behalf"
+      },
+      "protocolMappers": []
+    },
+    {
+      "name": "hr.read",
+      "description": "Read records in the neighbouring human resources system",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Read records in the neighbouring human resources system"
+      },
+      "protocolMappers": []
+    }
+  ],
+
+  "clients": [
+    {
+      "clientId": "mcp-conformance",
+      "name": "Conformance client (pre-registered)",
+      "description": "Every normal run. Same flow the hosted identity document drives, one registration path apart.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": true,
+      "frontchannelLogout": false,
+      "redirectUris": [
+        "http://127.0.0.1:8085/callback",
+        "http://localhost:8085/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "defaultClientScopes": ["basic", "mcp-erp-audience"],
+      "optionalClientScopes": ["erp.read", "erp.write", "erp.decide"]
+    },
+    {
+      "clientId": "mcp-conformance-decoy",
+      "name": "Decoy client (another resource server)",
+      "description": "audience_confusion. A token legitimately issued for somebody else's resource, replayed at us.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": true,
+      "frontchannelLogout": false,
+      "redirectUris": [
+        "http://127.0.0.1:8085/callback",
+        "http://localhost:8085/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "defaultClientScopes": ["basic", "hr-audience"],
+      "optionalClientScopes": ["hr.read"]
+    },
+    {
+      "clientId": "mcp-conformance-bare",
+      "name": "Audience-less client",
+      "description": "audience_missing. No audience mapper anywhere on its default scopes, so the fail-closed check has a real token to refuse.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": true,
+      "frontchannelLogout": false,
+      "redirectUris": [
+        "http://127.0.0.1:8085/callback",
+        "http://localhost:8085/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "defaultClientScopes": ["basic"],
+      "optionalClientScopes": ["erp.read", "erp.write", "erp.decide"]
+    },
+    {
+      "clientId": "mcp-expiry-probe",
+      "name": "Expiry probe",
+      "description": "token_expired. Identical to mcp-conformance but for a ten-second access token, so expiry is a wait rather than a fake clock.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": true,
+      "frontchannelLogout": false,
+      "redirectUris": [
+        "http://127.0.0.1:8085/callback",
+        "http://localhost:8085/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+",
+        "access.token.lifespan": "10"
+      },
+      "defaultClientScopes": ["basic", "mcp-erp-audience"],
+      "optionalClientScopes": ["erp.read", "erp.write", "erp.decide"]
+    }
+  ]
+}

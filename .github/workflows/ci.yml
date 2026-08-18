@@ -145,6 +145,21 @@ jobs:
       - name: Every package imports
         run: uv run python -c "import mcp_erp.app"
 
+      # The token helper's pure half — base64 padding, the challenge digest,
+      # form actions, scope sets. It lands here rather than in a ninth job
+      # because ADR-0013 fixes the job set at eight and holds their names equal
+      # to the ruleset's required contexts in both directions; a step inside a
+      # job that already runs changes no context and needs no ruleset edit.
+      #
+      # The seam is right, not merely convenient. This job means *an ordinary
+      # Python defect*, and a helper that pads base64 wrongly is exactly one.
+      # The three Compose jobs that will drive this helper cannot hold it —
+      # they need a running authorization server to say anything at all — and
+      # `Layer 2 ejects clean` would report a broken digest as layer 2 failing
+      # to stand alone, which is the wrong diagnosis on the wrong job.
+      - name: The token helper's Docker-free half
+        run: uv run pytest tests/test_tokens.py
+
   layer-boundaries:
     name: Layer boundaries
     runs-on: ubuntu-latest
@@ -242,10 +257,17 @@ jobs:
         run: |
           set -euo pipefail
 
+          # The two `data` directories hold nothing but renderings, so they are
+          # named whole. `keycloak/import/` is not like them: since #36 it holds
+          # the hand-authored realm files beside the generated user import, and
+          # naming the directory would report an authored edit as a rendering
+          # that drifted from the seed — the one diagnosis this job exists to
+          # give, handed out for the one thing it is not. So the rendered file
+          # is named exactly.
           drifted=$(git status --porcelain -- \
             src/mcp_erp/authorization/data \
             src/mcp_erp/purchase_to_pay/data \
-            keycloak/import)
+            keycloak/import/mcp-erp-users-0.json)
 
           if [ -n "${drifted}" ]; then
             echo "::error::A rendering no longer matches the seed."

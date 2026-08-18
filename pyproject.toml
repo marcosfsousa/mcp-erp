@@ -23,6 +23,11 @@ dependencies = ["pyyaml"]
 # container start. Versions float here and are pinned by uv.lock, per map
 # constraint `#11` — the lockfile is the pin, not this list.
 dev = [
+    # The token helper drives a real authorization code flow: one cookie jar
+    # across three requests, and redirects deliberately not followed, since two
+    # of the three answers *are* redirects. Test-only, because this server never
+    # mints a token — it validates one.
+    "httpx",
     "import-linter",
     "mypy",
     "pytest",

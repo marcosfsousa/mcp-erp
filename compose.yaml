@@ -1,0 +1,153 @@
+# The evaluation moment. ADR-0011 declined a public deployment outright, so this
+# file is where the exhibit runs — on the reader's machine and nowhere else.
+#
+#
+# WHAT IS HERE, AND WHAT IS NOT
+# -----------------------------
+# The authorization server and the database. The MCP server itself arrives with
+# #37, as two replicas behind no sticky routing, which is what makes map
+# constraint `#5`'s statelessness falsifiable rather than asserted.
+#
+#
+# NOTHING EXTERNAL FLOATS
+# -----------------------
+# Map constraint `#11`. Both images pin by **exact tag and digest** — Keycloak
+# through its Dockerfile, Postgres inline below — and a digest moves only in a
+# pull request that does nothing else.
+#
+#
+# COLD START EVERY TIME, ON BOTH SERVICES
+# ---------------------------------------
+# Neither service has a volume, and that is the design rather than an omission.
+# Keycloak re-imports the realm from an empty in-memory database on every boot,
+# so it is a provable pure function of the committed files and its signing keys
+# are fresh — which turns key rotation from asserted into exercised. Postgres
+# re-runs its init scripts on an empty data directory for the same reason: what
+# the database holds is a function of what is committed, not of what happened to
+# it since.
+#
+# The cost is stated rather than discovered: `docker compose down` discards
+# everything, and there is nothing here worth keeping that is not in git.
+#
+#
+# ONE HOSTNAME, TWO SIDES OF A CONTAINER BOUNDARY
+# -----------------------------------------------
+# The issuer is `http://keycloak:8081/realms/mcp-erp`, from the seed. ADR-0005
+# configures the resource server with the issuer and nothing else, so that one
+# string has to resolve identically inside the network and outside it. Inside,
+# Compose's own DNS answers for `keycloak`. Outside, it needs one line in the
+# host's hosts file, which ADR-0005 §Consequences priced and accepted:
+#
+#     127.0.0.1 keycloak
+#
+# Without it, a host-side tool can still be pointed somewhere reachable —
+# `KEYCLOAK_BASE_URL=http://localhost:8081` — which changes the address the
+# requests go to and never the issuer they assert.
+#
+# Plain HTTP on both identifiers is normative register row 2, a hard `MUST`
+# deviation carried deliberately and not closed here.
+
+name: mcp-erp
+
+services:
+  # The exhibit, in ADR-0007's words: a reader opens the realm files to see the
+  # audience mapper, the decoy client and the deliberate role drift.
+  keycloak:
+    build:
+      context: ./keycloak
+    image: mcp-erp-keycloak:26.7.1
+    # Port and hostname agree, because the issuer carries the port and Keycloak
+    # stamps the issuer into every token it mints.
+    ports:
+      - "8081:8081"
+    environment:
+      # What every token says, and what the principal directory joins on.
+      KC_HOSTNAME: http://keycloak:8081
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_PORT: "8081"
+
+      # Fresh on every boot, like everything else here. The admin console is not
+      # part of the exhibit; this exists so that a reader who wants to look at
+      # the imported realm can, and so that a missing value is not a boot
+      # failure nobody expected.
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: not-a-secret-demo-password
+
+      # The realm's `${VAR:default}` placeholders resolve from operating-system
+      # environment variables only — not from `-D` properties — and an
+      # unresolved one is left literally in place rather than erroring, silently
+      # installing the string `${MCP_RESOURCE_URL}` as an audience value. Every
+      # placeholder in the realm carries a default, so these are an override
+      # rather than a requirement; they are set anyway, so the value a reader
+      # sees in a token is the value this file states.
+      MCP_RESOURCE_URL: http://localhost:8080/mcp
+      HR_RESOURCE_URL: http://localhost:9090/hr
+    volumes:
+      # Mounted over the copy baked into the image, from the same committed
+      # path. The mount wins, so editing a realm file and restarting shows the
+      # change immediately — which is what makes the pure-function claim
+      # something a reader can try rather than take on trust.
+      - ./keycloak/import:/opt/keycloak/data/import:ro
+    healthcheck:
+      # **Realm readiness, not process readiness, and the difference was
+      # measured rather than assumed.** `/health/ready` on the management port
+      # answers UP about four seconds before the realm import even begins —
+      # Keycloak logs `started in 3.7s` at 19:21:35 and `Realm 'mcp-erp'
+      # imported` at 19:21:42. A dependent waiting on that signal would start
+      # against a server with no realm, and fail on something that has nothing
+      # to do with what it was asserting.
+      #
+      # So the probe is the realm's own metadata document, matched on the exact
+      # issuer — which makes it two checks in one: the realm exists, and the
+      # hostname is configured to stamp the issuer the seed declares.
+      #
+      # The image carries no curl and no wget, being built on a micro base, so
+      # this speaks HTTP over one of bash's own file descriptors.
+      #
+      # **Both realms, because the import order is not stable.** One run
+      # imported the neighbour first and another imported it last — same files,
+      # same image — so probing whichever realm "finishes last" is a guess that
+      # was already wrong once. Each subshell gets its own descriptor.
+      test:
+        - CMD-SHELL
+        - >-
+          (exec 3<>/dev/tcp/localhost/8081;
+          printf 'GET /realms/mcp-erp/.well-known/openid-configuration HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;
+          grep -q '"issuer":"http://keycloak:8081/realms/mcp-erp"' <&3) &&
+          (exec 3<>/dev/tcp/localhost/8081;
+          printf 'GET /realms/mcp-erp-neighbour/.well-known/openid-configuration HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;
+          grep -q '"issuer":"http://keycloak:8081/realms/mcp-erp-neighbour"' <&3)
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # The ERP's rows. Seeded from the seed's third rendering, which is the same
+  # file the drift check re-renders and refuses a diff on — so what the database
+  # holds at boot is what the authored organisation says, or a red check.
+  postgres:
+    image: postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: mcp_erp
+      POSTGRES_USER: mcp_erp
+      # Conspicuously not a secret, on the same terms as the Cast's password:
+      # the exhibit runs on the reader's machine and nowhere else, so there is
+      # nothing here to leak.
+      POSTGRES_PASSWORD: not-a-secret-demo-password
+    volumes:
+      # Named individually rather than by mounting `db/`, so that adding a
+      # README beside them does not silently become a startup step.
+      - ./db/001-schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+      - ./db/002-load-organisation.sh:/docker-entrypoint-initdb.d/002-load-organisation.sh:ro
+      # The rendering itself, read-only, at a path the loader names. Mounting
+      # the committed file means the database is seeded from the artifact the
+      # drift check polices rather than from a copy of it.
+      - ./src/mcp_erp/purchase_to_pay/data/organisation.json:/seed/organisation.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=$$POSTGRES_USER --dbname=$$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s

@@ -75,7 +75,19 @@
 #                                 the cast against the rule that every member
 #                                 earns a line.
 
-issuer: http://localhost:8081/realms/mcp-erp
+# The Compose service name, not `localhost`, and the difference is load-bearing.
+# ADR-0005 configures the resource server with the issuer and nothing else, so
+# this one string has to resolve identically on both sides of the container
+# boundary. A container cannot reach `localhost:8081` — that address is its own
+# loopback — while `keycloak:8081` resolves by Compose's own DNS inside the
+# network and by one documented `127.0.0.1 keycloak` line in the reader's hosts
+# file outside it. ADR-0005 §Consequences priced that line and accepted it.
+#
+# Plain HTTP rather than HTTPS is normative register row 2, a hard `MUST`
+# deviation carried deliberately: no certificate authority issues a certificate
+# for `keycloak:8081`, and a self-signed one makes certificate trust a setup
+# step for every third-party client.
+issuer: http://keycloak:8081/realms/mcp-erp
 
 # Not a secret, and conspicuously so. The exhibit runs on the reader's machine
 # and nowhere else, so there is nothing here to leak.
