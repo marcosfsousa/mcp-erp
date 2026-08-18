@@ -12,5 +12,7 @@ directory miss. Docker is not running when they pass.
 
 Landed with #34. The stand-in declarations these run against are in
 `declarations.py`, deliberately in a vocabulary this exhibit does not model —
-a fixture naming a requisition would reintroduce layer 3's words into the layer
-that has to survive without them.
+a declaration naming a requisition would reintroduce layer 3's words into the
+layer that has to survive without them. They are declarations rather than
+fixtures: a fixture is generated from a matrix row and owned by it, and every
+constant there is hand-written.

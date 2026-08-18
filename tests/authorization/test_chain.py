@@ -6,6 +6,8 @@ the earlier one is what the caller sees. A test that only ever fails one step at
 a time passes against a chain in any order at all.
 """
 
+from dataclasses import replace
+
 from declarations import (
     ALL_SCOPES,
     DECIDE_ROW,
@@ -33,7 +35,6 @@ from mcp_erp.authorization import (
     INSUFFICIENT_SCOPE,
     NOT_FOUND,
     ROLE_MISSING,
-    Principal,
     decide_call,
     decide_item,
     permits_scope,
@@ -50,13 +51,7 @@ def test_a_permitted_item_reaches_the_end_of_the_chain() -> None:
 
 def test_scope_is_checked_before_role() -> None:
     """A principal failing both steps sees the scope refusal, not the role one."""
-    scopeless = Principal(
-        issuer=UNROLED.issuer,
-        subject=UNROLED.subject,
-        granted_scopes=ALL_SCOPES - {DECIDE_SCOPE},
-        roles=frozenset(),
-        partition=UNROLED.partition,
-    )
+    scopeless = replace(UNROLED, granted_scopes=ALL_SCOPES - {DECIDE_SCOPE})
 
     assert decide_call(scopeless, DECIDE_ROW).reason is INSUFFICIENT_SCOPE
     assert decide_item(scopeless, DECIDE_ROW, ROW).reason is INSUFFICIENT_SCOPE
@@ -68,13 +63,7 @@ def test_role_is_checked_before_row_scoping() -> None:
     The reverse order would answer ``not_found``, which reads to a client as a
     row that does not exist rather than as a grant an administrator can make.
     """
-    stranger = Principal(
-        issuer=OUTSIDER.issuer,
-        subject=OUTSIDER.subject,
-        granted_scopes=ALL_SCOPES,
-        roles=frozenset(),
-        partition="P-9",
-    )
+    stranger = replace(OUTSIDER, roles=frozenset(), partition="P-9")
 
     assert decide_item(stranger, DECIDE_ROW, ROW).reason is ROLE_MISSING
 
@@ -137,13 +126,7 @@ def test_the_item_path_re_evaluates_the_caller_level_steps() -> None:
     ``decide_item`` runs steps 1 and 2 itself, so a handler cannot reach an
     item decision that skipped them by calling this entry point directly.
     """
-    scopeless = Principal(
-        issuer=REVIEWER.issuer,
-        subject=REVIEWER.subject,
-        granted_scopes=frozenset(),
-        roles=REVIEWER.roles,
-        partition=REVIEWER.partition,
-    )
+    scopeless = replace(REVIEWER, granted_scopes=frozenset())
 
     assert decide_item(scopeless, DECIDE_ROW, ROW).reason is INSUFFICIENT_SCOPE
     assert decide_item(UNROLED, DECIDE_ROW, ROW).reason is ROLE_MISSING

@@ -107,22 +107,7 @@ def test_the_absent_row_and_the_foreign_row_share_one_return_site() -> None:
     assert len(sites) == 1
 
 
-def test_layer_2_imports_nothing_from_the_layers_above_it() -> None:
-    """The ejection claim, read off the package rather than off the checkout.
-
-    ``import-linter`` makes the same assertion over the whole static graph and
-    the ejection job makes it over what these tests actually run. This one
-    catches the case where a layer-2 module grows an import that neither reaches
-    before a reader does.
-    """
-    package = Path(inspect.getfile(policy)).parent
-    for source in sorted(package.glob("*.py")):
-        tree = ast.parse(source.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module is not None:
-                assert "purchase_to_pay" not in node.module, source.name
-                assert "transport" not in node.module, source.name
-            elif isinstance(node, ast.Import):
-                for alias in node.names:
-                    assert "purchase_to_pay" not in alias.name, source.name
-                    assert "transport" not in alias.name, source.name
+# No test here asserts that layer 2 imports nothing from the layers above it.
+# The `Layer boundaries` job already does, over the whole static graph rather
+# than over the modules this suite happens to reach, and a second copy here
+# would be a weaker assertion wearing the same name.

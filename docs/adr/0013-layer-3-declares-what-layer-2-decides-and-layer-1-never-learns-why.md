@@ -4,6 +4,8 @@
 - **Date:** 2026-08-18
 - **Ticket:** [#12 Settle module boundaries](https://github.com/marcosfsousa/mcp-erp/issues/12)
 - **Evidence:** map constraints `#1`, `#4`, `#6`, `#7`, `#10`, `#12`; [ADR-0002](0002-refusal-shape-follows-the-remedy.md), [ADR-0003](0003-the-schema-is-the-policy-functions-argument-list.md), [ADR-0004](0004-layer-2-is-a-portable-pattern-layer-3-is-ejectable.md) (which handed this ticket five acceptance criteria and four tabled couplings), [ADR-0006](0006-fail-closed-in-a-fixed-order.md), [ADR-0007](0007-the-realm-is-the-exhibit.md), [ADR-0008](0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md), [ADR-0009](0009-not-built-is-not-unreachable.md), [ADR-0010](0010-the-clause-decides-the-row-the-removal-decides-the-split.md), [ADR-0012](0012-the-token-names-a-capability-never-a-role.md)
+- **Amended:** 2026-08-18 — substantive, by [#32](https://github.com/marcosfsousa/mcp-erp/issues/32). `Mount` becomes `Route`, and the accepted cost on exception handling is withdrawn. See *The gate chain sits in middleware, in two tiers*. No decision here is reversed. *(Header added 2026-08-18 by [#34](https://github.com/marcosfsousa/mcp-erp/issues/34); the in-body marker has stood since the amendment landed.)*
+- **Amended:** 2026-08-18 — additive, by [#34](https://github.com/marcosfsousa/mcp-erp/issues/34). `Rule` and `Action` are **parameterised on the resource type** as built. See *The `Action` is the seam*. No decision here is reversed.
 
 ## Question
 
@@ -46,6 +48,14 @@ An injected directory would make purity a promise every implementation must keep
 ### The `Action` is the seam
 
 Layer 2 defines a frozen `Action` — namespace, capability, required roles, ordered rule tuple, partition-bypass roles — and a `Rule` protocol `(Principal, Resource) -> Reason | None`. Layer 3 declares exactly one `Action` per tool, extending the per-tool declaration ADR-0012 already made single-source-of-truth. Ejection leaves the `Action` type and the chain with no instances declared.
+
+*Amended 2026-08-18 by [#34](https://github.com/marcosfsousa/mcp-erp/issues/34) — the signature above is **parameterised on the resource type** as built: `Rule[R: Resource]`, `Action[R]`, `decide_item(principal, action: Action[R], resource: R | None)`.*
+
+**The parameter states the signature precisely rather than departing from it.** Rule 3 traverses `Requisition.submitted_by` and the threshold reads an amount, and neither is a member of the one-member `Resource` protocol — so an unparameterised `Rule` would make every layer-3 rule cast its way back to the type it was declared beside, in the layer whose types are supposed to be the load-bearing part. `R` is bound to `Resource`, so a rule can only ever narrow what layer 2 already requires, and a resource of the wrong type is a type error rather than a runtime one.
+
+Two costs, both small and both visible at the call site. `permits_scope` and `decide_call` take `Action[Any]`, because they read nothing from a resource and a caller filtering `tools/list` holds every declared action at once. And an `Action` declaration needs an explicit annotation — `LIST_REQUISITIONS: Action[Requisition] = Action(...)` — because an action with no relationship rules leaves a type checker nothing to infer the parameter from.
+
+Recorded here rather than left to a reader diffing the code against this document, which is what the amendment idiom exists for.
 
 **The scope string is derived, never stored as a literal.** ADR-0012 gives layer 2 the shape, the join, the comparison and the three words, with layer 3 supplying only `erp`; `scenarios.yaml`'s `insufficient_scope` row states that the `scope=` strings are *"derived from the capability each tool declares — never hand-written here."* An `Action` therefore holds the **capability**, and its scope string is a derived, unstored property. A stored literal would be a hand-written scope string in the one place the attack suite forbids one. The mechanism — a computed property, or a value computed once at construction — is left to the build ticket; the property is what this ADR fixes.
 

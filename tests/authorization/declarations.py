@@ -2,14 +2,16 @@
 
 Everything a real domain declares, declared here in a vocabulary this exhibit
 does not model: rows in a **content review** tool rather than requisitions. That
-is not decoration. The suite these feed runs with layer 3 deleted, so a fixture
-naming a requisition would either import the package the ejection command
-removes or quietly reintroduce its vocabulary into the layer that must survive
-without it.
+is not decoration. The suite these feed runs with layer 3 deleted, so a
+declaration naming a requisition would either import the package the ejection
+command removes or quietly reintroduce its vocabulary into the layer that must
+survive without it.
 
-The ticket that renders the directory from the seed is a different one; these
-rows and people are inline on purpose, and the chain does not need real people
-to be proven domain-free.
+They are **declarations, not fixtures**: a fixture is generated from a
+decision-matrix row and owned by it, where every constant here is hand-written
+and stands in for what layer 3 will declare. The ticket that renders the
+directory from the seed is a different one, and the chain does not need real
+people to be proven domain-free.
 """
 
 from dataclasses import dataclass
@@ -26,7 +28,7 @@ from mcp_erp.authorization import (
 )
 
 ISSUER = "https://issuer.example/realms/exhibit"
-"""One issuer for every fixture. The directory key is subject **scoped by** it."""
+"""One issuer throughout. The directory key is the subject **scoped by** it."""
 
 
 @dataclass(frozen=True, slots=True)

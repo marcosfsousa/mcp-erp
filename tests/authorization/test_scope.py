@@ -9,7 +9,7 @@ fields the function actually touches, rather than by reading the source and
 trusting it.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, cast
 
 from declarations import (
@@ -63,12 +63,9 @@ def test_the_comparison_is_exact_and_case_sensitive() -> None:
     Case and namespace are one deletion — the comparison expression — so both
     variants are asserted against it.
     """
-    lookalikes = Principal(
-        issuer=REVIEWER.issuer,
-        subject=REVIEWER.subject,
+    lookalikes = replace(
+        REVIEWER,
         granted_scopes=frozenset({"REVIEW.READ", "audit.read", "review.read.all", "openid"}),
-        roles=REVIEWER.roles,
-        partition=REVIEWER.partition,
     )
 
     assert not permits_scope(lookalikes, LIST_ROWS)
@@ -76,12 +73,9 @@ def test_the_comparison_is_exact_and_case_sensitive() -> None:
 
 def test_an_unrecognised_scope_is_inert() -> None:
     """No unknown-scope code path, no namespace awareness, nothing to fingerprint."""
-    noisy = Principal(
-        issuer=REVIEWER.issuer,
-        subject=REVIEWER.subject,
+    noisy = replace(
+        REVIEWER,
         granted_scopes=frozenset({"review.read", "openid", "hr.read", "review.admin"}),
-        roles=REVIEWER.roles,
-        partition=REVIEWER.partition,
     )
 
     assert permits_scope(noisy, LIST_ROWS)
@@ -90,13 +84,7 @@ def test_an_unrecognised_scope_is_inert() -> None:
 
 def test_scopes_do_not_imply_one_another() -> None:
     """A plain set, and membership is the whole of the filter."""
-    decide_only = Principal(
-        issuer=REVIEWER.issuer,
-        subject=REVIEWER.subject,
-        granted_scopes=frozenset({DECIDE_ROW.scope}),
-        roles=REVIEWER.roles,
-        partition=REVIEWER.partition,
-    )
+    decide_only = replace(REVIEWER, granted_scopes=frozenset({DECIDE_ROW.scope}))
 
     assert permits_scope(decide_only, DECIDE_ROW)
     assert not permits_scope(decide_only, LIST_ROWS)
