@@ -143,12 +143,14 @@ A handler takes a `Principal` and parsed arguments, calls `load` and the chain, 
 
 ### The gate chain sits in middleware, in two tiers
 
-**A FastAPI dependency cannot gate the tool endpoint at all.** ADR-0008 settled that layer 1 is the official Python `mcp` 2.0.0 package, which supplies its own ASGI application. Under Starlette a mounted ASGI app is not a route — `mount()` takes a path, an app and a name, with no `dependencies` argument — and dependency solving happens inside a route handler a mount never enters. Middleware is the mechanism that reaches it. *Verified from documentation, not execution; it belongs with ADR-0009's first-run assertions.*
+*Amended 2026-08-18 by [#32](https://github.com/marcosfsousa/mcp-erp/issues/32) — the two tiers and their order survived contact; the carrier under them did not. `Mount` becomes `Route`, and the accepted cost below is withdrawn.*
+
+**A FastAPI dependency cannot gate the tool endpoint at all.** ADR-0008 settled that layer 1 is the official Python `mcp` 2.0.0 package, which supplies its own ASGI application. Under Starlette a mounted ASGI app is not a route — `mount()` takes a path, an app and a name, with no `dependencies` argument — and dependency solving happens inside a route handler a mount never enters. Middleware is the mechanism that reaches it. ~~*Verified from documentation, not execution; it belongs with ADR-0009's first-run assertions.*~~ **Executed, 2026-08-18 (#32):** a `FastAPI(dependencies=[...])` global fires for an `APIRoute` and does not fire for either a `Mount` or a plain `Route` holding an ASGI app. The claim is now a finding rather than an assumption, and no longer needs to wait for a first run.
 
 ```python
 app = FastAPI(routes=[
   Route("/.well-known/oauth-protected-resource/mcp", metadata),  # no token gate
-  Mount("/mcp", mcp_asgi_app, middleware=[
+  Route("/mcp", endpoint=mcp_asgi_app, middleware=[
       Middleware(ShapeGate),   # gate 2
       Middleware(TokenGate),   # gates 3, 4, then directory resolution
   ]),
@@ -156,11 +158,20 @@ app = FastAPI(routes=[
 app.add_middleware(OriginGate)  # gate 1, every path
 ```
 
+**`Mount` was the wrong carrier, and would have failed on the first `curl`.** Starlette compiles `Mount("/mcp", …)` to `^/mcp/(?P<path>.*)$`, which never matches the bare `/mcp` an MCP client posts to. The outer router falls through to `redirect_slashes` and answers **307 to `/mcp/` without running a single mount-level middleware** — the gate chain is not bypassed, because a redirect processes nothing, but the endpoint is wrong and every call pays a round trip. `Route` compiles to `^/mcp$`, takes the same `middleware=` sequence, and is what the `mcp` package itself uses internally to hang its ASGI app off a path.
+
+Two constraints ride along, both load-bearing and neither obvious:
+
+- **`mcp_asgi_app` is `StreamableHTTPASGIApp(server.session_manager)`, not the `Starlette` that `streamable_http_app()` returns.** That wrapper carries its own inner `Route(streamable_http_path)` — defaulting to `/mcp`, so nesting it under `/mcp` serves `/mcp/mcp` — and its own router's redirect. A `Route` endpoint must also be a non-function callable: Starlette wraps an `async def` endpoint as a request/response handler and calls it with a `Request`, so a bare ASGI function `500`s where a class instance works.
+- **The composition root runs `server.session_manager.run()` in its own lifespan.** A nested app's lifespan is never run by its parent, and there is no quiet degradation to catch later — every request answers `500` until it is wired.
+
 The unauthenticated endpoints sit outside the token gate **structurally** rather than by a path allow-list — preferring an attack to be impossible over defended-against, the move ADR-0006 already made once. Gates 5 and 6 are the chain, at dispatch, where the `Action` is known.
 
-**This closes ADR-0009's open condition from our side.** Its falsification case was *"if token verification lives inside the modern request path, the legacy leg is unauthenticated."* Validation now sits **above** era routing by construction, whatever the package does internally. The three seam assertions still run; they now confirm rather than discover.
+**Route-level middleware reaches everything the two tiers need.** Confirmed by execution at #32: the chain runs `OriginGate → ShapeGate → TokenGate → mcp_asgi_app`, exactly as drawn; `ShapeGate` reads the `Mcp-Method` header and the parsed body together and sees ADR-0006's own attack payload disagree; and a value written to the ASGI scope's `state` by `TokenGate` is readable at dispatch as `ctx.request.state.<name>`, which is where the `Principal` goes.
 
-Accepted cost: mount-level middleware is not wrapped by Starlette's exception-handling middleware, so challenges render themselves. They are `WWW-Authenticate` responses rather than exceptions, so this is arguably right anyway.
+**`ShapeGate` must hand the body back, not consume it.** Reading the body means draining the ASGI `receive` channel, and the mounted application drains it again. The replacement channel replays the buffered body once and then **delegates to the original**; returning `http.disconnect` after the body instead makes the application abandon its response mid-flight (`ASGI callable returned without starting response`). This is a correctness constraint on gate 2, not a detail of it.
+
+~~Accepted cost: mount-level middleware is not wrapped by Starlette's exception-handling middleware, so challenges render themselves. They are `WWW-Authenticate` responses rather than exceptions, so this is arguably right anyway.~~ **Void, 2026-08-18 (#32):** there is no such cost on this stack. Route- and mount-level middleware both sit **inside** the application's `ExceptionMiddleware`, and an `HTTPException` raised in either renders normally. Challenges may still build their own `Response` — a `WWW-Authenticate` body is easier written directly than routed through an exception — but that is now a choice rather than a constraint.
 
 ## Repository and continuous-integration shape
 
