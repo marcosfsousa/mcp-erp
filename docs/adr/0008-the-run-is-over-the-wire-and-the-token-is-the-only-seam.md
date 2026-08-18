@@ -4,6 +4,7 @@
 - **Date:** 2026-08-11
 - **Ticket:** [#8 Decide what performs the run](https://github.com/marcosfsousa/mcp-erp/issues/8)
 - **Evidence:** [`docs/research/0004-mcp-client-landscape.md`](../research/0004-mcp-client-landscape.md), [`docs/research/0003-2026-07-28-authorization-requirements.md`](../research/0003-2026-07-28-authorization-requirements.md); [ADR-0001](0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md), [ADR-0004](0004-layer-2-is-a-portable-pattern-layer-3-is-ejectable.md), [ADR-0006](0006-fail-closed-in-a-fixed-order.md), [ADR-0007](0007-the-realm-is-the-exhibit.md); Client Identity Metadata Document draft `-00` §3 and §6.5; map constraints #1, #4, #5, #6, #8, #9, #10; official Python `mcp` 2.0.0 documentation, read 2026-08-11
+- **Amended:** 2026-08-18 — additive, by [#53](https://github.com/marcosfsousa/mcp-erp/issues/53). This ADR made a document's path immutable without saying that its *origin* is the other half of the identifier and is held by nothing. See *The identifier's origin is held by an account name*. No decision here is changed.
 
 ## Question
 
@@ -57,6 +58,27 @@ Pages supplies real HTTPS with a path component for free, and it **decouples "a 
 The reason is a specification point, not a continuous-integration convenience, and it holds even if no automation existed: **the `client_id` *is* the URL.** Mutating the document at that URL silently changes a client's identity metadata under the authorization server — the same identifier now describing a different client. Draft `-01` added security considerations for exactly this, which research 0003 records. Immutability makes a change of identity visible as a change of identifier, which is what an identifier is for.
 
 It also happens to close a gap. Pages serves from `main`, so a pull request cannot publish its own document, and a pull request that edited one in place would test against the version it was replacing. Under immutability the sequence has no such window: one pull request adds `/2.json` while the client still names `/1.json`, and a second points the client at `/2.json` once Pages is serving it. At every moment the run fetches exactly the document the client under test names.
+
+#### The identifier's origin is held by an account name
+
+*Added 2026-08-18 by [#53](https://github.com/marcosfsousa/mcp-erp/issues/53), after the document went live at `https://marcosfsousa.github.io/mcp-erp/clients/conformance/1.json`.*
+
+Immutability above is a promise about a **path**, kept by a check over this repository's history. The identifier has two halves, and nothing holds the other one. `marcosfsousa.github.io` is derived from an account name, which GitHub releases for anyone to claim once it is changed.
+
+So the failure this ADR spent its argument preventing has a second entrance. Rename the account and whoever claims the old name inherits every identifier this exhibit has published — free to serve a *different* document at the *same* `client_id`, which is the substitution the immutability rule exists to make impossible. The rule is not wrong; its scope was simply never stated, and an unstated scope reads as a guarantee.
+
+**The two renames fail in opposite directions, and that is the useful part.**
+
+| Rename | What the authorization server sees | Outcome |
+| --- | --- | --- |
+| The **repository** | The path 404s | **Fails closed.** Draft `-00` §4.3: the server *"SHOULD abort the authorization request"* |
+| The **account** | HTTP 200, a well-formed document, a different client | **Fails open**, and silently |
+
+A 404 is a bad afternoon. A 200 from a stranger is the thing the exhibit refuses in `cimd_id_url_mismatch` and would then be shipping.
+
+**Consequence, stated rather than left to be rediscovered:** the account name and the repository name are load-bearing identifiers of this exhibit, on the same footing as the document's bytes. Not renaming them is a constraint, not a preference.
+
+**The route that would close it, declined for v1.** A custom domain moves the trust anchor from GitHub's account namespace to DNS this project controls, so no third party can ever come to answer at the identifier. It costs a domain, its renewal, and a verification step — and it trades one permanent dependency for another, since a lapsed registration fails open in exactly the same way. Declined on cost, not on impossibility. It is the same shape as [ADR-0011](0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md)'s treatment of deviation 2: named, priced, and carried.
 
 **Claim rejected, recorded so it is not re-litigated.** A vendor write-up states that Client Identity Metadata Documents reject `localhost` redirect URIs outright. This contradicts the draft, which prohibits no such thing, and contradicts research 0003's open ambiguity #7; Claude Code demonstrably pairs a hosted document with a `localhost` callback. **Only the document must be HTTPS, never the redirect URI.**
 
