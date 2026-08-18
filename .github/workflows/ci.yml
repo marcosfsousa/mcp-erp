@@ -145,6 +145,21 @@ jobs:
       - name: Every package imports
         run: uv run python -c "import mcp_erp.app"
 
+      # The token helper's pure half — base64 padding, the challenge digest,
+      # form actions, scope sets. It lands here rather than in a ninth job
+      # because ADR-0013 fixes the job set at eight and holds their names equal
+      # to the ruleset's required contexts in both directions; a step inside a
+      # job that already runs changes no context and needs no ruleset edit.
+      #
+      # The seam is right, not merely convenient. This job means *an ordinary
+      # Python defect*, and a helper that pads base64 wrongly is exactly one.
+      # The three Compose jobs that will drive this helper cannot hold it —
+      # they need a running authorization server to say anything at all — and
+      # `Layer 2 ejects clean` would report a broken digest as layer 2 failing
+      # to stand alone, which is the wrong diagnosis on the wrong job.
+      - name: The token helper's Docker-free half
+        run: uv run pytest tests/test_tokens.py
+
   layer-boundaries:
     name: Layer boundaries
     runs-on: ubuntu-latest

@@ -82,6 +82,14 @@ def user_import() -> dict[str, Any]:
     return _read(REPO / USER_IMPORT_RENDERING)
 
 
+@pytest.fixture(scope="module")
+def cast_subjects() -> set[str]:
+    """Every subject the principal directory holds, read from the committed rendering."""
+    directory = json.loads((REPO / DIRECTORY_RENDERING).read_text(encoding="utf-8"))
+    subjects: set[str] = {row["subject"] for row in directory}
+    return subjects
+
+
 # ─── The seam between the authored realm and the generated import ──────────
 
 
@@ -461,7 +469,9 @@ def test_the_neighbour_token_is_perfect_except_for_who_issued_it(
     )
 
 
-def test_the_neighbour_asserts_a_subject_the_directory_holds(neighbour: dict[str, Any]) -> None:
+def test_the_neighbour_asserts_a_subject_the_directory_holds(
+    neighbour: dict[str, Any], cast_subjects: set[str]
+) -> None:
     """The one value the neighbour realm copies from the seed, policed rather than trusted.
 
     The directory is keyed by issuer *and* subject, so this collides with
@@ -478,9 +488,6 @@ def test_the_neighbour_asserts_a_subject_the_directory_holds(neighbour: dict[str
     hardcoded claim mapper, and the user beneath it carries a generated id
     nothing reads.
     """
-    directory = json.loads((REPO / DIRECTORY_RENDERING).read_text(encoding="utf-8"))
-    subjects = {row["subject"] for row in directory}
-
     asserted = {
         mapper["config"]["claim.value"]
         for scope in neighbour["clientScopes"]
@@ -490,10 +497,12 @@ def test_the_neighbour_asserts_a_subject_the_directory_holds(neighbour: dict[str
     }
 
     assert asserted
-    assert asserted <= subjects
+    assert asserted <= cast_subjects
 
 
-def test_no_neighbour_user_reuses_a_cast_identifier(neighbour: dict[str, Any]) -> None:
+def test_no_neighbour_user_reuses_a_cast_identifier(
+    neighbour: dict[str, Any], cast_subjects: set[str]
+) -> None:
     """The boot failure that produced the mapper above, asserted so it stays fixed.
 
     `USER_ENTITY.ID` is unique across the database rather than per realm, so a
@@ -501,11 +510,29 @@ def test_no_neighbour_user_reuses_a_cast_identifier(neighbour: dict[str, Any]) -
     error during import — and Compose reports it as a container that started and
     then stopped, several steps from the file that caused it.
     """
-    directory = json.loads((REPO / DIRECTORY_RENDERING).read_text(encoding="utf-8"))
-    subjects = {row["subject"] for row in directory}
+    for user in neighbour["users"]:
+        assert user.get("id") not in cast_subjects, user["username"]
+
+
+def test_the_neighbour_user_takes_the_password_the_seed_states() -> None:
+    """The second value the neighbour copies from the seed, and it fails silently.
+
+    The token helper logs every Person in with the seed's password, this one
+    included. Authored beside the realm, the copy has nothing holding it: change
+    the seed and the foreign-issuer flow stops working, with the authorization
+    server reporting a rejected password and nothing pointing at the file that
+    went stale. Its *subject* is already policed above; this is the other half.
+
+    The neighbour is authored rather than rendered on purpose — it is not the
+    Cast, and ADR-0007's split governs the realm the Cast lives in. Authored
+    still means checked.
+    """
+    seed = read_identity_seed((REPO / SEED).read_text(encoding="utf-8"))
+    neighbour = _read(NEIGHBOUR_FILE)
 
     for user in neighbour["users"]:
-        assert user.get("id") not in subjects, user["username"]
+        for credential in user["credentials"]:
+            assert credential["value"] == seed.password, user["username"]
 
 
 def _read(path: Path) -> dict[str, Any]:

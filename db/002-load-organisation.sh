@@ -1,6 +1,13 @@
 #!/bin/sh
 # Load the organisation from the seed's ERP rendering, which is mounted read-only.
 #
+# **Committed executable, deliberately.** Postgres's entrypoint runs a `.sh` in
+# this directory if it is executable and `source`s it if it is not — and sourced,
+# the `set -eu` below would stay set in the entrypoint's own shell for the rest
+# of initialisation, changing how every later step fails. It works either way
+# today, which is exactly why the mode is stated here rather than left to
+# whatever a checkout produced.
+#
 # The rendering is JSON rather than SQL deliberately. `Seed renders clean`
 # re-renders it and refuses any diff, so it is already policed as a rendering;
 # emitting DDL or INSERT statements from the generator instead would put a
@@ -29,8 +36,8 @@ SELECT centre ->> 'code', centre ->> 'name'
 FROM jsonb_array_elements((:'organisation')::jsonb -> 'cost_centres') AS centre;
 
 INSERT INTO vendor (id, name)
-SELECT supplier ->> 'id', supplier ->> 'name'
-FROM jsonb_array_elements((:'organisation')::jsonb -> 'vendors') AS supplier;
+SELECT vendor ->> 'id', vendor ->> 'name'
+FROM jsonb_array_elements((:'organisation')::jsonb -> 'vendors') AS vendor;
 
 -- No roles column to fill: they are policy facts and live in the principal
 -- directory, which is the rendering beside this one.

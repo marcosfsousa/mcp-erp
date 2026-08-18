@@ -1,15 +1,19 @@
 """The token helper's own unit tests — the half that needs no authorization server.
 
-``tests/tokens.py`` is one flow driver with two kinds of code in it: four small
-pure functions, and the sequence of requests that strings them together. The
-sequence is proved by using it — every wire suite mints through it, and the
-standalone command in its ``__main__`` block is what #36 signs off against.
-These are the four functions, which have no such cover and would otherwise be
-proved only by a failure three requests later that names none of them.
+``tests/tokens.py`` is one flow driver with two kinds of code in it: small pure
+functions, and the sequence of requests that strings them together. The sequence
+is proved by using it — every wire suite mints through it, and the standalone
+command in its ``__main__`` block is what #36 signs off against. These are the
+pure functions, which have no such cover and would otherwise be proved only by a
+failure three requests later that names none of them. The cache is here too,
+because it is the one behaviour #36 singles out and it does not need a server to
+exercise.
 
-They stay Docker-free deliberately. A unit test that needed Compose would run in
-none of the five offline jobs, which is where a broken base64 padding rule
-should be caught.
+They stay Docker-free deliberately, and the `Lint and types` job runs this file
+by name — a step inside an existing job rather than a ninth one, since ADR-0013
+fixes the job set at eight and holds their names equal to the ruleset's required
+contexts. A broken base64 padding rule is an ordinary Python defect, which is
+what that job means.
 """
 
 import base64
@@ -18,11 +22,15 @@ import json
 
 import pytest
 
+import tokens
 from tokens import (
+    Minted,
     authorization_code,
+    cache_key,
     challenge_for,
     decode_claims,
     form_action,
+    mint,
     scope_set,
 )
 
@@ -86,7 +94,7 @@ def test_the_authorization_code_is_read_out_of_the_redirect_location() -> None:
     """
     location = "http://localhost:8085/callback?state=abc&code=the-code&session_state=x"
 
-    assert authorization_code(location) == "the-code"
+    assert authorization_code(location, expected_state="abc") == "the-code"
 
 
 def test_a_redirect_carrying_an_error_names_it() -> None:
@@ -94,7 +102,21 @@ def test_a_redirect_carrying_an_error_names_it() -> None:
     location = "http://localhost:8085/callback?error=invalid_scope&error_description=nope"
 
     with pytest.raises(ValueError, match="invalid_scope"):
-        authorization_code(location)
+        authorization_code(location, expected_state="abc")
+
+
+def test_a_redirect_carrying_somebody_else_s_state_is_refused() -> None:
+    """The value is sent on every request, so it is checked rather than decoration.
+
+    Nothing here is a browser, so this is not the cross-site defence `state`
+    exists for. What it does catch is the flow crossing wires — a cached
+    redirect, or a session belonging to a different mint — which would
+    otherwise show up as a token for the wrong Person.
+    """
+    location = "http://localhost:8085/callback?state=somebody-else&code=the-code"
+
+    with pytest.raises(ValueError, match="state"):
+        authorization_code(location, expected_state="ours")
 
 
 def test_claims_decode_without_their_padding() -> None:
@@ -146,3 +168,87 @@ def test_a_scope_claim_is_a_set_and_not_a_string() -> None:
 def test_scope_comparison_is_case_sensitive() -> None:
     """`ERP.READ` is a different string, and therefore a different scope."""
     assert scope_set("ERP.READ") != scope_set("erp.read")
+
+
+# ─── The cache, which #36 names as the reason to build this once ───────────
+
+
+def test_the_key_does_not_depend_on_the_order_the_scopes_were_written_in() -> None:
+    """A scope set is a set, so two spellings of one request are one cache entry.
+
+    Keyed by a list, the two calls below would mint twice for the same token —
+    which is the *slow* half of what #36 wants building deliberately, and the
+    half that would never show up as a failure.
+    """
+    assert cache_key("mcp-erp", "mcp-conformance", "tomas.weber", ["erp.read", "erp.write"]) == (
+        cache_key("mcp-erp", "mcp-conformance", "tomas.weber", ["erp.write", "erp.read"])
+    )
+
+
+def test_everything_that_changes_a_token_changes_the_key() -> None:
+    """Realm, client, Person and scope set, each on its own.
+
+    The *duplicated* half of #36's worry is a key that collides: a token minted
+    for one Person handed to a row asserting about another passes for the wrong
+    reason, which is the failure the whole exhibit is built to make impossible.
+    """
+    base = cache_key("mcp-erp", "mcp-conformance", "tomas.weber", ["erp.read"])
+
+    assert cache_key("mcp-erp-neighbour", "mcp-conformance", "tomas.weber", ["erp.read"]) != base
+    assert cache_key("mcp-erp", "mcp-expiry-probe", "tomas.weber", ["erp.read"]) != base
+    assert cache_key("mcp-erp", "mcp-conformance", "ingrid.holm", ["erp.read"]) != base
+    assert cache_key("mcp-erp", "mcp-conformance", "tomas.weber", ["erp.decide"]) != base
+
+
+def test_a_second_mint_for_the_same_request_performs_no_flow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cached within a run, asserted without a server.
+
+    The flow is stubbed rather than reached, so this says exactly one thing:
+    `mint` consults the cache before performing anything. What a real flow
+    returns is the wire suites' business.
+    """
+    performed: list[tuple[str, frozenset[str]]] = []
+
+    def _record(username: str, requested: frozenset[str], **_: object) -> Minted:
+        performed.append((username, requested))
+        return Minted(
+            access_token="a.b.c",
+            refresh_token=None,
+            claims={"sub": "tomas-weber"},
+            requested_scopes=requested,
+            granted_scopes=requested,
+        )
+
+    monkeypatch.setattr(tokens, "_perform", _record)
+    monkeypatch.setattr(tokens, "_CACHE", {})
+
+    first = mint("tomas.weber", ["erp.read", "erp.write"])
+    second = mint("tomas.weber", ["erp.write", "erp.read"])
+
+    assert first is second
+    assert len(performed) == 1
+
+
+def test_a_different_scope_set_is_a_different_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The cache is per Person *and* scope set, which is what the matrix varies."""
+    performed: list[tuple[str, frozenset[str]]] = []
+
+    def _record(username: str, requested: frozenset[str], **_: object) -> Minted:
+        performed.append((username, requested))
+        return Minted(
+            access_token="a.b.c",
+            refresh_token=None,
+            claims={"sub": "tomas-weber"},
+            requested_scopes=requested,
+            granted_scopes=requested,
+        )
+
+    monkeypatch.setattr(tokens, "_perform", _record)
+    monkeypatch.setattr(tokens, "_CACHE", {})
+
+    mint("tomas.weber", ["erp.read"])
+    mint("tomas.weber", ["erp.decide"])
+
+    assert len(performed) == 2

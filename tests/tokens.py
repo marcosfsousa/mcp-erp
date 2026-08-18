@@ -75,8 +75,20 @@ NEIGHBOUR_REALM = f"{REALM}-neighbour"
 PASSWORD = _SEED.password
 """One conspicuously fake password, shared by the whole Cast."""
 
-BASE_URL = os.environ.get("KEYCLOAK_BASE_URL", ISSUER.split("/realms/", 1)[0])
-"""Where the requests actually go. Identity is the issuer; this is transport."""
+REALMS_ROOT = ISSUER.rsplit("/", 1)[0]
+"""Everything in the issuer up to the realm name, so a second realm is not a second parse."""
+
+ISSUER_ORIGIN = REALMS_ROOT.rsplit("/realms", 1)[0]
+"""The issuer's scheme and authority — the half `KEYCLOAK_BASE_URL` replaces."""
+
+BASE_URL = os.environ.get("KEYCLOAK_BASE_URL", ISSUER_ORIGIN).rstrip("/")
+"""Where the requests actually go. Identity is the issuer; this is transport.
+
+Normalised once, here. :func:`_rebase` both compares against this value and
+substitutes it, and a trailing slash surviving into only one of the two would
+make every rebase a no-op — quietly, by sending the requests to the issuer's own
+host, which is the address the override exists because a reader cannot reach.
+"""
 
 REDIRECT_URI = "http://localhost:8085/callback"
 """Registered on every client, and never served.
@@ -89,6 +101,14 @@ callback URL that nothing answers at is not a defect here.
 
 CONFORMANCE_CLIENT = "mcp-conformance"
 """The client every normal mint goes through."""
+
+NEIGHBOUR_CLIENT = "mcp-neighbour"
+"""The neighbour realm's only client.
+
+Named because the two realms share no clients at all — they are separate
+issuers, not two views of one — so a caller who changes the realm and not the
+client gets `invalid_client`.
+"""
 
 MAX_AUTHORIZATION_STEPS = 8
 """How many redirects and forms the flow may take before the helper gives up.
@@ -181,13 +201,42 @@ def mint(
     Raises:
         RuntimeError: The authorization server refused a step, with what it said.
     """
-    requested = frozenset(scopes) | {"openid"}
-    key = (realm, client_id, username, requested)
+    key = cache_key(realm, client_id, username, scopes)
 
     if key not in _CACHE:
-        _CACHE[key] = _perform(username, requested, client_id=client_id, realm=realm)
+        _CACHE[key] = _perform(username, key[3], client_id=client_id, realm=realm)
 
     return _CACHE[key]
+
+
+def cache_key(
+    realm: str, client_id: str, username: str, scopes: Iterable[str]
+) -> tuple[str, str, str, frozenset[str]]:
+    """Everything that changes a token, and nothing that does not.
+
+    A named function rather than a tuple built inline, because both halves of
+    what #36 asks for live in it. A key that varies with the *order* scopes were
+    written in mints twice for one token, which is the slow half and never shows
+    up as a failure. A key that fails to vary with the Person or the client
+    hands a suite somebody else's token, which is the duplicated half and shows
+    up as a row passing for the wrong reason.
+
+    `openid` joins the set here, so the key matches what is actually requested:
+    a realm without it answers the authorization request with a login page and
+    no code.
+    """
+    return (realm, client_id, username, frozenset(scopes) | {"openid"})
+
+
+def default_client_for(realm: str) -> str:
+    """The client to use when the caller named a realm and no client.
+
+    Two realms, one client each worth defaulting to. Anything else is a
+    deliberate choice — the decoy, the bare client and the expiry probe all
+    exist to make one specific refusal reachable, so none of them is what a
+    caller who said nothing meant.
+    """
+    return NEIGHBOUR_CLIENT if realm == NEIGHBOUR_REALM else CONFORMANCE_CLIENT
 
 
 def metadata(realm: str = REALM) -> Mapping[str, Any]:
@@ -208,7 +257,7 @@ def metadata(realm: str = REALM) -> Mapping[str, Any]:
         response.raise_for_status()
         document: Mapping[str, Any] = response.json()
 
-    expected = f"{ISSUER.rsplit('/', 1)[0]}/{realm}"
+    expected = f"{REALMS_ROOT}/{realm}"
     if document.get("issuer") != expected:
         raise RuntimeError(f"discovered issuer {document.get('issuer')!r}, expected {expected!r}")
 
@@ -241,19 +290,29 @@ def form_action(html: str) -> str:
     return match.group(2).replace("&amp;", "&").replace("&#39;", "'").replace("&quot;", '"')
 
 
-def authorization_code(location: str) -> str:
-    """The `code` from a redirect back to the client.
+def authorization_code(location: str, *, expected_state: str) -> str:
+    """The `code` from a redirect back to the client, once its `state` checks out.
+
+    Nothing here is a browser, so `state` is not doing the cross-site job it
+    exists for. It is checked anyway because it is sent anyway: what it catches
+    is the flow crossing wires — a cached redirect, or a session belonging to a
+    different mint — which would otherwise surface as a token for the wrong
+    Person, three assertions later, in a suite about something else.
 
     Raises:
-        ValueError: The redirect carries an `error` instead, which is reported
-            in the authorization server's own words rather than as an absent
-            code three lines later.
+        ValueError: The redirect carries an `error` instead, reported in the
+            authorization server's own words rather than as an absent code
+            three lines later; or it carries somebody else's `state`.
     """
     query = parse_qs(urlparse(location).query)
 
     if "error" in query:
         description = query.get("error_description", [""])[0]
         raise ValueError(f"{query['error'][0]}: {description}".strip(": "))
+
+    returned = query.get("state", [""])[0]
+    if returned != expected_state:
+        raise ValueError(f"redirect carries state {returned!r}, expected {expected_state!r}")
 
     if "code" not in query:
         raise ValueError(f"no code and no error in redirect: {location!r}")
@@ -348,7 +407,7 @@ def _perform(
             data={
                 "grant_type": "authorization_code",
                 "client_id": client_id,
-                "code": authorization_code(location),
+                "code": authorization_code(location, expected_state=state),
                 "redirect_uri": REDIRECT_URI,
                 "code_verifier": verifier,
             },
@@ -356,17 +415,18 @@ def _perform(
 
     payload = redeemed.json()
     access_token = str(payload["access_token"])
+    claims = decode_claims(access_token)
 
     return Minted(
         access_token=access_token,
         refresh_token=payload.get("refresh_token"),
-        claims=decode_claims(access_token),
+        claims=claims,
         requested_scopes=requested,
         # The token's own claim, not the response parameter. Keycloak omits an
         # unpermitted scope silently, and whether it then reports the narrowing
         # in the response is ADR-0012's open verification item — so the granted
         # set is read from the artifact that is definitely authoritative.
-        granted_scopes=scope_set(decode_claims(access_token).get("scope")),
+        granted_scopes=scope_set(claims.get("scope")),
     )
 
 
@@ -477,7 +537,7 @@ def _rebase(url: str) -> str:
     parsed = urlparse(url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
 
-    return url.replace(origin, BASE_URL.rstrip("/"), 1) if origin != BASE_URL else url
+    return url if origin == BASE_URL else url.replace(origin, BASE_URL, 1)
 
 
 def _get(http: httpx.Client, url: str, *, params: dict[str, str] | None = None) -> httpx.Response:
@@ -507,11 +567,17 @@ def main(argv: list[str] | None = None) -> int:
     This is #36's *verifiable standalone* criterion, executable::
 
         uv run python tests/tokens.py priya.raman erp.read erp.write
+        uv run python tests/tokens.py tomas.weber erp.read --realm mcp-erp-neighbour
+
+    The client defaults per realm rather than to one name, because the realms
+    share no clients: `mcp-conformance` does not exist next door, so a fixed
+    default would make the second line above fail with `invalid_client` — a
+    message about the client, on a flag the caller never touched.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("username", help="the login name, e.g. priya.raman")
     parser.add_argument("scopes", nargs="*", help="capability scopes to request")
-    parser.add_argument("--client-id", default=CONFORMANCE_CLIENT)
+    parser.add_argument("--client-id", default=None, help="defaults to the realm's own client")
     parser.add_argument("--realm", default=REALM)
     parser.add_argument("--token", action="store_true", help="print the raw access token too")
     arguments = parser.parse_args(argv)
@@ -519,7 +585,7 @@ def main(argv: list[str] | None = None) -> int:
     minted = mint(
         arguments.username,
         arguments.scopes,
-        client_id=arguments.client_id,
+        client_id=arguments.client_id or default_client_for(arguments.realm),
         realm=arguments.realm,
     )
 

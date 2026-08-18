@@ -11,8 +11,8 @@ is called directly, so a fixture wrapping it would add a second place to look
 and a second scope to reason about. When a wire suite needs shared setup that
 the helper does not already own, it earns its lines here then.
 
-**Nothing here connects to anything at import time.** All five Docker-free jobs
-collect this file, the ejection job among them — with layer 3 deleted. A fixture
-that reached Keycloak while being *defined* would turn every offline job into
-one that needs Compose.
+**Nothing here connects to anything at import time.** Every job that runs pytest
+collects this file — `Layer 2 ejects clean` with layer 3 deleted, `Seed renders
+clean`, and the token-helper step inside `Lint and types`. A fixture that reached
+Keycloak while being *defined* would turn all three into jobs that need Compose.
 """

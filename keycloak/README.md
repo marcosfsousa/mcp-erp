@@ -73,6 +73,42 @@ Host-side tooling that has not had the line added can be pointed somewhere
 reachable instead — `KEYCLOAK_BASE_URL=http://localhost:8081` — which moves the
 address the requests go to and never the issuer they assert.
 
+## Minting a token
+
+`tests/tokens.py` drives the real authorization code flow — direct access
+grants are off on every client, so there is no shortcut — and prints what came
+back:
+
+```
+uv run python tests/tokens.py priya.raman erp.read erp.write
+uv run python tests/tokens.py tomas.weber erp.read --realm mcp-erp-neighbour
+uv run python tests/tokens.py tomas.weber erp.read --client-id mcp-conformance-bare
+```
+
+The client defaults per realm, because the two realms share no clients. Pick one
+explicitly to reach a specific refusal: `mcp-conformance-decoy` for a token
+bound to somebody else's resource, `mcp-conformance-bare` for one with no
+audience at all, `mcp-expiry-probe` for a ten-second lifespan.
+
+The two most instructive runs are the role scope mapping doing its work:
+
+```
+$ uv run python tests/tokens.py rafael.costa erp.read erp.write erp.decide
+granted     erp.read erp.write openid
+declined    erp.decide
+
+$ uv run python tests/tokens.py ingrid.holm erp.decide
+granted     erp.decide openid
+```
+
+Rafael Costa holds `invoice_clerk` and neither deciding role, so the scope is
+silently omitted and the flow succeeds — conformant, per RFC 6749 §3.3, and the
+reason ADR-0012 left the `scope` response parameter as an open verification
+item. Ingrid Holm holds `unlimited_approver` and **not** `approver`, and still
+receives `erp.decide`: that is why the mapping lists both roles, and gating on
+`approver` alone would have made the above-threshold branch she exists for
+unreachable.
+
 ## The user import
 
 Rendered from `docs/organisation/seed.yaml`: one entry per Person in the Cast,

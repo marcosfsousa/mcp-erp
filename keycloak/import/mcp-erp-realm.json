@@ -160,12 +160,12 @@
     },
     {
       "name": "hr.read",
-      "description": "Read employee records",
+      "description": "Read records in the neighbouring human resources system",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
         "display.on.consent.screen": "true",
-        "consent.screen.text": "Read employee records"
+        "consent.screen.text": "Read records in the neighbouring human resources system"
       },
       "protocolMappers": []
     }
