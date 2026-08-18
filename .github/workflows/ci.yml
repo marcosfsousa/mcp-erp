@@ -66,12 +66,20 @@
 # it moves with the Dockerfile once one exists. `requires-python` stays a range
 # because it states what the distribution supports, which is a different claim.
 #
-# The named exception is this file: GitHub Actions pin to a *floating major*.
-# The reasoning for that exception is that only a major release should produce a
-# Dependabot pull request — but this repository has no `.github/dependabot.yml`
-# yet, so nothing raises those pull requests and the floating majors currently
-# move unobserved. Wiring Dependabot is the outstanding half of constraint `#11`
-# here, and is not this ticket's.
+# The named exception is this file: GitHub Actions may pin to a *floating
+# major*. The reasoning for that exception is that only a major release should
+# produce a Dependabot pull request — but this repository has no
+# `.github/dependabot.yml` yet, so nothing raises those pull requests and a
+# floating major moves unobserved. Wiring Dependabot is the outstanding half of
+# constraint `#11` here, and is not this ticket's.
+#
+# The exception is a permission, not an obligation, and one action cannot take
+# it: `astral-sh/setup-uv` stopped publishing moving major tags after `v7`, so
+# `v8` onwards exist only as exact patch tags and `@v10` does not resolve. That
+# one pins exact — the stricter side of the constraint, needing no exemption —
+# and moves in a pull request that does nothing else. Verified rather than
+# assumed: this file first shipped `@v10` and every job failed at
+# `Set up job` with *unable to find version `v10`*.
 
 name: CI
 
@@ -110,7 +118,7 @@ jobs:
       # Floating major, per the named exception above.
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
 
@@ -144,7 +152,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
 
