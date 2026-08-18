@@ -164,3 +164,78 @@ jobs:
       # independent, and modules those tests never reach.
       - name: Layer contracts
         run: uv run lint-imports
+
+  # The mechanism standing behind "a change is a new path" — ADR-0008's third,
+  # the one it credits with removing the only genuine false green. The argument
+  # lives there and in public/README.md; this job only refuses. Adding a path is
+  # the sole permitted operation on public/clients/.
+  #
+  # Its seam is neither of the two above: a red here means someone rewrote a
+  # published client identity, not that Python is broken and not that a layer
+  # boundary was crossed.
+  published-documents-are-immutable:
+    name: Published documents are immutable
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Floating major, per the named exception above. Full history, because
+      # the comparison below needs a merge base and the default single-commit
+      # checkout has none.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # No uv, no lockfile, no interpreter. This job asserts a property of the
+      # repository's own history rather than of the package, so it stays
+      # outside the environment the two jobs above install — which also keeps
+      # it standing when they fall over.
+      - name: Refuse a modified or removed document
+        env:
+          # A pull request compares against its base branch; a push compares
+          # against what the branch pointed at before. Both are resolved to a
+          # merge base by the three-dot form below.
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+
+          # A branch's first push, and a force push, report an all-zero or
+          # empty "before". There is no baseline, so there is nothing this job
+          # can honestly claim — and saying so out loud matters, because a
+          # green tick that asserted nothing is what the placeholder job this
+          # file shipped with was deleted for being.
+          if [ -z "${BASE}" ] || [ "${BASE}" = "0000000000000000000000000000000000000000" ]; then
+            echo "::warning::No comparable base commit, so immutability was not checked on this run."
+            exit 0
+          fi
+
+          # Three deliberate flags:
+          #
+          # `:(glob)` because git's default pathspec is fnmatch with `*`
+          # matching `/`, under which `**/` demands at least one intermediate
+          # directory — so a document sitting straight in public/clients/ would
+          # slip past unmatched. `:(glob)` switches to gitignore semantics,
+          # where `**/` also matches zero directories.
+          #
+          # `--no-renames` because with rename detection a 1.json -> 2.json
+          # rename reports only the destination, and the message below would
+          # then name 2.json as both the offence and the remedy. Off, the same
+          # rename reports 1.json as removed, which is what happened.
+          #
+          # `T` alongside `M` and `D` because swapping the document for a
+          # symlink changes what Pages serves without changing the file's
+          # contents, and served bytes are the whole subject here.
+          touched=$(git diff --name-only --no-renames --diff-filter=MDT "${BASE}...HEAD" -- ':(glob)public/clients/**/*.json')
+
+          if [ -n "${touched}" ]; then
+            echo "::error::A published Client Identity Metadata Document was modified or removed."
+            echo
+            echo "${touched}"
+            echo
+            echo "The client_id is the URL, so these bytes are part of a client's"
+            echo "identity. Add a new versioned path instead — 2.json alongside"
+            echo "1.json, never an edit to it. public/README.md has the sequence;"
+            echo "ADR-0008 has the argument."
+            exit 1
+          fi
+
+          echo "No published document was modified or removed."

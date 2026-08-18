@@ -1,0 +1,11 @@
+{
+  "client_id": "https://marcosfsousa.github.io/mcp-erp/clients/conformance/1.json",
+  "client_name": "mcp-erp conformance client",
+  "redirect_uris": [
+    "http://127.0.0.1:8085/callback",
+    "http://localhost:8085/callback"
+  ],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none"
+}

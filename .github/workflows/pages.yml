@@ -1,0 +1,97 @@
+# Publishes `public/` to GitHub Pages. That directory holds the conformance
+# client's Client Identity Metadata Document, and nothing else in the repository
+# is served — the upload names one path, so what becomes public is a list
+# somebody wrote rather than a side effect of what happens to be committed.
+#
+# This runs on `main` only, and that is not a preference. Pages serves from
+# `main`, so a pull request cannot publish the document it tests against. The
+# sequence that follows from it — one pull request adds a new versioned path, a
+# second points the client at it — is written up in `public/README.md`, along
+# with why a published document is never edited in place.
+#
+# Deploying is not a gate and never reports a status check on a pull request, so
+# nothing here can leave one pending. Map constraint 13 is about `ci.yml`.
+#
+#
+# THE SITE MUST ALREADY EXIST
+# ---------------------------
+# `configure-pages` does not create it. Its `enablement` input defaults to
+# `false` and its own documentation requires "a token other than GITHUB_TOKEN"
+# to flip — a personal access token with `repo`, or a GitHub App with
+# `administration:write`. Neither is available here, and map constraint 11's
+# no-secrets posture is the reason to keep it that way.
+#
+# So enabling Pages is a one-time manual act, done once against the repository
+# rather than on every run: Settings -> Pages -> Source: GitHub Actions, or
+#
+#   gh api --method POST repos/marcosfsousa/mcp-erp/pages -f build_type=workflow
+#
+# Until it is done, the first push to `main` fails at `configure-pages`, which
+# is the honest outcome — a missing site is a missing precondition, and it says
+# so at a named step.
+#
+#
+# ACTION PINS
+# -----------
+# Four floating majors, and they are outside the exception as written. Map
+# constraint 11 says nothing external floats; `ci.yml` states the carve-out as
+# *"The named exception is this file"*, and this is not that file. The reasoning
+# there is about GitHub Actions as a class rather than about a filename, so
+# extending it here is a reading rather than a licence already granted.
+#
+# Flagged rather than assumed. Either the map widens the exception to workflow
+# files generally, or these four pin exact — one line in the map decides which,
+# and it is not this ticket's line to write. `ci.yml` also records that no
+# `.github/dependabot.yml` exists yet, so nothing raises the pull requests the
+# exception's reasoning depends on; that half is already owed there.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  # For a redeploy that no commit triggers — a Pages-side failure, or the first
+  # run after the site is enabled by hand.
+  workflow_dispatch:
+
+# Least privilege for GITHUB_TOKEN at the file level, with the two extra scopes
+# the deploy needs added to the one job that needs them.
+permissions:
+  contents: read
+
+# One deployment at a time, and never cancel one in flight: a cancelled deploy
+# can leave the site serving the previous commit with no indication that it did.
+# Queueing is the right behaviour for a published artifact, where cancelling is
+# the right behaviour for a check.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy public/ to Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      # Pinned to a floating major, the deliberate exception to "nothing
+      # external floats" that `ci.yml` documents.
+      - uses: actions/checkout@v7
+
+      - uses: actions/configure-pages@v6
+
+      # Uploads the directory verbatim — no Jekyll, so no `.nojekyll` marker and
+      # no build step between the committed bytes and the served bytes. The
+      # preflight step's hash comparison depends on there being none.
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: public
+
+      - id: deploy
+        uses: actions/deploy-pages@v5
