@@ -4,6 +4,9 @@
 - **Date:** 2026-08-06
 - **Ticket:** [#6 Fix the ERP data model and seed fixtures](https://github.com/marcosfsousa/mcp-erp/issues/6)
 - **Evidence:** map constraints #2 (four entities, governing rule), #3 (intersection authorization), #4 (matrix as data, not a DSL); [ADR-0002](0002-refusal-shape-follows-the-remedy.md), which handed this ticket the multi-cost-centre question
+- **Amended:** 2026-08-12 — substantive, by [#9](https://github.com/marcosfsousa/mcp-erp/issues/9). Identifiers are legible rather than opaque, against a specification `SHOULD`. See the marked passage below. *(Header added 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12); the in-body marker has stood since 2026-08-12.)*
+- **Amended:** 2026-08-16 — substantive, by [#11](https://github.com/marcosfsousa/mcp-erp/issues/11). `senior_approver` becomes `unlimited_approver`; the four role names are ratified. See *Four roles*. *(Header added 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12).)*
+- **Amended:** 2026-08-18 — substantive, by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). The seed renders **three** ways, not two; roles leave the ERP `person` table; the matrix definition gains a committed home; the seam handed to #12 gains its successor sentence; resource hydration is named. See *Identity: one seed file, two renderings*, *The organisation is authored; the test data is generated*, *The matrix skeleton* and *Input to other tickets*. No decision here is reversed.
 
 ## Question
 
@@ -76,6 +79,14 @@ The `auditor` line in the cast below reads *"reads 3 of 3, writes nothing"*. Tha
 ### Identity: one seed file, two renderings
 
 The seed file is the single source of truth for the organisation and lists a chosen, readable subject for each person. A build step renders it twice — into the ERP database rows, and into the authorization server's user import. The join at request time is on the standard `sub` claim, scoped by issuer, with the values fixed in the repository.
+
+*Amended 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12).* **Two renderings become three**, and roles move out of the ERP schema.
+
+[ADR-0013](0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md) makes the principal directory a layer-2 artifact backed by a committed data file, so the seed renders into **ERP rows, directory rows, and the authorization server's user import**. Roles leave the `person` table entirely — they are policy facts, not domain facts, and `CONTEXT.md` already says a role is *"resolved server-side per request."* The person table keeps name and cost centre; the directory keeps issuer, subject, roles and partition.
+
+The seed therefore carries **two independent role columns** — server-side roles and issuer-side realm roles — and layer 2's generator renders both while treating the issuer-side names as **opaque strings it never interprets**. Rendering the realm import from directory roles would erase Priya Raman's divergence, which [ADR-0007](0007-the-realm-is-the-exhibit.md) calls load-bearing. Only the identity half — subject, username, credentials — is shared between the renderings.
+
+All three renderings are committed with a drift check, and the renderer must be **byte-stable**: sorted keys, no generated identifiers, no timestamps. Keycloak realm exports produce all three by default, and a flaky required job is one that would earn an exemption the branch ruleset does not offer.
 
 The alternatives all failed on the same axis. Keying on `email` or `preferred_username` puts a claim the OpenID Connect specification explicitly declines to guarantee as stable or unique in the position of a primary key — quotable chapter and verse, in front of the exact reader this exhibit targets. Late-binding real subjects from a provisioning step makes `docker compose up` depend on something the repository does not contain, against ship line #8.
 
@@ -162,6 +173,12 @@ About 29 rows: `tools/list` 4, `submit_requisition` 3, `approve_requisition` 9, 
 - **#9 (attack suite)** gains nothing new here; the capability-hole row belongs to the matrix, not the suite.
 - **#11 (scope granularity)** inherits four role names and every scope string as placeholders.
 - **#12 (module boundaries)** inherits a seam: the seed generator reads the matrix, and the policy function reads neither.
+
+  *Amended 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12) — the seam is settled, and the sentence has a successor.* That sentence was written when there was one generator. [ADR-0013](0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md) adds a second — an identity generator owned by layer 2 — and places each with the layer whose vocabulary it speaks: the **fixture generator** in `purchase_to_pay/`, the **identity generator** in `authorization/`. The successor reads: **each generator speaks one layer's vocabulary and is deleted with it; the policy function reads neither, and neither reads the other.** They touch disjoint halves of the seed, per *The organisation is authored; the test data is generated* above.
+
+  Because the fixture generator ships in `src/`, the matrix definition cannot live under `tests/`. It becomes a committed data file at **`docs/decision-matrix/matrix.yaml`**, sibling to `docs/attack-suite/scenarios.yaml` and disjoint from it: `scenarios.yaml` is canonical for named attacks, `matrix.yaml` for `(principal × tool × resource → expected)`.
+
+  **Resource hydration is a named layer-3 step.** The two-entity traversal in rule 3 above means the policy function must receive a pre-loaded aggregate, and it takes no collaborators, so a handler calls `load(action, arguments) -> Resource | None` first. The resource is **the thing acted against, never the thing created**: for `record_invoice` it is the `PurchaseOrder` this ADR already tests against, and `submit_requisition` has no resource at all.
 - **#15 (demo walkthrough)** gets a cast with stated justifications and no stable ordering.
 - **Audit trail** (map, not yet specified) inherits the timestamp question with a blank page.
 

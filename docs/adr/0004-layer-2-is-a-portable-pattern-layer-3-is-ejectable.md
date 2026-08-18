@@ -4,6 +4,7 @@
 - **Date:** 2026-08-06
 - **Ticket:** none. A standing constraint, deliberately not raised through the map, so it is argued on its own merits rather than absorbed as a settled premise.
 - **Evidence:** [ADR-0001](0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md), [ADR-0002](0002-refusal-shape-follows-the-remedy.md), [ADR-0003](0003-the-schema-is-the-policy-functions-argument-list.md); map constraints #2, #3, #4, #6
+- **Amended:** 2026-08-18 — additive, by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). All five acceptance criteria are discharged and all four tabled couplings resolved; see [ADR-0013](0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md). No decision here is reversed.
 
 ## Question
 
@@ -37,6 +38,8 @@ Not one of those mentions a requisition. That set *is* the layer-2 pattern, and 
 
 ### The four couplings that would tear on ejection
 
+*Amended 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12) — all four are resolved. How each was resolved is in [ADR-0013](0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md); the table below is unchanged.*
+
 | Coupling | What breaks |
 | --- | --- |
 | **The closed reason vocabulary** | A single enum mixing layers. `insufficient_scope`, `role_missing` and `not_found` are layer 2; `segregation_of_duties`, `over_threshold`, `already_decided` and `already_invoiced` are layer 3. Ejecting the domain means editing the vocabulary rather than deleting a module. `remedy` and both retry booleans stay portable — only the reason names do not. |
@@ -47,6 +50,8 @@ Not one of those mentions a requisition. That set *is* the layer-2 pattern, and 
 Two lesser ones, noted rather than tabled: the fixture generator knows domain field names, and tool schemas are partly data-derived. Both are sound as patterns and currently exist only as domain-specific instances.
 
 ### Acceptance criteria for #12
+
+*Amended 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12) — all five are discharged in [ADR-0013](0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md). The criteria below are unchanged.*
 
 1. **The policy function's signature is domain-free.** This is the load-bearing artifact and nothing has written it down. Something of the shape `decide(principal, action, resource) -> Decision`, with domain types behind an interface, makes layer 2 portable by construction and reduces everything else here to naming. A signature taking a requisition makes the principles above decorative.
 2. **The reason vocabulary splits.** Layer 2 owns a fixed set plus an extension point; layer 3 contributes its own values. `remedy` and the retry booleans stay wholly in layer 2, since they describe client behaviour rather than domain facts.
