@@ -2,7 +2,7 @@
 
 Everything in this directory is served publicly over HTTPS at
 <https://marcosfsousa.github.io/mcp-erp/>, by
-[`.github/workflows/pages.yml`](../.github/workflows/pages.yml) on every push to
+[`.github/workflows/pages.yml`](https://github.com/marcosfsousa/mcp-erp/blob/main/.github/workflows/pages.yml) on every push to
 `main`. Nothing else in the repository is published — the workflow uploads this
 directory and no other.
 
@@ -14,13 +14,18 @@ Today it holds one artifact and this note, both served:
 | `README.md` | <https://marcosfsousa.github.io/mcp-erp/README.md> |
 
 The note ships with the artifact deliberately. Anyone who dereferences the
-`client_id` and wonders why it looks the way it does can reach the reasoning
-from the same origin, without an account or a clone.
+`client_id` and wonders why it looks the way it does can follow the reasoning
+from what they already have, without an account or a clone.
+
+**Every link below is absolute, and must stay that way.** Only this directory is
+uploaded, so a relative path out of it — `../docs/adr/…` — resolves in a clone
+and returns 404 on the site, which is the one place the link was added for. The
+first version of this file made exactly that mistake.
 
 **One-time setup, not yet done automatically anywhere:** the Pages site must
 exist before the workflow can deploy to it. `configure-pages` will not create
 it — enabling Pages needs a token the workflow deliberately does not have. See
-the header of [`.github/workflows/pages.yml`](../.github/workflows/pages.yml).
+the header of [`.github/workflows/pages.yml`](https://github.com/marcosfsousa/mcp-erp/blob/main/.github/workflows/pages.yml).
 
 ## A published document is never edited
 
@@ -31,11 +36,11 @@ convenience: the `client_id` *is* the URL. Mutating the document at that URL
 silently changes a client's identity metadata under the authorization server —
 the same identifier now describing a different client. Immutability makes a
 change of identity visible as a change of identifier, which is what an
-identifier is for. [ADR-0008](../docs/adr/0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md)
+identifier is for. [ADR-0008](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/adr/0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md)
 carries the full argument.
 
 A job checks it rather than a reviewer. `Published documents are immutable` in
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) fails on any change
+[`.github/workflows/ci.yml`](https://github.com/marcosfsousa/mcp-erp/blob/main/.github/workflows/ci.yml) fails on any change
 that modifies, removes or retypes a `*.json` file under `clients/`, at any depth
 — adding one is the only operation it permits.
 
@@ -56,6 +61,15 @@ the run fetches exactly the document the client under test names.
 endings. The preflight step hashes the fetched body against the committed copy,
 which only means anything if the committed copy has one set of bytes.
 
+**What this does not cover: the origin.** The rule holds a *path* still. The
+other half of the identifier is `marcosfsousa.github.io`, which is derived from
+an account name that GitHub releases for anyone to claim once it changes — so
+renaming the account would let a stranger answer at these identifiers, while
+renaming the repository merely 404s them. The account name and the repository
+name are therefore load-bearing, and not renaming them is a constraint rather
+than a preference. [ADR-0008](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/adr/0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md)
+has the asymmetry and the route that would close it.
+
 ## Why the document is hosted here at all
 
 Hosting it inside Compose over plain HTTP is not available. The Client Identity
@@ -68,7 +82,7 @@ against it in one repository would be incoherent.
 
 Pages supplies real HTTPS with a path component, and decouples *a public HTTPS
 document* from *a public deployment of the server* — which is what let
-[ADR-0011](../docs/adr/0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md)
+[ADR-0011](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/adr/0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md)
 decline hosting outright while this capability survived.
 
 ## The redirect URI is `localhost`, deliberately
@@ -85,7 +99,7 @@ decline hosting outright while this capability survived.
 **Only the document must be HTTPS, never the redirect URI.** A vendor write-up
 states that Client Identity Metadata Documents reject `localhost` redirect URIs
 outright; that claim is rejected and recorded in
-[ADR-0008](../docs/adr/0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md)
+[ADR-0008](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/adr/0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md)
 so it is not re-litigated. The draft prohibits no such thing, the Model Context
 Protocol specification's own canonical example document lists
 `http://127.0.0.1:3000/callback` and `http://localhost:3000/callback`, and
@@ -111,7 +125,7 @@ Model Context Protocol requires; the draft itself requires only `client_id`.
 
 `token_endpoint_auth_method` is `"none"`. Every client in the realm is public
 and authenticates with Proof Key for Code Exchange
-([ADR-0007](../docs/adr/0007-the-realm-is-the-exhibit.md)); no secret exists
+([ADR-0007](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/adr/0007-the-realm-is-the-exhibit.md)); no secret exists
 anywhere in this repository, and draft §4.1 forbids any method built around a
 shared symmetric secret in this document regardless.
 
@@ -124,7 +138,7 @@ response type, including the implicit flow OAuth 2.1 removed.
 
 **`scope` is deliberately absent.** The three capability scopes are gated by
 role scope mappings and displayed on the consent screen
-([ADR-0012](../docs/adr/0012-the-token-names-a-capability-never-a-role.md)), and
+([ADR-0012](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/adr/0012-the-token-names-a-capability-never-a-role.md)), and
 the client narrows its request through the `scope` parameter. Restating the
 ceiling here would add a second place for that vocabulary to drift, in a file
 that cannot be corrected in place — and under the governing rule a field earns
