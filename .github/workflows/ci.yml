@@ -32,6 +32,21 @@
 # rename fails the suite instead of quietly unprotecting the branch.
 #
 #
+# A REQUIRED CONTEXT MUST BE PRODUCED UNCONDITIONALLY
+# ---------------------------------------------------
+# Map constraint #13. If a ruleset requires a job's `name:`, that job must report
+# on every run of this workflow — no `paths:`, no `paths-ignore:`, no job-level
+# `if:`, no conditional matrix leg. Each of those four produces a context that
+# never arrives, and a rule waiting on one is indistinguishable from a rule that
+# has not run yet: the pull request sits pending rather than failing, which reads
+# as "still working" instead of "misconfigured".
+#
+# The escape hatch, if measured wall time ever justifies it, is a step-level
+# early exit inside a job that always runs. Measured, never anticipated.
+#
+# Full statement and reasoning: map issue #2, constraint #13.
+#
+#
 # NO SECRETS, DELIBERATELY
 # ------------------------
 # Configure none unless a job genuinely cannot run without one. A keyless run is

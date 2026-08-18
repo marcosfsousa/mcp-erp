@@ -253,7 +253,9 @@ Because `app.py` sits at the package root rather than inside any sub-package, th
 
 *Required checks match the ruleset* holds job names and required contexts equal in both directions. It is its own job because it must not sit on a cut path: cutting the decision matrix, third on cut order `#9`, removes *Decision matrix (wire)* and *Seed renders clean* together, and a name-contract test inside either would be cut in silence, taking the argument for required checks with it. *Lint and types* would hold it uncuttably but would then mean two unrelated things, against this table's own rule.
 
-**A required context must be produced unconditionally by every run of the workflow.** This binds every future workflow edit, not just this design, so it lands as **map constraint `#13`** rather than as a sentence in an ADR about layers. It covers `paths:`, `paths-ignore:`, job-level `if:` and conditional matrix legs alike: each produces a context that never reports, and a rule waiting on one is indistinguishable from a rule that has not run — the pull request sits pending, reading as *still working* at exactly the moment it matters. The escape hatch, if measured wall time ever justifies it, is a step-level early exit inside a job that always runs; the condition is measured wall time, not anticipated.
+**A required context must be produced unconditionally by every run of the workflow** — **map constraint `#13`**, which carries the conditional forms it covers, the reasoning, and the one escape hatch. It binds every future edit to `ci.yml`, not just this design, which is why it lands there rather than here.
+
+The consequence this ADR owns: **the ruleset change cannot precede the jobs it requires.** Adding eight required contexts before eight jobs exist leaves every pull request pending indefinitely, including the one that would add them — which is why the enforcement scaffolding is deferred rather than merely sequenced.
 
 Three Compose bring-ups per pull request is the accepted cost; the five Docker-free jobs run in parallel in under a minute, so wall time is set by the Compose jobs regardless.
 
