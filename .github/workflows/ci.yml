@@ -187,11 +187,85 @@ jobs:
       #
       # This job covers what import-linter cannot: that layer 2 *runs* with the
       # domain gone, including through dynamic and string-based imports a static
-      # graph misses. It is also the only job that runs this suite, which is
-      # deliberate — the ejected run is the stronger of the two assertions, so a
-      # second job running it intact would add wall time and no coverage.
+      # graph misses. It is also the only job that runs this suite *whole*,
+      # which is deliberate — the ejected run is the stronger of the two
+      # assertions, so a second job running all of it intact would add wall time
+      # and no coverage. `Seed renders clean` runs one file of it, for a
+      # different question; see the comment on that job.
       - name: Eject layer 3, then run layer 2's own suite
         run: rm -rf src/mcp_erp/purchase_to_pay && uv run --no-sync pytest tests/authorization
+
+  # ADR-0013's fourth job. A red here means a rendering diverged from the seed —
+  # not that Python is broken, not that a layer boundary was crossed.
+  #
+  # It asks two questions that fail differently. The re-render plus diff catches
+  # a *hand-edited* rendering, and it is the only cover the ERP rendering has:
+  # layer 3 gets no test directory of its own, because ADR-0008 routes every
+  # assertion about it over the wire. That is thinner than layer 2's cover but
+  # not as thin as it looks — the committed bytes were rendered on whichever
+  # machine authored them and this job re-renders them on a Linux runner, so
+  # the comparison spans two machines and two runs, which is the reproducibility
+  # claim rather than a weaker version of it. The test file catches a *broken renderer*
+  # — byte-stability, and the realm-versus-directory subject-set equality with
+  # its role-column exception — and it lives in `tests/authorization` because
+  # identity provisioning is layer 2's and has to survive ejection. So the
+  # ejection job runs it too. That overlap is real and worth its cost: both jobs
+  # are telling the truth when a generator invariant breaks, and neither can
+  # cover the other's half.
+  seed-renders-clean:
+    name: Seed renders clean
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      # One generator per layer, each re-rendering the half of the seed whose
+      # vocabulary it speaks. Both write into the working tree; the step below
+      # is what turns that into a verdict.
+      - name: Re-render the seed
+        run: |
+          uv run python -m mcp_erp.authorization.identity
+          uv run python -m mcp_erp.purchase_to_pay.organisation
+
+      # `git status --porcelain` rather than `git diff --exit-code`, because a
+      # rendering that is missing entirely comes back as an untracked file and a
+      # diff would report nothing. Both cases are the same defect: what is
+      # committed is not what the seed renders.
+      - name: Refuse a rendering the seed does not produce
+        run: |
+          set -euo pipefail
+
+          drifted=$(git status --porcelain -- \
+            src/mcp_erp/authorization/data \
+            src/mcp_erp/purchase_to_pay/data \
+            keycloak/import)
+
+          if [ -n "${drifted}" ]; then
+            echo "::error::A rendering no longer matches the seed."
+            echo
+            echo "${drifted}"
+            echo
+            echo "The seed at docs/organisation/seed.yaml is the source of truth"
+            echo "for all three renderings. Edit it and re-run both generators;"
+            echo "never edit a rendering by hand."
+            exit 1
+          fi
+
+          echo "All three renderings match the seed."
+
+      # The invariants a diff cannot see: that the renderer is byte-stable, that
+      # the two role columns stay independent, and that realm membership and
+      # directory membership are equal with the divergence declared on the role
+      # columns only.
+      - name: The invariants between the renderings
+        run: uv run pytest tests/authorization/test_identity.py
 
   # The mechanism standing behind "a change is a new path" — ADR-0008's third,
   # the one it credits with removing the only genuine false green. The argument

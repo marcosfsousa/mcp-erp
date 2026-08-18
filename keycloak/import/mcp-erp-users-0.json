@@ -1,0 +1,118 @@
+{
+  "realm": "mcp-erp",
+  "users": [
+    {
+      "credentials": [
+        {
+          "temporary": false,
+          "type": "password",
+          "value": "not-a-secret-demo-password"
+        }
+      ],
+      "enabled": true,
+      "id": "anna-lindqvist",
+      "realmRoles": [
+        "auditor"
+      ],
+      "requiredActions": [],
+      "username": "anna.lindqvist"
+    },
+    {
+      "credentials": [
+        {
+          "temporary": false,
+          "type": "password",
+          "value": "not-a-secret-demo-password"
+        }
+      ],
+      "enabled": true,
+      "id": "ingrid-holm",
+      "realmRoles": [
+        "invoice_clerk",
+        "unlimited_approver"
+      ],
+      "requiredActions": [],
+      "username": "ingrid.holm"
+    },
+    {
+      "credentials": [
+        {
+          "temporary": false,
+          "type": "password",
+          "value": "not-a-secret-demo-password"
+        }
+      ],
+      "enabled": true,
+      "id": "mei-tanaka",
+      "realmRoles": [
+        "approver"
+      ],
+      "requiredActions": [],
+      "username": "mei.tanaka"
+    },
+    {
+      "credentials": [
+        {
+          "temporary": false,
+          "type": "password",
+          "value": "not-a-secret-demo-password"
+        }
+      ],
+      "enabled": true,
+      "id": "priya-raman",
+      "realmRoles": [
+        "approver"
+      ],
+      "requiredActions": [],
+      "username": "priya.raman"
+    },
+    {
+      "credentials": [
+        {
+          "temporary": false,
+          "type": "password",
+          "value": "not-a-secret-demo-password"
+        }
+      ],
+      "enabled": true,
+      "id": "rafael-costa",
+      "realmRoles": [
+        "invoice_clerk"
+      ],
+      "requiredActions": [],
+      "username": "rafael.costa"
+    },
+    {
+      "credentials": [
+        {
+          "temporary": false,
+          "type": "password",
+          "value": "not-a-secret-demo-password"
+        }
+      ],
+      "enabled": true,
+      "id": "tomas-weber",
+      "realmRoles": [
+        "approver"
+      ],
+      "requiredActions": [],
+      "username": "tomas.weber"
+    },
+    {
+      "credentials": [
+        {
+          "temporary": false,
+          "type": "password",
+          "value": "not-a-secret-demo-password"
+        }
+      ],
+      "enabled": true,
+      "id": "yusuf-demir",
+      "realmRoles": [
+        "approver"
+      ],
+      "requiredActions": [],
+      "username": "yusuf.demir"
+    }
+  ]
+}

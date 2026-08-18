@@ -151,6 +151,14 @@ _Avoid_: department, team, org unit, tenant, business unit
 The hand-authored half of the seed — the Cast, the cost centres, the vendors. Stable and legible, as opposed to the generated fixtures.
 _Avoid_: master data, reference data
 
+**Seed**:
+Everything the exhibit starts from: the authored Organisation and the generated Fixtures, which are its two halves and are never confused. One file authors the first; nothing hand-writes the second.
+_Avoid_: seed data (which names a Fixture), bootstrap data, initial state
+
+**Rendering**:
+A committed artifact generated from the seed — ERP rows, principal-directory rows, the authorization server's user import. Byte-stable, checked against the seed on every run, and never edited by hand.
+_Avoid_: export, dump, output, generated file
+
 ### Purchase-to-pay
 
 **Purchase-to-pay**:

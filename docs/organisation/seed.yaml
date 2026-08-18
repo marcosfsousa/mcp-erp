@@ -1,0 +1,178 @@
+# The organisation — the hand-authored half of the seed, and the single source
+# of truth for who exists.
+#
+# Decided by #6 and #12; rules recorded in
+# docs/adr/0003-the-schema-is-the-policy-functions-argument-list.md and
+# docs/adr/0007-the-realm-is-the-exhibit.md
+#
+# This file is authored, and nothing may generate it: the cast, the cost
+# centres and the vendors are the exhibit's legible furniture, and every person
+# here earns a line by making a branch of the decision matrix reachable that
+# nothing else reaches. The disposable per-row requisitions are the seed's
+# other half, generated from the matrix definition, and never appear here.
+#
+# It renders three ways, one file per rendering:
+#
+#   src/mcp_erp/purchase_to_pay/data/organisation.json        ERP rows
+#   src/mcp_erp/authorization/data/principal-directory.json   directory rows
+#   keycloak/import/mcp-erp-users-0.json                      the user import
+#
+# Two generators produce those three, split by the vocabulary each speaks and
+# deleted with the layer whose words it uses: `mcp_erp.authorization.identity`
+# renders the last two, `mcp_erp.purchase_to_pay.organisation` the first. The
+# fixture generator is a third and renders none of them — it reads the matrix
+# definition rather than this file, and emits the seed's other half. The `Seed
+# renders clean` job re-renders all three and fails on any diff, so a
+# hand-edited rendering is a red check rather than a surprise at boot.
+#
+#
+# TWO ROLE COLUMNS, AND WHY THEY ARE NOT ONE
+# ------------------------------------------
+# `roles` is what the server resolves per request. `realm_roles` is what the
+# authorization server holds for the same person. Two stores of the same truth,
+# allowed to disagree — which is the point rather than an oversight to tidy.
+#
+# Priya Raman holds `approver` in the realm and no role in the ERP. That single
+# divergence is load-bearing: it is what makes the scope-without-role state
+# reachable through a real authorization code flow, and so what makes the
+# middle denial class — a protocol error a `403` would lie about — something
+# the exhibit demonstrates rather than asserts. ADR-0007 spells out that role
+# gating applied uniformly would have silently deleted it.
+#
+# Layer 2's generator renders each column into its own artifact and **never
+# interprets an issuer-side role name**: `realm_roles` values are opaque
+# strings on their way to the realm, nothing in `src/` compares them to
+# `roles`, and no code path derives either column from the other.
+#
+#
+# FIELDS
+# ------
+#   issuer         the authorization server that vouches for these subjects.
+#                  The directory key is `subject` scoped by this, never an
+#                  email or a preferred username — OpenID Connect declines to
+#                  guarantee either as stable or unique.
+#   password       one conspicuously fake password, shared by all seven and
+#                  committed deliberately. Per-person passwords would be seven
+#                  equally committed, equally fake secrets buying no behaviour.
+#   cost_centres   flat, no hierarchy. Every person holds exactly one.
+#   vendors        the parties a requisition may be raised against. The
+#                  `submit_requisition` enum is generated from these, so the
+#                  tool definition cannot drift from the data.
+#   people         the Cast. Per person:
+#                    name         display name; the named legibility exception
+#                    subject      the `sub` claim, chosen and readable, and the
+#                                 realm user id it is imported as. A
+#                                 lowercase-hyphen slug of at most 36
+#                                 characters, the width a UUID exactly fills.
+#                    username     what the person types at the login form
+#                    cost_centre  the one centre they hold. Layer 2 reads this
+#                                 as the partition, and that duplication is
+#                                 what the drift check polices.
+#                    roles        server-side, resolved per request
+#                    realm_roles  issuer-side, opaque to everything in `src/`
+#                    exists_to    the branch this person makes reachable.
+#                                 Rendered nowhere: it is how a reviewer checks
+#                                 the cast against the rule that every member
+#                                 earns a line.
+
+issuer: http://localhost:8081/realms/mcp-erp
+
+# Not a secret, and conspicuously so. The exhibit runs on the reader's machine
+# and nowhere else, so there is nothing here to leak.
+password: not-a-secret-demo-password
+
+cost_centres:
+  - code: CC-4100
+    name: Facilities
+  - code: CC-4200
+    name: Engineering
+  - code: CC-4300
+    name: Marketing
+
+vendors:
+  - id: ven_0001
+    name: Nordwind Office Supplies
+  - id: ven_0002
+    name: Meridian Cloud Services
+  - id: ven_0003
+    name: Bauer Facility Services
+  - id: ven_0004
+    name: Talbot Print and Signage
+
+# CC-4100 is the only centre where the purchase-to-pay chain runs end to end.
+# CC-4200 and CC-4300 are row-scoping foils that can start a chain they cannot
+# finish, and that hole is deliberate: one matrix row lands on it to assert
+# that a remedy names a class of action, not an available human.
+people:
+  - name: Priya Raman
+    subject: priya-raman
+    username: priya.raman
+    cost_centre: CC-4100
+    roles: []
+    realm_roles: [approver]
+    exists_to: >-
+      Scope-only submit, and role_missing on approve. The one row where the two
+      role columns diverge, so the realm can issue erp.decide to someone the
+      server refuses.
+
+  - name: Tomas Weber
+    subject: tomas-weber
+    username: tomas.weber
+    cost_centre: CC-4100
+    roles: [approver]
+    realm_roles: [approver]
+    exists_to: >-
+      Approves others' requisitions at or below the threshold, is refused above
+      it, and is refused on his own — the submitter side of the first
+      segregation-of-duties edge.
+
+  - name: Ingrid Holm
+    subject: ingrid-holm
+    username: ingrid.holm
+    cost_centre: CC-4100
+    roles: [invoice_clerk, unlimited_approver]
+    realm_roles: [invoice_clerk, unlimited_approver]
+    exists_to: >-
+      Approves above the threshold, composes two roles on one person, and
+      cannot record an invoice against what she approved — the negative side of
+      the second edge.
+
+  - name: Rafael Costa
+    subject: rafael-costa
+    username: rafael.costa
+    cost_centre: CC-4100
+    roles: [invoice_clerk]
+    realm_roles: [invoice_clerk]
+    exists_to: >-
+      The positive side of the second edge — the counterparty who can record an
+      invoice against Ingrid's approvals.
+
+  - name: Yusuf Demir
+    subject: yusuf-demir
+    username: yusuf.demir
+    cost_centre: CC-4200
+    roles: [approver]
+    realm_roles: [approver]
+    exists_to: >-
+      Row scoping. Everything Tomas has, in another centre, so CC-4100 rows
+      come back not_found.
+
+  - name: Anna Lindqvist
+    subject: anna-lindqvist
+    username: anna.lindqvist
+    cost_centre: CC-4200
+    roles: [auditor]
+    realm_roles: [auditor]
+    exists_to: >-
+      Breadth by role — reads three centres of three, and the role confers no
+      write authority of its own.
+
+  - name: Mei Tanaka
+    subject: mei-tanaka
+    username: mei.tanaka
+    cost_centre: CC-4300
+    roles: [approver]
+    realm_roles: [approver]
+    exists_to: >-
+      The third centre's inhabitant, which is what makes an auditor's three of
+      three distinguishable from merely holding two.
