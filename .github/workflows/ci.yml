@@ -261,7 +261,7 @@ jobs:
       # directory membership are equal with the divergence declared on the role
       # columns only.
       - name: The invariants between the renderings
-        run: uv run --no-sync pytest tests/authorization/test_identity.py
+        run: uv run pytest tests/authorization/test_identity.py
 
   # The mechanism standing behind "a change is a new path" — ADR-0008's third,
   # the one it credits with removing the only genuine false green. The argument
