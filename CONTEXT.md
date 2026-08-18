@@ -81,8 +81,12 @@ _Avoid_: access level, authorization
 A rule decided by the identities and amounts involved rather than by the caller alone — segregation of duties and the approval threshold.
 _Avoid_: business rule, policy
 
+**Partition**:
+The single-valued attribute of a Principal that row scoping compares against. Layer 2's name for the value; layer 3 supplies it from the Person's cost centre. Carried as `principal.partition` and `resource.partition`, with a per-Action set of bypass roles.
+_Avoid_: tenant, row scope, unit, cost centre (which is the layer-3 name for what fills it)
+
 **Row scoping**:
-Restricting which records a Principal may see to those in their own cost centre.
+Restricting which records a Principal may see to those sharing their partition — one equality check, plus a set of roles that bypass it. The mechanism keeps this name; the attribute it reads is the partition. In the purchase-to-pay layer the partition is the cost centre, and `auditor` is the bypass role on the two read tools.
 _Avoid_: filtering, tenant isolation, multi-tenancy
 
 **Segregation of duties**:
@@ -112,8 +116,12 @@ _Avoid_: fix, resolution, next step
 ### Identity and organisation
 
 **Person**:
-A named human in the seeded organisation, holding exactly one cost centre and zero or more roles.
+A named human in the seeded organisation, holding exactly one cost centre. Roles are **not** held here — they are policy facts, kept in the principal directory alongside the issuer and subject that identify the Person to the authorization layer.
 _Avoid_: user, account, employee, persona
+
+**Principal directory**:
+The layer-2 record mapping an issuer-and-subject pair to a set of roles and a partition. Owned by the authorization layer, rendered from the seed, and consulted once per request between token validation and the first gate. Its shape survives ejection of the domain; only its rows are domain-supplied.
+_Avoid_: user table, identity store, profile
 
 **Cast**:
 The named People seeded into the exhibit. Each one exists to make some branch of the decision matrix reachable.

@@ -5,6 +5,9 @@
 - **Ticket:** [#7 Choose the authorization server](https://github.com/marcosfsousa/mcp-erp/issues/7)
 - **Evidence:** [ADR-0002](0002-refusal-shape-follows-the-remedy.md) (three denial classes), [ADR-0003](0003-the-schema-is-the-policy-functions-argument-list.md) (the cast, the `sub` join), [ADR-0004](0004-layer-2-is-a-portable-pattern-layer-3-is-ejectable.md), [ADR-0005](0005-the-authorization-server-is-a-dependency-not-a-deliverable.md); RFC 9700 §4.14.2; map constraints #3, #4, #5, #8, #10; live verification against Keycloak 26.7.1, 2026-08-11
 - **Amended:** 2026-08-11 — additive, by [#8](https://github.com/marcosfsousa/mcp-erp/issues/8). This ADR put Keycloak behind a Dockerfile without saying how its version is held still, and `--features=cimd` is a preview flag. See *The base image is pinned by digest*. No decision here is changed.
+- **Amended:** 2026-08-15 — cosmetic, by [#10](https://github.com/marcosfsousa/mcp-erp/issues/10). One clause anticipating a Cloud Run decision is withdrawn; the reasons around it are untouched. See *How it runs, and where the file lives*. *(Header added 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12); the in-body marker has stood since 2026-08-15.)*
+- **Amended:** 2026-08-16 — substantive, by [#11](https://github.com/marcosfsousa/mcp-erp/issues/11). Only `erp.decide` carries a role scope mapping, and it lists two roles. See *Scopes are gated by roles that mirror the ERP's*. *(Header added 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12).)*
+- **Amended:** 2026-08-18 — substantive, by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). The seed renders **three** ways and carries **two independent role columns**; realm and directory membership is held equal by a test, with Priya's divergence declared as a role-column exception. See *Hand-authored, with only the users generated* and *Scopes are gated by roles that mirror the ERP's*. No decision here is reversed.
 
 ## Question
 
@@ -17,6 +20,12 @@ How is it produced, what is in it, and how does it run?
 ### Hand-authored, with only the users generated
 
 The clients, redirect URIs, client scopes and audience mappers are **hand-written JSON**. That section *is* the exhibit; a generated blob is worse evidence than authored intent. A generator fills the `users` array from #6's seed file, which is exactly the `sub` join ADR-0003 already owes — one seed file rendered twice, into ERP rows and into the realm import. One committed realm file, drift-checked the way #6 drift-checks its per-row fixtures.
+
+*Amended 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12).* **Rendered twice becomes rendered three times**, and the generator moves.
+
+[ADR-0013](0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md) adds a layer-2 principal directory as a third rendering, and gives layer 2 the generator that produces both it and this realm import. The seed carries **two independent role columns** — server-side roles and issuer-side realm roles — and the generator treats the **issuer-side names as opaque strings it never interprets**, so only the identity half (subject, username, credentials) is shared between renderings. Rendering this import from directory roles would erase the divergence *Scopes are gated by roles that mirror the ERP's* calls load-bearing.
+
+**Realm and directory membership is held equal by a test**, not by the assumption that the seed is the only writer: realm subject set equals directory subject set, with Priya Raman declared as an exception on the **role columns only, never on membership**. The renderer must be byte-stable — sorted keys, no generated identifiers, no timestamps, all three of which a Keycloak export emits by default — or the drift job flakes and a required check gets disabled.
 
 ### Keycloak is a pure function of that file
 

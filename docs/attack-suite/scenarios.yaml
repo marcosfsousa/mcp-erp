@@ -47,11 +47,11 @@ meta:
   ticket: 9
   decided: 2026-08-12
   revision: "2026-07-28"
-  total: 32
+  total: 33
   floor: 11
   basis_split:
     clause: 19
-    adr: 10
+    adr: 11
     seam: 3
   strength_split:
     MUST: 11
@@ -224,6 +224,11 @@ scenarios:
       "server MUST reject X"; the actual text is SHOULD. The row is unchanged —
       ADR-0006 commits us to this shape regardless — but the table must not
       render it as a MUST.
+      NAMING: this scenario's name is character-identical to the layer-2 Reason
+      value `insufficient_scope` and is a different kind of thing — a stable
+      test identifier, not a Reason.value. Nothing binds them and no drift check
+      relates them. ADR-0013 split the reason vocabulary by layer; this name did
+      not move with it. (Added 2026-08-18 by #12.)
 
   - name: scope_exact_match
     basis: adr
@@ -479,8 +484,45 @@ scenarios:
     status: asserted
     floor: false
     note: >-
-      Read path. Asserts byte-identical `not_found` AND indistinguishable timing.
-      Splits from state_handle_hijack, which is the write path.
+      Read path, NAMED resource. Asserts byte-identical `not_found` for "exists
+      but not yours" and "never existed". Splits from state_handle_hijack, which
+      is the write path; splits from list_partition_scoped, which is the
+      discovered half of the same contract.
+      Narrowed 2026-08-18 by #12: this note read "AND indistinguishable timing".
+      Constant time is NOT measured here and is not claimed. Timing
+      indistinguishability is unprovable over HTTP against Compose — container
+      scheduling and garbage collection swamp the signal — and a flaky assertion
+      in a required job gets disabled. What is asserted is byte-identity on the
+      wire; the layer-2 counterpart is a single-return-site property asserted
+      structurally in tests/authorization/. ADR-0002 is narrowed to match. This
+      reverses a project commitment, not a normative clause, so no
+      normative-register row is owed. See ADR-0013 §Indistinguishability is
+      byte-identity, at two altitudes.
+
+  - name: list_partition_scoped
+    basis: adr
+    prevents: A listing returning rows from every cost centre because the caller cleared the whole-call gate.
+    citation:
+      source: ADR-0013 §Named versus discovered — the refusal contract
+    normative_strength: null
+    removal: Return the unfiltered result set after the whole-call gate permits, without evaluating row scoping per row.
+    status: asserted
+    floor: false
+    note: >-
+      Read path, DISCOVERED resources — the other half of the contract
+      row_probe_indistinguishable covers for named ones. Asserts set equality
+      over returned identifiers for a principal without the bypass role, and the
+      widened set for one holding `auditor`.
+      Declared 2026-08-18 by #12 because nothing asserted it. ADR-0013 gives the
+      policy function three entry points, and the type system closes accidental
+      omission of the resource but NOT the wrong entry point: a handler that
+      takes a whole-call permit and lists every partition type-checks cleanly.
+      That residual is structurally untestable in tests/authorization/, since
+      choosing the entry point is a handler obligation and handlers are layer 3,
+      which ejection deletes. So the falsifier has to live at the wire.
+      Splits from row_probe_indistinguishable: that row's removal makes a named
+      refusal distinguishable; this row's removal skips per-row evaluation
+      entirely. Different deletions, so different rows.
 
   - name: auth_bypass_via_method_header_mismatch
     basis: adr

@@ -5,6 +5,7 @@
 - **Ticket:** [#4 Survey the MCP client landscape](https://github.com/marcosfsousa/mcp-erp/issues/4)
 - **Evidence:** [`docs/research/0004-mcp-client-landscape.md`](../research/0004-mcp-client-landscape.md)
 - **Amended:** 2026-08-07 — terminology only, to match [`CONTEXT.md`](../../CONTEXT.md), which postdates this ADR and discourages the abbreviation this document used nine times. No finding, option or decision changed.
+- **Amended:** 2026-08-11 — substantive, by [#8](https://github.com/marcosfsousa/mcp-erp/issues/8). The conformance client is **no longer a legitimate cut candidate**. Recorded in [ADR-0008](0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md) at the time and back-amended here 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). See *Consequences*. No decision here is reversed.
 
 ## Question
 
@@ -42,6 +43,8 @@ Two premise corrections fall out (see *Consequences*): the prior revision is **2
 The binding decision on *what performs the run* remains #8's to make; this ADR removes the false constraint that was forcing its hand.
 
 ## Consequences
+
+*Amended 2026-08-11 by [#8](https://github.com/marcosfsousa/mcp-erp/issues/8), back-amended 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12).* The cut-candidate clause below is **withdrawn**. Packaging the client as one library with two entry points means cutting it removes the runnable entry point and the hosted document only — the transport, the calls and the assertions stay, because the suites import them. The saving fell to about a day while the value rose. It is **not** on the cut list, and map note `#9` is unchanged.
 
 **Cost.** The conformance client survives the cut list on weaker grounds than "load-bearing," so it is now a legitimate cut candidate — a change to the note-9 cut order that #8 should weigh. It also needs a publicly-reachable HTTPS document: a Client Identity Metadata Document `client_id` is a URL the authorization server fetches, so a `localhost` client cannot self-host its own identity.
 

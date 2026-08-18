@@ -5,6 +5,7 @@
 - **Ticket:** [#7 Choose the authorization server](https://github.com/marcosfsousa/mcp-erp/issues/7)
 - **Evidence:** [`docs/research/0003-2026-07-28-authorization-requirements.md`](../research/0003-2026-07-28-authorization-requirements.md) (fifteen-clause list, §2.2 path insertion, §2.4 challenge parameters), [`docs/research/0004-mcp-client-landscape.md`](../research/0004-mcp-client-landscape.md); RFC 9728 §3.1, RFC 6750 §3, RFC 9700 §4.14.2; [ADR-0002](0002-refusal-shape-follows-the-remedy.md), [ADR-0005](0005-the-authorization-server-is-a-dependency-not-a-deliverable.md)
 - **Amended:** 2026-08-11 — substantive, by [#8](https://github.com/marcosfsousa/mcp-erp/issues/8). The chain below is **not uniform across both protocol eras**, and one refinement passed to #12 is void. See *The order describes the modern leg* and *Input to other tickets*. No decision here is reversed.
+- **Amended:** 2026-08-18 — additive, by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). A **resolution step** sits between gates 4 and 5, and the chain runs in mount-level middleware rather than in a route dependency. See *The gate order is a security property, not a style choice*. No decision here is reversed.
 
 ## Question
 
@@ -103,6 +104,16 @@ Because it is the one endpoint that answers strangers, its `instructions` descri
 5. scope insufficient                    -> 403 + insufficient_scope
 6. domain rule                           -> -31010 or tool result
 ```
+
+*Amended 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12) — one step is added to the list above, and it is not a gate.*
+
+**Between 4 and 5 the server resolves a `Principal`.** [ADR-0013](0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md) makes the principal directory a layer-2 seam, and its lookup runs inside the token middleware immediately after gate 4, putting the resolved `Principal` in request state for gates 5 and 6 to read. This ADR orders *gates* — refusals keyed on what would fix them — and this is a **resolution step**, which is why it carries no number.
+
+It is placed here rather than at dispatch because it is conditional on nothing dispatch knows, and because `tools/list` and `tools/call` share one scope check precisely so that one rule has one implementation; resolving at dispatch would give it two.
+
+**A directory miss is an explicit refusal, not an empty principal.** A principal with no roles would clear gate 5 and then clear a role check demanding nothing — map note `#6` makes submitting scope-only and note `#11` leaves `erp.write` ungated — so an unknown subject holding `erp.write` would write a requisition charged to a null cost centre. That is a fail-open in a chain named for failing closed. `Principal.partition` is therefore non-optional, making a miss structurally unable to produce a `Principal`, and the refusal reuses `role_missing`, whose record it shares exactly.
+
+The chain also runs in **mount-level middleware** rather than a route dependency: ADR-0008's substrate supplies its own ASGI application, and a mounted application is not a route, so dependency solving never reaches it. The unauthenticated endpoints sit outside the token gate structurally rather than by a path allow-list — the same preference for impossible over defended-against that produced the ordering argument below.
 
 The specification says *"MCP servers **MUST** validate access tokens before processing the request"*, which reads as *token first*. The exemption above cuts across it: something must establish **which method this is** before the token check can decide whether to run, and the method arrives in a caller-controlled header.
 
