@@ -58,8 +58,12 @@ _Avoid_: test client, harness
 ### Authorization
 
 **Principal**:
-A Person together with the set of scopes their access token carries. The two halves vary independently — the same Person is a different Principal under a narrower token.
+A Person together with the set of scopes their access token carries. The two halves vary independently — the same Person is a different Principal under a narrower token. The Person's half is what the Principal directory answers with — their Roles and their Partition — and it is never optional: a directory miss yields no Principal at all rather than an empty one.
 _Avoid_: user, caller, subject, actor
+
+**Claims**:
+The unverified caller a validated access token asserts — issuer, subject and granted scopes. The stage *before* a Principal rather than half of one: the token says who it is for, and the Principal is who the server is willing to stand behind.
+_Avoid_: token payload, identity, user info
 
 **Granted scope**:
 A permission string carried inside an access token, agreed when a person authorizes an application. It is a ceiling on what the application may do on their behalf, not a statement of what they are allowed to do.
@@ -68,6 +72,14 @@ _Avoid_: permission, entitlement, grant
 **Capability**:
 A member of the fixed vocabulary a tool declares, naming what a token must carry to reach it. Joined to a namespace to build a scope string, and never parsed back out of one.
 _Avoid_: permission, action, scope, verb
+
+**Action**:
+Everything one tool declares so that the policy chain can decide on it — a namespace, a Capability, the Roles it requires, its ordered Relationship rules, and the Roles that bypass Row scoping. The only thing that crosses from the purchase-to-pay layer into the authorization layer. **Not a synonym for Capability**, whose _Avoid_ line bars the bare word: an Action is a tool's whole declaration and a Capability is one field of it.
+_Avoid_: operation, command, policy, rule
+
+**Resource**:
+The row an item-level Decision is taken against — the thing acted *against*, never the thing created. The authorization layer reads exactly one member of it, the Partition; a Relationship rule needing more declares a narrower type alongside the entity it belongs to. Unrelated to **Resource server**, which is this server in its token-validating capacity.
+_Avoid_: entity, record, object, target
 
 **Role**:
 A standing grant of authority held by a Person and resolved server-side per request, never carried in the token.
@@ -97,12 +109,16 @@ _Avoid_: SoD, four-eyes principle, dual control (a distinct and rejected mechani
 The amount above which approving a requisition requires a more senior role.
 _Avoid_: limit, ceiling, spending cap
 
+**Decision**:
+What the chain answers for one item — a permit, or the Reason it refuses on. Distinct from a **Gate outcome**, which answers for a whole call: they are two types rather than one, so a whole-call permit cannot be used as an item permit.
+_Avoid_: result, verdict, judgement, outcome (which is the whole-call half)
+
 **Refusal**:
 Any authorization decision that stops a call. Deliberately not "error" — two of the three kinds are not errors in any protocol sense.
 _Avoid_: error, failure, rejection, denial
 
 **Denial class**:
-One of the three shapes a refusal takes on the wire, chosen by what would fix it for the caller.
+One of the three shapes a refusal takes on the wire, chosen by what would fix it for the caller. One of its three members is named for a **protocol error**, which is exact rather than a lapse against the line below: the Refusal entry's *"two of the three kinds are not errors in any protocol sense"* says of the third that it is one.
 _Avoid_: error type, status
 
 **Reason**:

@@ -87,6 +87,22 @@ rediscover.
   established. Naming a surface is not the same as having checked it.
   — #12, 2026-08-18
 
+- **"No default" and "never absent" are different constraints, and the design
+  needs one without the other.** `decide_item`'s resource takes no default, so a
+  handler cannot omit it and receive a truncated permit. It is nonetheless
+  nullable, because the other half of the same design says an empty join and a
+  foreign row must converge on one return site — which only holds if the absent
+  row is passed *into* the chain rather than handled by the caller. The two read
+  as contradictory and act on different things: one on the argument list, one on
+  the type. — #34, ADR-0013
+
+- **The type checker refused to let the type split be tested, which is the
+  proof.** `GateOutcome` and `Decision` are structurally identical records, so
+  the obvious assertion is that they are not the same class — and mypy rejects
+  it as a non-overlapping identity check before the test can run. The property
+  was already held statically, so the only honest thing left to assert at
+  runtime is that neither inherits from the other. — #34
+
 ---
 
 ## Findings

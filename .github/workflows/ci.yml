@@ -165,6 +165,34 @@ jobs:
       - name: Layer contracts
         run: uv run lint-imports
 
+  layer-2-ejects-clean:
+    name: Layer 2 ejects clean
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      # The ejection test is a command, not a file: the deletion is the setup,
+      # and what it proves is that layer 2 stands alone rather than that some
+      # test file avoided an import. `--no-sync` is load-bearing — a re-sync
+      # between the deletion and the run would reinstall what was just deleted
+      # and the assertion would quietly become nothing.
+      #
+      # This job covers what import-linter cannot: that layer 2 *runs* with the
+      # domain gone, including through dynamic and string-based imports a static
+      # graph misses. It is also the only job that runs this suite, which is
+      # deliberate — the ejected run is the stronger of the two assertions, so a
+      # second job running it intact would add wall time and no coverage.
+      - name: Eject layer 3, then run layer 2's own suite
+        run: rm -rf src/mcp_erp/purchase_to_pay && uv run --no-sync pytest tests/authorization
+
   # The mechanism standing behind "a change is a new path" — ADR-0008's third,
   # the one it credits with removing the only genuine false green. The argument
   # lives there and in public/README.md; this job only refuses. Adding a path is
