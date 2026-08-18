@@ -201,7 +201,11 @@ jobs:
   # It asks two questions that fail differently. The re-render plus diff catches
   # a *hand-edited* rendering, and it is the only cover the ERP rendering has:
   # layer 3 gets no test directory of its own, because ADR-0008 routes every
-  # assertion about it over the wire. The test file catches a *broken renderer*
+  # assertion about it over the wire. That is thinner than layer 2's cover but
+  # not as thin as it looks — the committed bytes were rendered on whichever
+  # machine authored them and this job re-renders them on a Linux runner, so
+  # the comparison spans two machines and two runs, which is the reproducibility
+  # claim rather than a weaker version of it. The test file catches a *broken renderer*
   # — byte-stability, and the realm-versus-directory subject-set equality with
   # its role-column exception — and it lives in `tests/authorization` because
   # identity provisioning is layer 2's and has to survive ejection. So the

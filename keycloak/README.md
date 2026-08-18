@@ -28,7 +28,8 @@ directory import is first executed against a running container.
 
 ## The user import
 
-Rendered from `docs/organisation/seed.yaml`. Seven users, each carrying:
+Rendered from `docs/organisation/seed.yaml`: one entry per Person in the Cast,
+seven in all. Each carries:
 
 - **`id`** — the seed's chosen subject, imported verbatim. This is the `sub`
   claim the ERP rows and the principal directory join on, which is why it is

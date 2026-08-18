@@ -42,6 +42,15 @@ import yaml
 
 from mcp_erp.authorization.directory import DirectoryEntry
 
+SEED = "docs/organisation/seed.yaml"
+"""The authored organisation this generator reads, relative to the repository root.
+
+Layer 3's generator names the same file for itself. One shared constant would
+be a cross-layer import for a string, and the layer that survives ejection
+would be holding it on behalf of the layer that does not — the same trade
+:func:`_as_json` is stated twice for.
+"""
+
 DIRECTORY_RENDERING = "src/mcp_erp/authorization/data/principal-directory.json"
 """Where the directory rendering is committed, relative to the repository root.
 
@@ -65,10 +74,10 @@ and a directory import reads both.
 SUBJECT_LIMIT = 36
 """The longest subject the realm will store, which is the width a UUID fills.
 
-The subject is imported as the user's identifier, so this is the realm's
-constraint rather than ours. Checked here so that a too-long subject fails at
-the line of the seed that caused it, rather than as an import error with no
-obvious connection to it.
+The subject is imported as the realm's identifier for the person, so this is
+the realm's constraint rather than ours. Checked here so that a too-long
+subject fails at the line of the seed that caused it, rather than as an import
+error with no obvious connection to it.
 """
 
 
@@ -102,8 +111,14 @@ class Identity:
 
 
 @dataclass(frozen=True, slots=True)
-class Seed:
+class IdentitySeed:
     """The seed's identity half: who vouches for these people, and who they are.
+
+    Named for the half rather than for the seed, because the seed is the whole
+    of what the exhibit starts from — the authored organisation *and* the
+    generated fixtures — and this type is one slice of the first of those.
+    :class:`mcp_erp.purchase_to_pay.organisation.Organisation` is the slice
+    beside it, in the layer whose words the rest of that half is written in.
 
     Attributes:
         issuer: The authorization server the subjects below are scoped by.
@@ -121,7 +136,7 @@ class Seed:
     identities: tuple[Identity, ...]
 
 
-def read_seed(text: str) -> Seed:
+def read_identity_seed(text: str) -> IdentitySeed:
     """Parse the identity half of the seed, refusing what the realm would reject later.
 
     Two refusals, both of which would otherwise surface as an authorization
@@ -156,7 +171,7 @@ def read_seed(text: str) -> Seed:
             )
         )
 
-    return Seed(
+    return IdentitySeed(
         issuer=issuer,
         realm=issuer.rsplit("/", 1)[-1],
         password=str(document["password"]),
@@ -164,7 +179,7 @@ def read_seed(text: str) -> Seed:
     )
 
 
-def directory_entries(seed: Seed) -> tuple[DirectoryEntry, ...]:
+def directory_entries(seed: IdentitySeed) -> tuple[DirectoryEntry, ...]:
     """The directory rows this seed describes, in the shape layer 2 already owns.
 
     Going through :class:`~mcp_erp.authorization.directory.DirectoryEntry`
@@ -183,7 +198,7 @@ def directory_entries(seed: Seed) -> tuple[DirectoryEntry, ...]:
     )
 
 
-def render_directory(seed: Seed) -> str:
+def render_directory(seed: IdentitySeed) -> str:
     """Render the principal directory: issuer, subject, roles and partition per row.
 
     A flat array rather than an issuer with rows beneath it. The key is a pair,
@@ -203,7 +218,7 @@ def render_directory(seed: Seed) -> str:
     )
 
 
-def render_user_import(seed: Seed) -> str:
+def render_user_import(seed: IdentitySeed) -> str:
     """Render the authorization server's user import.
 
     The credential is **non-temporary with no required actions**, deliberately:
@@ -263,7 +278,7 @@ def main() -> None:
     diff.
     """
     repo = Path(__file__).resolve().parents[3]
-    seed = read_seed((repo / "docs" / "organisation" / "seed.yaml").read_text(encoding="utf-8"))
+    seed = read_identity_seed((repo / SEED).read_text(encoding="utf-8"))
 
     for rendering, text in (
         (DIRECTORY_RENDERING, render_directory(seed)),

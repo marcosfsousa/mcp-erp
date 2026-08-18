@@ -35,6 +35,15 @@ from pathlib import Path
 
 import yaml
 
+SEED = "docs/organisation/seed.yaml"
+"""The authored organisation this generator reads, relative to the repository root.
+
+Named here as well as in layer 2's generator, deliberately. Sharing the string
+would mean one layer importing it from the other for no other reason, and the
+importer would be the layer that survives ejection holding a constant on behalf
+of the layer that does not.
+"""
+
 ORGANISATION_RENDERING = "src/mcp_erp/purchase_to_pay/data/organisation.json"
 """Where the ERP rendering is committed, relative to the repository root.
 
@@ -92,10 +101,17 @@ class Organisation:
 
 
 def read_organisation(text: str) -> Organisation:
-    """Parse the domain half of the seed, refusing a person charged to no centre.
+    """Parse the domain half of the seed, refusing what the ERP's own rows cannot hold.
+
+    Both refusals are layer 3's, and it makes them for itself rather than
+    inheriting them: a person charged to a centre nobody declared, and two
+    people sharing the key their rows are keyed by. Layer 2's generator refuses
+    a duplicated subject too, for its own reason — a directory key collision —
+    and neither layer may rely on the other having looked.
 
     Raises:
-        ValueError: A person holds a cost centre the seed does not list.
+        ValueError: A person holds a cost centre the seed does not list, or two
+            people share a subject.
     """
     document = yaml.safe_load(text)
 
@@ -106,16 +122,21 @@ def read_organisation(text: str) -> Organisation:
     codes = {centre.code for centre in centres}
 
     people: list[Person] = []
+    seen: set[str] = set()
     for entry in document["people"]:
+        subject = str(entry["subject"])
         cost_centre = str(entry["cost_centre"])
         if cost_centre not in codes:
             raise ValueError(
-                f"person {entry['subject']!r} holds cost centre {cost_centre!r}, "
+                f"person {subject!r} holds cost centre {cost_centre!r}, "
                 f"which the seed does not list"
             )
+        if subject in seen:
+            raise ValueError(f"duplicate subject {subject!r}")
+        seen.add(subject)
         people.append(
             Person(
-                subject=str(entry["subject"]),
+                subject=subject,
                 name=str(entry["name"]),
                 cost_centre=cost_centre,
             )
@@ -171,6 +192,12 @@ def _as_json(document: object) -> str:
     return json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
+def _write(path: Path, text: str) -> None:
+    """Write a rendering, in bytes, with the newline the renderer chose."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(text.encode("utf-8"))
+
+
 def main() -> None:
     """Re-render the ERP rows from the committed seed.
 
@@ -179,11 +206,9 @@ def main() -> None:
     job re-runs this and fails on any diff.
     """
     repo = Path(__file__).resolve().parents[3]
-    seed = (repo / "docs" / "organisation" / "seed.yaml").read_text(encoding="utf-8")
+    seed = (repo / SEED).read_text(encoding="utf-8")
 
-    target = repo / ORGANISATION_RENDERING
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(render_organisation(read_organisation(seed)).encode("utf-8"))
+    _write(repo / ORGANISATION_RENDERING, render_organisation(read_organisation(seed)))
     print(f"rendered {ORGANISATION_RENDERING}")
 
 
