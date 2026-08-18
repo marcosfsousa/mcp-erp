@@ -7,7 +7,14 @@ readme = "CONTEXT.md"
 # Dockerfile. A split leaves CI testing a runtime the deploy image does not use,
 # which is a green suite that proves nothing about the artifact.
 requires-python = "==3.13.*"
-dependencies = []
+# One runtime dependency, and it sits here rather than in the dev group on
+# purpose. The identity generator ships inside layer 2 — ADR-0013 rejected
+# putting provisioning outside `src/`, because that would let it survive
+# ejection by sitting outside the blast radius — so the seed parser it imports
+# is a dependency of the distribution, not of the test tooling. A dev-group
+# placement would leave a module in `src/` that imports fine on a runner and
+# fails at container start, which is the exact failure the note below refuses.
+dependencies = ["pyyaml"]
 
 [dependency-groups]
 # Test-only tooling, installed separately from the deploy manifest above.
@@ -20,6 +27,9 @@ dev = [
     "mypy",
     "pytest",
     "ruff",
+    # Stubs only. The parser itself is a runtime dependency above; this is the
+    # half the types job needs and the image does not.
+    "types-pyyaml",
 ]
 
 [build-system]

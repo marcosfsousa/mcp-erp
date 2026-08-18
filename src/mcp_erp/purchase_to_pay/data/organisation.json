@@ -1,0 +1,71 @@
+{
+  "cost_centres": [
+    {
+      "code": "CC-4100",
+      "name": "Facilities"
+    },
+    {
+      "code": "CC-4200",
+      "name": "Engineering"
+    },
+    {
+      "code": "CC-4300",
+      "name": "Marketing"
+    }
+  ],
+  "people": [
+    {
+      "cost_centre": "CC-4200",
+      "name": "Anna Lindqvist",
+      "subject": "anna-lindqvist"
+    },
+    {
+      "cost_centre": "CC-4100",
+      "name": "Ingrid Holm",
+      "subject": "ingrid-holm"
+    },
+    {
+      "cost_centre": "CC-4300",
+      "name": "Mei Tanaka",
+      "subject": "mei-tanaka"
+    },
+    {
+      "cost_centre": "CC-4100",
+      "name": "Priya Raman",
+      "subject": "priya-raman"
+    },
+    {
+      "cost_centre": "CC-4100",
+      "name": "Rafael Costa",
+      "subject": "rafael-costa"
+    },
+    {
+      "cost_centre": "CC-4100",
+      "name": "Tomas Weber",
+      "subject": "tomas-weber"
+    },
+    {
+      "cost_centre": "CC-4200",
+      "name": "Yusuf Demir",
+      "subject": "yusuf-demir"
+    }
+  ],
+  "vendors": [
+    {
+      "id": "ven_0001",
+      "name": "Nordwind Office Supplies"
+    },
+    {
+      "id": "ven_0002",
+      "name": "Meridian Cloud Services"
+    },
+    {
+      "id": "ven_0003",
+      "name": "Bauer Facility Services"
+    },
+    {
+      "id": "ven_0004",
+      "name": "Talbot Print and Signage"
+    }
+  ]
+}

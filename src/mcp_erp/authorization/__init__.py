@@ -22,6 +22,7 @@ from mcp_erp.authorization.directory import (
     DIRECTORY_MISS,
     DirectoryEntry,
     PrincipalDirectory,
+    shipped_directory,
 )
 from mcp_erp.authorization.policy import (
     Decision,
@@ -63,4 +64,5 @@ __all__ = [
     "decide_call",
     "decide_item",
     "permits_scope",
+    "shipped_directory",
 ]

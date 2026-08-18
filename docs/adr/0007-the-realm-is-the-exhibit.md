@@ -8,6 +8,7 @@
 - **Amended:** 2026-08-15 — cosmetic, by [#10](https://github.com/marcosfsousa/mcp-erp/issues/10). One clause anticipating a Cloud Run decision is withdrawn; the reasons around it are untouched. See *How it runs, and where the file lives*. *(Header added 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12); the in-body marker has stood since 2026-08-15.)*
 - **Amended:** 2026-08-16 — substantive, by [#11](https://github.com/marcosfsousa/mcp-erp/issues/11). Only `erp.decide` carries a role scope mapping, and it lists two roles. See *Scopes are gated by roles that mirror the ERP's*. *(Header added 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12).)*
 - **Amended:** 2026-08-18 — substantive, by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). The seed renders **three** ways and carries **two independent role columns**; realm and directory membership is held equal by a test, with Priya's divergence declared as a role-column exception. See *Hand-authored, with only the users generated* and *Scopes are gated by roles that mirror the ERP's*. No decision here is reversed.
+- **Amended:** 2026-08-18 — substantive, by [#35](https://github.com/marcosfsousa/mcp-erp/issues/35). The generated users land in a **second file beside** the hand-authored realm rather than in an array inside it. See *Hand-authored, with only the users generated*. No decision here is reversed; the split is what makes this section's own rule structural.
 
 ## Question
 
@@ -26,6 +27,14 @@ The clients, redirect URIs, client scopes and audience mappers are **hand-writte
 [ADR-0013](0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md) adds a layer-2 principal directory as a third rendering, and gives layer 2 the generator that produces both it and this realm import. The seed carries **two independent role columns** — server-side roles and issuer-side realm roles — and the generator treats the **issuer-side names as opaque strings it never interprets**, so only the identity half (subject, username, credentials) is shared between renderings. Rendering this import from directory roles would erase the divergence *Scopes are gated by roles that mirror the ERP's* calls load-bearing.
 
 **Realm and directory membership is held equal by a test**, not by the assumption that the seed is the only writer: realm subject set equals directory subject set, with Priya Raman declared as an exception on the **role columns only, never on membership**. The renderer must be byte-stable — sorted keys, no generated identifiers, no timestamps, all three of which a Keycloak export emits by default — or the drift job flakes and a required check gets disabled.
+
+*Amended 2026-08-18 by [#35](https://github.com/marcosfsousa/mcp-erp/issues/35), which built it.* **One committed realm file becomes two committed files**, and this section's own rule is what forces it.
+
+*Hand-written clients, generated users* is a rule about one file that nothing enforces: an array spliced into the authored realm leaves the generated half sitting in the file a reader is invited to edit, one hand-edit away from being overwritten without warning. Two files make the split structural instead. `keycloak/import/mcp-erp-users-0.json` is rendered and never edited; the realm file beside it is authored and holds no `users` key to edit. Neither can quietly become the other, and the drift check has a whole file to compare rather than one key inside a file it must otherwise leave alone.
+
+It is also **Keycloak's own shape**: exporting a realm with its users in separate files produces `<realm>-realm.json` alongside `<realm>-users-N.json`, and importing a directory reads both. So this buys the split at the cost of nothing invented — the naming and the index are the export format's, not ours.
+
+**Unverified against a running container, and deliberately so.** [#36](https://github.com/marcosfsousa/mcp-erp/issues/36) is the ticket that stands Keycloak up and is where a directory import is first executed; it inherits the check, and the fallback if the two-file read disappoints is one line of rendering — splice the same `users` array into the realm file — which is why this was not worth blocking a Docker-free ticket on.
 
 ### Keycloak is a pure function of that file
 

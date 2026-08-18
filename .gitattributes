@@ -4,3 +4,12 @@
 # because normalisation is still a rule about what the bytes become — and these
 # bytes are the thing being compared.
 public/clients/**/*.json -text
+
+# The seed's three renderings, on the same argument. `Seed renders clean`
+# re-renders them and fails on a diff, and the renderer writes bytes with one
+# newline character on every platform — so a checkout that converted line
+# endings would fail the drift check on a machine rather than on a change,
+# which is exactly the flakiness the renderer was constrained to prevent.
+src/mcp_erp/authorization/data/*.json -text
+src/mcp_erp/purchase_to_pay/data/*.json -text
+keycloak/import/*.json -text

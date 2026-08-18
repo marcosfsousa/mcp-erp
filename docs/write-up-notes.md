@@ -103,6 +103,29 @@ rediscover.
   was already held statically, so the only honest thing left to assert at
   runtime is that neither inherits from the other. — #34
 
+- **"Hand-authored except the users" is a rule about a file that nothing can
+  enforce, until it is two files.** ADR-0007 wanted the realm's clients and
+  mappers authored and only its users generated. Spliced into one file, that
+  leaves generated content in the file a reader is invited to edit, one
+  hand-edit from being silently overwritten. Two files make it structural: the
+  rendered one is never edited, the authored one has no `users` key to edit —
+  and it is Keycloak's own export shape, so the split costs nothing invented.
+  — #35, ADR-0007
+
+- **The count of generators is fixed by the count of renderings, not by the
+  count of layers.** ADR-0013 named two generators and split them by the
+  vocabulary each speaks; the seed has three renderings, and the third speaks
+  layer 3's words, so layer 3 ends up holding two. The rule survived being
+  counted wrongly, which is the useful part: it produced the answer rather than
+  being bent to fit it. — #35, ADR-0013
+
+- **The one place the two vocabularies touch is a generator, and that is why a
+  drift check is the right control.** A cost centre is a domain fact and a
+  partition is a policy attribute; they hold the same value for a person, and
+  nothing derives one from the other at request time. The duplication happens
+  once, by rendering, so it is checkable by re-rendering — where a duplication
+  by hand would only be checkable by remembering. — #35, ADR-0003
+
 ---
 
 ## Findings

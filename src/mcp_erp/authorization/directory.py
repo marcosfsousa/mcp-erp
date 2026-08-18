@@ -13,18 +13,31 @@ goes into request state for the gates to read. Placing it there rather than at
 dispatch is what lets ``tools/list`` and ``tools/call`` share one scope check
 (ADR-0006).
 
-**This ticket delivers the function and its types, not the rows.** The committed
-data file is rendered from the seed by the identity generator that lands with
-it; hand-writing rows here would create data that ticket regenerates. The chain
-does not need real people to be proven domain-free.
+**The rows are rendered, never written here.** :func:`shipped_directory` reads
+the committed file that :mod:`mcp_erp.authorization.identity` renders from the
+seed, so the only hand-written rows anywhere are the stand-ins the tests
+declare. The file is a package resource rather than a repository path: the
+server reads it wherever it is installed, and the generator that writes it is
+the only thing that needs to know where the checkout keeps it.
 """
 
+import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from functools import cache
+from importlib import resources
 from types import MappingProxyType
 
 from mcp_erp.authorization.principal import Claims, Principal
 from mcp_erp.authorization.reasons import ROLE_MISSING, Reason
+
+DIRECTORY_FILE = "principal-directory.json"
+"""The rendered rows, inside layer 2's own package.
+
+Inside, because identity provisioning is layer 2's and has to survive the
+domain being deleted (ADR-0004, criterion 4). Its rows are domain-supplied and
+its shape is not, which is the whole of the split.
+"""
 
 DIRECTORY_MISS: Reason = ROLE_MISSING
 """What a directory miss refuses with — the same reason, not a fourth one.
@@ -110,3 +123,44 @@ class PrincipalDirectory:
             roles=entry.roles,
             partition=entry.partition,
         )
+
+
+def parse_directory(text: str) -> tuple[DirectoryEntry, ...]:
+    """Read rendered rows back into the type the lookup is built on.
+
+    The reader of what :func:`mcp_erp.authorization.identity.render_directory`
+    writes. Both are layer 2's, and the round trip is asserted, so one format
+    cannot quietly become two that only nearly agree.
+
+    Order is preserved rather than imposed: the renderer sorts, and re-sorting
+    here would hide a rendering that had stopped doing so.
+    """
+    return tuple(
+        DirectoryEntry(
+            issuer=row["issuer"],
+            subject=row["subject"],
+            roles=frozenset(row["roles"]),
+            partition=row["partition"],
+        )
+        for row in json.loads(text)
+    )
+
+
+@cache
+def shipped_directory() -> PrincipalDirectory:
+    """The directory the server runs on, read once and held immutable in memory.
+
+    Cached because the file is a build artifact rather than configuration: it
+    cannot change while the process runs, so re-reading it per request would
+    buy nothing and put a file read inside the token middleware. A duplicated
+    row therefore fails on the first lookup of the process rather than on the
+    request that happens to hit the second copy — and it cannot get that far,
+    because the renderer refuses a duplicated subject before it writes.
+
+    No database, no Docker, and no call to the authorization server per
+    request: ADR-0006 rejected the last of those outright, and this is what
+    stands in its place.
+    """
+    package = resources.files(__package__)
+    text = package.joinpath("data", DIRECTORY_FILE).read_text(encoding="utf-8")
+    return PrincipalDirectory(parse_directory(text))

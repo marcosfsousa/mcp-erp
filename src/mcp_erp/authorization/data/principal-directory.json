@@ -1,0 +1,57 @@
+[
+  {
+    "issuer": "http://localhost:8081/realms/mcp-erp",
+    "partition": "CC-4200",
+    "roles": [
+      "auditor"
+    ],
+    "subject": "anna-lindqvist"
+  },
+  {
+    "issuer": "http://localhost:8081/realms/mcp-erp",
+    "partition": "CC-4100",
+    "roles": [
+      "invoice_clerk",
+      "unlimited_approver"
+    ],
+    "subject": "ingrid-holm"
+  },
+  {
+    "issuer": "http://localhost:8081/realms/mcp-erp",
+    "partition": "CC-4300",
+    "roles": [
+      "approver"
+    ],
+    "subject": "mei-tanaka"
+  },
+  {
+    "issuer": "http://localhost:8081/realms/mcp-erp",
+    "partition": "CC-4100",
+    "roles": [],
+    "subject": "priya-raman"
+  },
+  {
+    "issuer": "http://localhost:8081/realms/mcp-erp",
+    "partition": "CC-4100",
+    "roles": [
+      "invoice_clerk"
+    ],
+    "subject": "rafael-costa"
+  },
+  {
+    "issuer": "http://localhost:8081/realms/mcp-erp",
+    "partition": "CC-4100",
+    "roles": [
+      "approver"
+    ],
+    "subject": "tomas-weber"
+  },
+  {
+    "issuer": "http://localhost:8081/realms/mcp-erp",
+    "partition": "CC-4200",
+    "roles": [
+      "approver"
+    ],
+    "subject": "yusuf-demir"
+  }
+]
