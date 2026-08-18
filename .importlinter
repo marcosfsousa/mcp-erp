@@ -1,0 +1,23 @@
+# The architecture as a checked statement. Enforced by the `Layer boundaries`
+# job on every run; ADR-0013 records why both this and the ejection job exist —
+# they cover different claims, and only this one sees the whole static graph.
+#
+# Neither contract needs an exception clause for the composition root, because
+# `app.py` sits at the package root rather than inside a sub-package. It is out
+# of scope by construction rather than by a carve-out someone has to justify.
+
+[importlinter]
+root_package = mcp_erp
+
+[importlinter:contract:1]
+name = Layer 2 knows nothing above it
+type = forbidden
+source_modules = mcp_erp.authorization
+forbidden_modules = mcp_erp.transport
+                    mcp_erp.purchase_to_pay
+
+[importlinter:contract:2]
+name = Transport and domain never meet
+type = independence
+modules = mcp_erp.transport
+          mcp_erp.purchase_to_pay

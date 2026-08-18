@@ -1,17 +1,15 @@
-# Skeleton for .github/workflows/ci.yml — the idioms, not the jobs.
-#
-# Copy this in, then replace the placeholder job. What is worth carrying between
-# repos is the frame around the jobs: the trigger, the concurrency policy, the
-# token permissions, and a per-job timeout. Those are the same argument
-# everywhere. The jobs themselves never are.
+# The idioms this file keeps, and why they are worth carrying between repos: the
+# trigger, the concurrency policy, the token permissions, and a per-job timeout
+# are the same argument everywhere. The jobs themselves never are.
 #
 #
 # ONE JOB PER SEAM
 # ----------------
 # Split by the layer that can break, not by convenience. A red check should name
-# the layer without anyone opening logs. Backend suite, image build, frontend
-# build, browser tests — four jobs, not one job with four steps, because a
-# failing step in a single job tells you only that "CI" is red.
+# the layer without anyone opening logs. ADR-0013 fixes the eight jobs and what
+# a red one means; two of them are here, and the rest arrive with the seams they
+# assert. `Lint and types` means an ordinary Python defect; `Layer boundaries`
+# means someone crossed a layer boundary. Neither may come to mean the other.
 #
 #
 # JOB `name:` VALUES ARE A CONTRACT
@@ -27,24 +25,24 @@
 #
 # A job with no `name:` reports its job id instead. Both are contracts.
 #
-# Copy templates/tests/test_required_checks.py in alongside this file. It holds
-# these names and the ruleset's required contexts equal in both directions, so a
-# rename fails the suite instead of quietly unprotecting the branch.
+# #47 adds the test that holds these names and the ruleset's required contexts
+# equal in both directions, so a rename fails a suite instead of quietly
+# unprotecting the branch. Until it lands, the pairing is held by hand.
 #
 #
 # A REQUIRED CONTEXT MUST BE PRODUCED UNCONDITIONALLY
 # ---------------------------------------------------
-# Map constraint #13. If a ruleset requires a job's `name:`, that job must report
-# on every run of this workflow — no `paths:`, no `paths-ignore:`, no job-level
-# `if:`, no conditional matrix leg. Each of those four produces a context that
-# never arrives, and a rule waiting on one is indistinguishable from a rule that
-# has not run yet: the pull request sits pending rather than failing, which reads
-# as "still working" instead of "misconfigured".
+# Map constraint `#13`. If a ruleset requires a job's `name:`, that job must
+# report on every run of this workflow — no `paths:`, no `paths-ignore:`, no
+# job-level `if:`, no conditional matrix leg. Each of those four produces a
+# context that never arrives, and a rule waiting on one is indistinguishable
+# from a rule that has not run yet: the pull request sits pending rather than
+# failing, which reads as "still working" instead of "misconfigured".
 #
 # The escape hatch, if measured wall time ever justifies it, is a step-level
 # early exit inside a job that always runs. Measured, never anticipated.
 #
-# Full statement and reasoning: map issue #2, constraint #13.
+# Full statement and reasoning: map issue #2, constraint `#13`.
 #
 #
 # NO SECRETS, DELIBERATELY
@@ -59,12 +57,29 @@
 # privileged access to be reviewable.
 #
 #
-# THE PLACEHOLDER BELOW IS NOT A GATE
-# -----------------------------------
-# It is green and it asserts nothing. Replace it before adding its context to a
-# ruleset — a required check that always passes is worse than an absent one,
-# because the settings UI, the diff, and the pull request all report protection
-# that is not there.
+# NOTHING EXTERNAL FLOATS — WITH ONE NAMED EXCEPTION
+# --------------------------------------------------
+# Map constraint `#11`. Python dependencies pin by lockfile: `uv.lock` is
+# committed, and `uv sync --locked` fails rather than re-resolving, so a
+# dependency cannot move under a green suite. The interpreter pins to an exact
+# patch in `.python-version` — the runner installs that build and no other, and
+# it moves with the Dockerfile once one exists. `requires-python` stays a range
+# because it states what the distribution supports, which is a different claim.
+#
+# The named exception is this file: GitHub Actions may pin to a *floating
+# major*. The reasoning for that exception is that only a major release should
+# produce a Dependabot pull request — but this repository has no
+# `.github/dependabot.yml` yet, so nothing raises those pull requests and a
+# floating major moves unobserved. Wiring Dependabot is the outstanding half of
+# constraint `#11` here, and is not this ticket's.
+#
+# The exception is a permission, not an obligation, and one action cannot take
+# it: `astral-sh/setup-uv` stopped publishing moving major tags after `v7`, so
+# `v8` onwards exist only as exact patch tags and `@v10` does not resolve. That
+# one pins exact — the stricter side of the constraint, needing no exemption —
+# and moves in a pull request that does nothing else. Verified rather than
+# assumed: this file first shipped `@v10` and every job failed at
+# `Set up job` with *unable to find version `v10`*.
 
 name: CI
 
@@ -90,9 +105,8 @@ permissions:
   contents: read
 
 jobs:
-  # ── Replace this whole job. ─────────────────────────────────────────────────
-  placeholder:
-    name: Placeholder (replace me)
+  lint-and-types:
+    name: Lint and types
     runs-on: ubuntu-latest
     # Every job gets one. The budget is normally dominated by dependency
     # install, so pick a number the job clears comfortably and read anything
@@ -101,67 +115,52 @@ jobs:
     # the six-hour default.
     timeout-minutes: 10
     steps:
-      # Pinned to a floating major, so only a major release produces a
-      # Dependabot pull request. templates/dependabot.yml groups them.
+      # Floating major, per the named exception above.
       - uses: actions/checkout@v7
 
-      - name: Assert nothing
-        run: echo "Replace this job before requiring its context."
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
 
-  # ── Shapes worth copying, kept as comments so this file stays valid. ───────
-  #
-  # A language runtime, with its version matched to whatever actually runs in
-  # production. Pin the same version in the Dockerfile and here, and move them
-  # together — a split leaves CI testing a runtime the deploy image does not
-  # use, which is a green suite that proves nothing about the artifact.
-  #
-  #   - uses: actions/setup-python@v7
-  #     with:
-  #       python-version: "3.11"
-  #       cache: pip
-  #       cache-dependency-path: requirements.txt
-  #
-  # Install the *deploy* manifest unchanged, then add test-only tools
-  # separately, pinned. Installing a dev superset makes CI faithful to nothing:
-  # a module the app imports but the image does not carry resolves fine here and
-  # fails at container start.
-  #
-  #   - run: |
-  #       python -m pip install --upgrade pip
-  #       pip install -r requirements.txt
-  #       pip install pytest==9.1.1
-  #
-  # Build the image and import the app inside it, if the repo ships one. This is
-  # a different assertion from the suite above and catches what the suite
-  # cannot: a bare runner has the whole checkout on disk, so it never exercises
-  # the image's COPY list. With an enumerated COPY, a new import breaks the
-  # image at import time with nothing in the repo to notice until deploy.
-  #
-  #   - run: docker build -t app:ci .
-  #   - run: docker run --rm app:ci python -c "import app.main"
-  #
-  # Browser binaries cache on the exact resolved test-runner version, since they
-  # are version-locked to it. System libraries live outside the cached path and
-  # must be installed on every run — hence the two mutually exclusive steps.
-  #
-  #   - id: pw-version
-  #     run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-  #   - id: pw-cache
-  #     uses: actions/cache@v6
-  #     with:
-  #       path: ~/.cache/ms-playwright
-  #       key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}
-  #   - if: steps.pw-cache.outputs.cache-hit != 'true'
-  #     run: npx playwright install --with-deps chromium
-  #   - if: steps.pw-cache.outputs.cache-hit == 'true'
-  #     run: npx playwright install-deps chromium
-  #
-  # Upload diagnostics on failure only. A report and retained traces are usually
-  # the only way to diagnose a failure that will not reproduce locally.
-  #
-  #   - if: failure()
-  #     uses: actions/upload-artifact@v7
-  #     with:
-  #       name: report
-  #       path: test-results/
-  #       retention-days: 7
+      # `--locked` verifies uv.lock against pyproject.toml instead of updating
+      # it, so a drifted lockfile fails here rather than silently re-resolving
+      # into an environment nobody wrote down. The interpreter comes from
+      # .python-version, which uv installs if the runner lacks it.
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format
+        run: uv run ruff format --check .
+
+      - name: Types
+        run: uv run mypy
+
+      # The cheapest assertion that the package tree is real: the composition
+      # root imports all three layers, so importing it imports everything.
+      # import-linter reads the import graph statically and would not notice a
+      # module that fails at import time.
+      - name: Every package imports
+        run: uv run python -c "import mcp_erp.app"
+
+  layer-boundaries:
+    name: Layer boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      # Both contracts in .importlinter, over the whole static import graph.
+      # This covers what the ejection job cannot: layers 1 and 3 staying
+      # independent, and modules those tests never reach.
+      - name: Layer contracts
+        run: uv run lint-imports

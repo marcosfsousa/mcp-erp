@@ -6,3 +6,15 @@
 # Claude Code scratch worktrees. Each is an embedded git repository, which
 # `git add -A` will otherwise stage as a gitlink.
 .claude/worktrees/
+
+# Python build and tool caches, plus the environment uv materialises from
+# uv.lock. The lockfile is committed; the environment it produces is not.
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
