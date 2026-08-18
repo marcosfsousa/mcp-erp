@@ -242,10 +242,17 @@ jobs:
         run: |
           set -euo pipefail
 
+          # The two `data` directories hold nothing but renderings, so they are
+          # named whole. `keycloak/import/` is not like them: since #36 it holds
+          # the hand-authored realm files beside the generated user import, and
+          # naming the directory would report an authored edit as a rendering
+          # that drifted from the seed — the one diagnosis this job exists to
+          # give, handed out for the one thing it is not. So the rendered file
+          # is named exactly.
           drifted=$(git status --porcelain -- \
             src/mcp_erp/authorization/data \
             src/mcp_erp/purchase_to_pay/data \
-            keycloak/import)
+            keycloak/import/mcp-erp-users-0.json)
 
           if [ -n "${drifted}" ]; then
             echo "::error::A rendering no longer matches the seed."

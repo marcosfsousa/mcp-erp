@@ -9,6 +9,7 @@
 - **Amended:** 2026-08-16 — substantive, by [#11](https://github.com/marcosfsousa/mcp-erp/issues/11). Only `erp.decide` carries a role scope mapping, and it lists two roles. See *Scopes are gated by roles that mirror the ERP's*. *(Header added 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12).)*
 - **Amended:** 2026-08-18 — substantive, by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). The seed renders **three** ways and carries **two independent role columns**; realm and directory membership is held equal by a test, with Priya's divergence declared as a role-column exception. See *Hand-authored, with only the users generated* and *Scopes are gated by roles that mirror the ERP's*. No decision here is reversed.
 - **Amended:** 2026-08-18 — substantive, by [#35](https://github.com/marcosfsousa/mcp-erp/issues/35). The generated users land in a **second file beside** the hand-authored realm rather than in an array inside it. See *Hand-authored, with only the users generated*. No decision here is reversed; the split is what makes this section's own rule structural.
+- **Amended:** 2026-08-18 — additive, by [#36](https://github.com/marcosfsousa/mcp-erp/issues/36), which built it. The two-file directory import is **verified against a running container**, and execution banked **three further traps** plus one consequence of register deviation 2 that this document did not anticipate. See *Hand-authored, with only the users generated* and *Consequences*. No decision here is reversed.
 
 ## Question
 
@@ -34,7 +35,18 @@ The clients, redirect URIs, client scopes and audience mappers are **hand-writte
 
 It is also **Keycloak's own shape**: exporting a realm with its users in separate files produces `<realm>-realm.json` alongside `<realm>-users-N.json`, and importing a directory reads both. So this buys the split at the cost of nothing invented — the naming and the index are the export format's, not ours.
 
-**Unverified against a running container, and deliberately so.** [#36](https://github.com/marcosfsousa/mcp-erp/issues/36) is the ticket that stands Keycloak up and is where a directory import is first executed; it inherits the check, and the fallback if the two-file read disappoints is one line of rendering — splice the same `users` array into the realm file — which is why this was not worth blocking a Docker-free ticket on.
+~~**Unverified against a running container, and deliberately so.**~~ [#36](https://github.com/marcosfsousa/mcp-erp/issues/36) is the ticket that stands Keycloak up and is where a directory import is first executed; it inherits the check, and the fallback if the two-file read disappoints is one line of rendering — splice the same `users` array into the realm file — which is why this was not worth blocking a Docker-free ticket on.
+
+*Amended 2026-08-18 by [#36](https://github.com/marcosfsousa/mcp-erp/issues/36), which executed it.* **Verified**, on 26.7.1:
+
+```
+Importing from directory /opt/keycloak/bin/../data/import
+Realm 'mcp-erp-neighbour' imported
+Imported users from /opt/keycloak/bin/../data/import/mcp-erp-users-0.json
+Realm 'mcp-erp' imported
+```
+
+A directory import reads `<realm>-realm.json` and the `<realm>-users-N.json` beside it exactly as the export format promises, and it pairs them by name rather than by order — the neighbour realm's own file sits in the same directory and takes no users. **The fallback is not needed and is not taken.**
 
 ### Keycloak is a pure function of that file
 
@@ -165,6 +177,20 @@ All seven share a single non-temporary password committed in the seed file, with
 1. **A hand-authored `clientScopes` array suppresses Keycloak's built-in defaults — including `basic`, which is where `sub` comes from.** Since Keycloak 25 the access token's `sub` is written by the `oidc-sub-mapper` on the built-in `basic` client scope, and `RealmManager.isCreateDefaultClientScopes()` returns `rep.getClientScopes() == null || …` — so a realm JSON containing that array never gets the defaults created ([keycloak#31082](https://github.com/keycloak/keycloak/issues/31082)). We hit this **by construction**, because the audience mapper lives on a hand-authored scope. The ID token is unaffected, so it would have failed exactly where we read it: the `sub` join to ERP rows. **The realm must carry `basic`, or an equivalent subject mapper, explicitly.**
 2. **Imported passwords are temporary by default**, which triggers an update-password action on first login and hangs a headless flow on a form it does not expect. The credential must be non-temporary with `requiredActions` empty.
 3. **`${VAR}` placeholders resolve from operating-system environment variables only** — not from `-D` properties — and an **unresolved placeholder is left literally in place rather than erroring**, silently installing the string `${MCP_RESOURCE_URL}` as an audience value. Every placeholder we use carries a default: `${VAR:default}`. (Values containing a colon parse as `key:default`.)
+
+**Three more traps, banked by execution rather than by reading.** *Added 2026-08-18 by [#36](https://github.com/marcosfsousa/mcp-erp/issues/36).* The three above were found by reading the source and the issue tracker; these three were found by a boot failing and a flow stopping, which is the difference the build ticket exists to make.
+
+4. **A Keycloak user id is unique across the whole database, not per realm.** `USER_ENTITY.ID` is a primary key, so the neighbour realm cannot hold a user whose id is one of the Cast's subjects — the import dies with `Duplicate resource error`, reported by Compose as a container that started and then stopped. The subject a foreign token asserts therefore comes from a **hardcoded claim mapper**, over a user whose generated id nothing reads. It has to match a directory row: skip the `iss` check with a *foreign* subject and the call still fails, at the principal directory, on `role_missing` — so `foreign_issuer_token` would go red on its own removal while proving nothing about the issuer.
+5. **`VERIFY_PROFILE` fires even with `requiredActions: []` on the user.** Trap 2 above covers the credential; this is a second required action from a different source — Keycloak's declarative user profile, which marks email, first name and last name required. The Cast carries none of the three, and that is the governing rule holding rather than an omission: no field of a profile changes an authorization decision, and this ADR's evidence already has ADR-0003 rejecting `email` as a directory key. Both realms disable the action. Without it the flow reaches `login-actions/required-action?execution=VERIFY_PROFILE` instead of a code.
+6. **A `description` over 255 characters fails the import**, as `Value too long for column "DESCRIPTION CHARACTER VARYING(255)"`. Worth recording because the pressure is structural: realm JSON has no comments, so the reasoning a reader wants keeps trying to move into the nearest `description`. It belongs in `keycloak/README.md`.
+
+**A consequence of register deviation 2 that nothing had priced.** *Added 2026-08-18 by [#36](https://github.com/marcosfsousa/mcp-erp/issues/36).*
+
+Keycloak sets `AUTH_SESSION_ID`, `KC_RESTART` and `KC_AUTH_SESSION_HASH` with **`Secure; SameSite=None`** — measured on 26.7.1 under an `http://keycloak:8081` hostname *and* under an `http://localhost:18081` one, so it does not follow from which name the issuer carries. `SameSite=None` requires `Secure`, Keycloak needs the former for its cross-origin form post, and it emits both whatever the scheme is. It says so at boot: *"the server is running in an insecure context. Secure contexts are required for full functionality, including cross-origin cookies."*
+
+**So a conforming cookie jar cannot complete this flow over plain HTTP.** It declines to send those cookies back, and Keycloak answers the login post with *Restart login cookie not found* — which reads like a rejected password. The token helper clears the flag as it stores them, and states that it is doing so; the concession is confined to the client that mints fixtures and nothing the exhibit ships makes it.
+
+**The half that is not ours to fix is the browser's.** A browser stores `Secure` cookies for `http://localhost` and `http://127.0.0.1` because it treats them as trustworthy origins — and it decides that on the **name**, so a host that merely *resolves* to a loopback address gets no such pass. This ADR's *Cost* accepts *"one documented `127.0.0.1 keycloak` line in the host's hosts file"* for the browser-driven demo. That line fixes resolution and does not reach this: it is a claim about DNS, and the rule is about the name. **The disposition is open and belongs with [#46](https://github.com/marcosfsousa/mcp-erp/issues/46) and [#15](https://github.com/marcosfsousa/mcp-erp/issues/15)**, whose tiers are the ones that meet it; recorded here because they should not have to rediscover it, and because [ADR-0011](0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md) named ADR-0005's option 6 — the opt-in TLS profile — as the route that closes deviation 2, and this is a second, sharper reason to want it.
 
 **A correction banked.** *"Partial import through the admin API regenerates user ids"* is out of date and the conclusion drawn from it is void — true only through Keycloak 22.x, fixed by [keycloak#22568](https://github.com/keycloak/keycloak/pull/22568) (merged 2023-11-02, shipped 23.0.0). `kcadm.sh` and `keycloak-config-cli` are therefore **not** disqualified on `sub`-join grounds. They remain a heavier path; the argument that pruned them was wrong and must not be reused.
 
