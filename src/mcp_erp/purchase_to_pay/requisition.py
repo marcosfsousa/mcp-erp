@@ -73,6 +73,24 @@ returning the same row must not grow three descriptions of it that only nearly
 agree.
 """
 
+SINGLE_ROW_SCHEMA: Final[dict[str, Any]] = {
+    "type": "object",
+    "properties": {"requisition": ROW_SCHEMA},
+    "required": ["requisition"],
+    "additionalProperties": False,
+}
+"""A result carrying exactly one requisition — the output of two of the three tools.
+
+The named read answers with the row it was asked for and the write answers with
+the row it created, and those are the same document. Shared for the same reason
+:data:`ROW_SCHEMA` is, one level up: the wrapper is as much a description of the
+row as the row's own properties are, and two copies of it is two places for
+``required`` to disagree.
+
+Not shared with ``list_requisitions``, which returns an array under a plural key
+— a different shape rather than the same one written twice.
+"""
+
 
 @dataclass(frozen=True, slots=True)
 class Requisition:

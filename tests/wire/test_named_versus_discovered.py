@@ -25,6 +25,7 @@ from typing import Any
 
 import pytest
 
+import requisitions as visible
 import rpc
 import seeded_requisitions
 from tokens import mint
@@ -51,15 +52,6 @@ def _get(username: str, identifier: str) -> dict[str, Any]:
     """What `get_requisition` answers one Person, as a JSON-RPC result."""
     minted = mint(username, ["erp.read"])
     return rpc.result(rpc.call_tool(GET, {"id": identifier}, token=minted.access_token))
-
-
-def _listed(username: str) -> set[str]:
-    """The identifiers `list_requisitions` returns to one Person."""
-    minted = mint(username, ["erp.read"])
-    result = rpc.result(rpc.call_tool(LIST, token=minted.access_token))
-
-    assert result["isError"] is False, result
-    return {row["id"] for row in result["structuredContent"]["requisitions"]}
 
 
 def _submitted(username: str) -> str:
@@ -90,12 +82,12 @@ def test_the_two_read_tools_agree_about_a_row_the_caller_may_see() -> None:
     shape, so this is asserting that the sharing is real rather than that two
     descriptions happen to agree today.
     """
-    (identifier,) = seeded_requisitions.identifiers_in("CC-4200") & _listed(OUTSIDER)
+    (identifier,) = seeded_requisitions.identifiers_in("CC-4200")
     named = _get(OUTSIDER, identifier)
 
     assert named["isError"] is False, named
     assert named["structuredContent"]["requisition"]["id"] == identifier
-    assert identifier in _listed(OUTSIDER)
+    assert identifier in visible.visible_to(OUTSIDER)
 
 
 def test_one_identifier_is_refused_by_name_and_omitted_from_the_listing() -> None:
@@ -113,7 +105,7 @@ def test_one_identifier_is_refused_by_name_and_omitted_from_the_listing() -> Non
     assert named["isError"] is True, named
     assert named["structuredContent"]["reason"] == "not_found"
 
-    discovered = _listed(OUTSIDER)
+    discovered = visible.visible_to(OUTSIDER)
     assert identifier not in discovered
 
 
@@ -158,9 +150,9 @@ def test_a_submitted_row_is_then_named_and_discovered_by_its_submitter() -> None
     named = _get(INSIDER, identifier)
     assert named["isError"] is False, named
     assert named["structuredContent"]["requisition"]["cost_centre"] == "CC-4100"
-    assert identifier in _listed(INSIDER)
+    assert identifier in visible.visible_to(INSIDER)
 
     refused = _get(OUTSIDER, identifier)
     assert refused["isError"] is True, refused
     assert refused["structuredContent"]["reason"] == "not_found"
-    assert identifier not in _listed(OUTSIDER)
+    assert identifier not in visible.visible_to(OUTSIDER)

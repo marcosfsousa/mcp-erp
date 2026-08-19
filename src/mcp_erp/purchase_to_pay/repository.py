@@ -38,7 +38,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from mcp_erp.purchase_to_pay.requisition import Requisition
 
-_COLUMNS = """
+_COLUMNS: Final = """
     requisition.id,
     requisition.cost_centre,
     requisition.vendor,

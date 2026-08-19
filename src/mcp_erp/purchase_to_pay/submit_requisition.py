@@ -23,7 +23,7 @@ from typing import Any, Final
 
 from mcp_erp.authorization import Action, Capability
 from mcp_erp.purchase_to_pay import vendors
-from mcp_erp.purchase_to_pay.requisition import ROW_SCHEMA, Requisition
+from mcp_erp.purchase_to_pay.requisition import SINGLE_ROW_SCHEMA, Requisition
 
 NAME: Final = "submit_requisition"
 """The tool's name on the wire, and the key layer 1's registry holds it under."""
@@ -57,12 +57,17 @@ AMOUNT_PATTERN: Final = r"^(0|[1-9][0-9]{0,9})(\.[0-9]{1,2})?$"
 """A decimal string, never a float — up to ten integer digits and two decimals.
 
 The column is ``numeric(12, 2)``, and this is that stated where a model can read
-it. It is a **declaration and not the enforcement**: nothing validates arguments
-against a declared schema on this stack, so the handler parses the value itself
-and a string this pattern would have refused is refused there. The pattern
-deliberately admits ``0``, which the column's own ``CHECK (amount > 0)`` refuses
-— expressing *positive* in a regular expression buys an unreadable pattern for a
-rule the database already states.
+it. Nothing on this stack validates arguments against a declared schema, so the
+handler enforces it — by **matching against this constant**, not by parsing the
+value and hoping the two agree. ``Decimal`` accepts a great deal this forbids,
+and two of those reach the column: three decimal places are silently rounded,
+and an eleventh integer digit overflows it. One rule, one place.
+
+The pattern deliberately admits ``0``, which the column's own
+``CHECK (amount > 0)`` refuses and the handler checks separately — expressing
+*positive* in a regular expression buys an unreadable pattern for a rule the
+database already states, and that one exception is the reason this docstring
+says which rule lives where.
 """
 
 INPUT_SCHEMA: Final[dict[str, Any]] = {
@@ -92,13 +97,8 @@ cannot supply it.
 authorization decision and is carried so a walkthrough reads.
 """
 
-OUTPUT_SCHEMA: Final[dict[str, Any]] = {
-    "type": "object",
-    "properties": {"requisition": ROW_SCHEMA},
-    "required": ["requisition"],
-    "additionalProperties": False,
-}
-"""The row as written, in the shape the two read tools return.
+OUTPUT_SCHEMA: Final[dict[str, Any]] = SINGLE_ROW_SCHEMA
+"""The row as written, in the same document the named read answers with.
 
 Returning it rather than an identifier alone is what makes the server-stamped
 cost centre observable: the caller sees which centre was charged without a

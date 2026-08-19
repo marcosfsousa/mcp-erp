@@ -27,8 +27,9 @@ from collections.abc import Mapping
 from functools import cache
 from importlib import resources
 from types import MappingProxyType
+from typing import Final
 
-ORGANISATION_FILE = "organisation.json"
+ORGANISATION_FILE: Final = "organisation.json"
 """The ERP rendering, inside layer 3's own package.
 
 A package resource rather than a repository path: the server reads it wherever

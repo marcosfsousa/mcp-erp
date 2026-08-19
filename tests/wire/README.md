@@ -1,10 +1,12 @@
 # `tests/wire/` — the server's own posture, over the wire
 
-The three assertions this slice makes that belong to no proof artifact: the
-endpoints that answer and the ones that do not, the tool listing's filter and
-its freshness hint, and two replicas behind no sticky routing.
+The assertions that belong to no proof artifact: the endpoints that answer and
+the ones that do not, the tool listing's filter and its freshness hint, two
+replicas behind no sticky routing, and — since #39 — what `submit_requisition`
+charges and how the named-versus-discovered contract behaves across all three
+live tools.
 
-Needs Compose. Landed with #37.
+Needs Compose. Landed with #37; #39 added the last two.
 
 ## Why there is a fifth directory
 
@@ -22,13 +24,24 @@ places these three.
 - The **tool listing's filter, `cacheScope` and `ttlMs`** will become four rows
   of `matrix.yaml` when #43 writes it. Until that file exists there is nothing
   to generate them from, and `tests/matrix/` is generated in its entirety.
+- **What `submit_requisition` charges** (#39) is the same case one ticket later:
+  a principal and a tool mapped to an expected answer is a matrix row, and there
+  is still nothing to generate it from. It is not `state_handle_hijack` either —
+  that row is a refused write against a *named* resource, and this tool has none.
+- **The named-versus-discovered contract across all three tools** (#39) is the
+  seam between two attack-suite rows rather than a third one. Each of
+  `row_probe_indistinguishable` and `list_partition_scoped` asserts its own half
+  about its own tool; neither says the *same* row takes the *other* shape through
+  the other tool. Minting a row for the seam would move a derived count to record
+  something that is not an attack, which is the same refusal the two above take.
 
-The alternative was to mint scenario rows for the first two. That was declined:
+The alternative was to mint scenario rows for the ones that could carry them.
+That was declined:
 membership in the attack suite is ADR-0010's rule — one row per distinct clause
 this project *enforces*, each recording the exact removal that makes it pass —
 and the row count is a derived artifact under map constraint `#12`. Inventing
-two rows to give three tests a home would move a number three documents track,
-to record something that is not an attack.
+rows to give these tests a home would move a number three documents track, to
+record something that is not an attack.
 
 **This directory is named for the altitude every assertion in it shares, not for
 a layer.** ADR-0013's prohibition is on a directory named `transport/` or

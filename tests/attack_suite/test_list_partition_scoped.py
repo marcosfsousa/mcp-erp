@@ -27,9 +27,10 @@ no order to assert that the authorization model has an opinion about.
 from collections.abc import Iterator
 
 import pytest
-import seeded_requisitions
 
+import requisitions as visible
 import rpc
+import seeded_requisitions
 from tokens import mint
 
 TOOL = "list_requisitions"
@@ -54,16 +55,6 @@ def requisitions() -> Iterator[None]:
     yield
 
 
-def _visible_to(username: str) -> set[str]:
-    """The requisition identifiers one Person sees through the tool, over the wire."""
-    minted = mint(username, ["erp.read"])
-    result = rpc.result(rpc.call_tool(TOOL, token=minted.access_token))
-
-    assert result["isError"] is False, result
-    rows = result["structuredContent"]["requisitions"]
-    return {row["id"] for row in rows}
-
-
 def test_a_caller_sees_their_own_cost_centre_and_no_other() -> None:
     """Tomas Weber holds CC-4100, so he sees CC-4100's rows and exactly those.
 
@@ -72,7 +63,7 @@ def test_a_caller_sees_their_own_cost_centre_and_no_other() -> None:
     assertion would pass on a handler that returned nothing; a membership
     assertion would pass on a handler that returned everything.
     """
-    assert _visible_to("tomas.weber") == seeded_requisitions.identifiers_in("CC-4100")
+    assert visible.visible_to("tomas.weber") == seeded_requisitions.identifiers_in("CC-4100")
 
 
 def test_another_partition_sees_a_disjoint_set() -> None:
@@ -82,8 +73,8 @@ def test_another_partition_sees_a_disjoint_set() -> None:
     different partition — so a listing that ignored the partition would return
     the same rows to both and this pair would catch it.
     """
-    assert _visible_to("yusuf.demir") == seeded_requisitions.identifiers_in("CC-4200")
-    assert not _visible_to("yusuf.demir") & _visible_to("tomas.weber")
+    assert visible.visible_to("yusuf.demir") == seeded_requisitions.identifiers_in("CC-4200")
+    assert not visible.visible_to("yusuf.demir") & visible.visible_to("tomas.weber")
 
 
 def test_the_third_centre_is_its_own_answer() -> None:
@@ -94,7 +85,7 @@ def test_the_third_centre_is_its_own_answer() -> None:
     the whole reason breadth is a role rather than a wider membership would stop
     being observable.
     """
-    assert _visible_to("mei.tanaka") == seeded_requisitions.identifiers_in("CC-4300")
+    assert visible.visible_to("mei.tanaka") == seeded_requisitions.identifiers_in("CC-4300")
 
 
 def test_the_auditing_role_reads_across_every_partition() -> None:
@@ -106,7 +97,7 @@ def test_the_auditing_role_reads_across_every_partition() -> None:
     value — on the write tools the same mistake is invisible, and this assertion
     is the only place in the repository where it is not.
     """
-    assert _visible_to("anna.lindqvist") == seeded_requisitions.every_identifier()
+    assert visible.visible_to("anna.lindqvist") == seeded_requisitions.every_identifier()
     # Three of three, not two: the claim is breadth by role rather than by
     # membership, and the count is what separates them.
     assert len({row.cost_centre for row in seeded_requisitions.ROWS}) == 3

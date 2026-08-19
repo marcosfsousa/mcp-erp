@@ -25,6 +25,7 @@ from typing import Any
 import httpx2
 import pytest
 
+import requisitions as visible
 import rpc
 import seeded_requisitions
 from tokens import Minted, mint
@@ -160,7 +161,7 @@ def test_a_token_without_the_write_scope_is_refused_before_anything_is_written()
     caller genuinely does not hold `erp.write`, and re-authorizing is genuinely
     the remedy.
     """
-    before = _identifiers_visible_to("priya.raman")
+    before = visible.visible_to("priya.raman")
 
     response = _submit(mint("priya.raman", ["erp.read"]))
 
@@ -169,7 +170,7 @@ def test_a_token_without_the_write_scope_is_refused_before_anything_is_written()
     assert parameters["error"] == "insufficient_scope"
     assert parameters["scope"] == "erp.write"
     assert parameters["resource_metadata"] == rpc.METADATA_URL
-    assert _identifiers_visible_to("priya.raman") == before
+    assert visible.visible_to("priya.raman") == before
 
 
 def test_an_argument_the_schema_forbids_is_a_protocol_error_and_not_a_refusal() -> None:
@@ -185,10 +186,41 @@ def test_an_argument_the_schema_forbids_is_a_protocol_error_and_not_a_refusal() 
     assert rpc.error(response)["code"] == -32602
 
 
-def _identifiers_visible_to(username: str) -> set[str]:
-    """What `list_requisitions` returns to one Person, as a set of identifiers."""
-    minted = mint(username, ["erp.read"])
-    result = rpc.result(rpc.call_tool("list_requisitions", token=minted.access_token))
+@pytest.mark.parametrize(
+    "amount",
+    [
+        # `Decimal` accepts every one of these and the declared pattern accepts
+        # none of them, which is why the handler matches the pattern rather than
+        # parsing and hoping the two agree.
+        "1e2",
+        "+5",
+        " 1.5",
+        "1_0",
+        # Three decimal places: `numeric(12, 2)` would round it silently, so the
+        # caller would be charged an amount they did not name.
+        "1.555",
+        # Eleven integer digits: one more than the column holds, so this reached
+        # the database and came back as an integrity error rather than as a
+        # message about the argument.
+        "99999999999",
+        # The pattern admits `0`; `CHECK (amount > 0)` is the rule it declines to
+        # express, and the handler carries that one separately.
+        "0",
+        "-1",
+    ],
+)
+def test_an_amount_the_pattern_forbids_never_reaches_the_column(amount: str) -> None:
+    """The declared pattern is the rule, and the handler enforces *that* rule.
 
-    assert result["isError"] is False, result
-    return {row["id"] for row in result["structuredContent"]["requisitions"]}
+    Every value here is one `Decimal` would have parsed happily. Two of them
+    change what the caller gets rather than merely being sloppy — a third decimal
+    place is rounded by the column, and an eleventh integer digit overflows it —
+    so a handler that parsed instead of matching would answer a database error
+    where the declaration promised invalid params.
+    """
+    before = visible.visible_to("priya.raman")
+
+    response = _submit(mint("priya.raman", ["erp.write"]), {**ARGUMENTS, "amount": amount})
+
+    assert rpc.error(response)["code"] == -32602
+    assert visible.visible_to("priya.raman") == before

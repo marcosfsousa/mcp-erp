@@ -24,7 +24,7 @@ That deviation is what makes the refusal above demonstrated rather than asserted
 from typing import Any, Final
 
 from mcp_erp.authorization import Action, Capability
-from mcp_erp.purchase_to_pay.requisition import ROW_SCHEMA, Requisition
+from mcp_erp.purchase_to_pay.requisition import SINGLE_ROW_SCHEMA, Requisition
 
 NAME: Final = "get_requisition"
 """The tool's name on the wire, and the key layer 1's registry holds it under."""
@@ -59,17 +59,13 @@ either change nothing or become the enumeration primitive ADR-0002 designed out
 of ``submit_requisition``.
 """
 
-OUTPUT_SCHEMA: Final[dict[str, Any]] = {
-    "type": "object",
-    "properties": {"requisition": ROW_SCHEMA},
-    "required": ["requisition"],
-    "additionalProperties": False,
-}
+OUTPUT_SCHEMA: Final[dict[str, Any]] = SINGLE_ROW_SCHEMA
 """One row, in the shape the listing returns many of.
 
-Shared with :mod:`~mcp_erp.purchase_to_pay.list_requisitions` rather than
-restated, so the single-row read and the listing cannot describe the same row
-two ways.
+The row description is shared with
+:mod:`~mcp_erp.purchase_to_pay.list_requisitions` and the whole document with
+:mod:`~mcp_erp.purchase_to_pay.submit_requisition`, so the two tools that
+answer with one requisition cannot describe it two ways.
 """
 
 ACTION: Action[Requisition] = Action(

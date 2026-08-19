@@ -76,8 +76,14 @@ def _foreign_identifier() -> str:
     return identifier
 
 
-def _refusal(username: str, identifier: str) -> httpx2.Response:
-    """What `get_requisition` answers one Person naming one identifier."""
+def _answer(username: str, identifier: str) -> httpx2.Response:
+    """What `get_requisition` answers one Person naming one identifier.
+
+    The raw response rather than a parsed result, because the scenario
+    compares bytes. Named for the answer rather than for the refusal: half
+    the calls below are permitted, and those are the ones that make the
+    refusals mean something.
+    """
     minted = mint(username, ["erp.read"])
     return rpc.call_tool(TOOL, {"id": identifier}, token=minted.access_token)
 
@@ -89,7 +95,7 @@ def test_the_foreign_row_is_a_row_somebody_can_see() -> None:
     it calls foreign does not exist at all — at which point it is comparing
     *never existed* with *never existed* and asserting nothing.
     """
-    result = rpc.result(_refusal(OWNER, _foreign_identifier()))
+    result = rpc.result(_answer(OWNER, _foreign_identifier()))
 
     assert result["isError"] is False, result
     assert result["structuredContent"]["requisition"]["cost_centre"] == FOREIGN_CENTRE
@@ -108,8 +114,8 @@ def test_a_foreign_row_and_a_row_that_never_existed_answer_byte_identically() ->
     answered, and round robin means the two calls land on different ones — a
     property another suite exists to assert, and nothing to do with this one.
     """
-    foreign = _refusal(PROBER, _foreign_identifier())
-    absent = _refusal(PROBER, seeded_requisitions.ABSENT_IDENTIFIER)
+    foreign = _answer(PROBER, _foreign_identifier())
+    absent = _answer(PROBER, seeded_requisitions.ABSENT_IDENTIFIER)
 
     assert foreign.status_code == absent.status_code
     assert foreign.content == absent.content, (foreign.text, absent.text)
@@ -122,7 +128,7 @@ def test_the_refusal_is_a_refusal_rather_than_an_omission() -> None:
     an empty success. The `not_found` reason and the `null` remedy are the whole
     of what a caller learns, and neither is a fact only the database holds.
     """
-    result = rpc.result(_refusal(PROBER, _foreign_identifier()))
+    result = rpc.result(_answer(PROBER, _foreign_identifier()))
 
     assert result["isError"] is True, result
     assert result["structuredContent"] == {
@@ -145,7 +151,7 @@ def test_the_auditing_role_reads_the_row_the_prober_cannot() -> None:
     what makes the refusal a *decision* rather than a property of the row: one
     identifier, two callers, two answers.
     """
-    result = rpc.result(_refusal("anna.lindqvist", _foreign_identifier()))
+    result = rpc.result(_answer("anna.lindqvist", _foreign_identifier()))
 
     assert result["isError"] is False, result
     assert result["structuredContent"]["requisition"]["id"] == _foreign_identifier()

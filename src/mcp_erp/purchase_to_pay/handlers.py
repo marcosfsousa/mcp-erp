@@ -33,8 +33,9 @@ type is the standard library's rather than one this package invents — so a
 handler signals it without importing anything layer 1 owns.
 """
 
+import re
 from collections.abc import AsyncIterator, Callable, Mapping
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any
 
 from mcp_erp.authorization import Decision, Principal, decide_call, decide_item
@@ -43,7 +44,7 @@ from mcp_erp.purchase_to_pay.get_requisition import ACTION as GET_REQUISITION
 from mcp_erp.purchase_to_pay.list_requisitions import ACTION as LIST_REQUISITIONS
 from mcp_erp.purchase_to_pay.repository import Requisitions
 from mcp_erp.purchase_to_pay.submit_requisition import ACTION as SUBMIT_REQUISITION
-from mcp_erp.purchase_to_pay.submit_requisition import CURRENCY
+from mcp_erp.purchase_to_pay.submit_requisition import AMOUNT_PATTERN, CURRENCY
 
 Handler = Callable[[Principal, Mapping[str, Any]], AsyncIterator[Mapping[str, Any] | Decision]]
 """The shape layer 1 calls, written here as well as there.
@@ -234,18 +235,29 @@ def _amount(arguments: Mapping[str, Any]) -> Decimal:
     ``numeric(12, 2)`` and binary floating point cannot represent what an
     accounting amount means.
 
+    **Matched against the declared pattern rather than against a second reading
+    of it.** ``Decimal`` is far more permissive than
+    :data:`~mcp_erp.purchase_to_pay.submit_requisition.AMOUNT_PATTERN` — it
+    accepts ``1e2``, ``+5``, surrounding whitespace, Python's ``1_0`` digit
+    separators, and any number of decimal places — so parsing alone would let
+    through values the declaration forbids. Two of those reach the column and
+    change what a caller gets: ``1.555`` is silently rounded by
+    ``numeric(12, 2)``, and eleven integer digits overflow it and surface as a
+    database error rather than as *invalid params*. So the constant a model reads
+    is the constant this matches, and the rule is stated once.
+
     Raises:
-        ValueError: It is absent, is not a string, is not a decimal, or is not
-            positive. The last is the column's own ``CHECK (amount > 0)``,
+        ValueError: It is absent, is not a string, is not the shape the schema
+            declares, or is not positive. The last is the one rule the pattern
+            deliberately does not carry — the column's own ``CHECK (amount > 0)``,
             checked here so a caller gets a message about their argument rather
             than an integrity error about a constraint they cannot see.
     """
     value = _string(arguments, "amount")
-    try:
-        amount = Decimal(value)
-    except InvalidOperation:
-        raise ValueError(f"'amount' is not a decimal: {value!r}") from None
+    if re.fullmatch(AMOUNT_PATTERN, value) is None:
+        raise ValueError(f"'amount' is not a decimal amount: {value!r}")
 
-    if not amount.is_finite() or amount <= 0:
+    amount = Decimal(value)
+    if amount <= 0:
         raise ValueError(f"'amount' must be positive: {value!r}")
     return amount
