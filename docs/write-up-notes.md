@@ -249,6 +249,43 @@ rediscover.
   rule the ADR left open, on a field whose whole point is that layer 3 owns it.
   — #39, ADR-0013, ADR-0007
 
+- **The order two rules are written in decided whether a capability hole was
+  observable.** `approve_requisition` declares the threshold before the submitter
+  edge. The other order is equally correct on every row where one rule fires, and
+  it would have hidden the thing ADR-0003 built a third cost centre to show:
+  CC-4300 holds one Person, so every requisition charged to it is submitted by
+  the only Person who could decide it, and a submitter-edge-first `Action` answers
+  `segregation_of_duties` there for ever. The refusal that names a remedy nobody
+  in the organisation can fill would have been unreachable — not by a decision,
+  but by a tuple's order. — #40, ADR-0003, ADR-0013
+
+- **A remedy that is true and unfulfillable is the point, and it needs a named
+  test rather than a matrix row.** `over_threshold` in CC-4300 truthfully reports
+  `retry_as_other_person_helps: true` while the one Person holding the role it
+  points at is in another centre — and gets `not_found` on the row, so she cannot
+  even see what she is the remedy for. A matrix row expecting `over_threshold`
+  would assert the refusal and say nothing about the hole; what makes it a
+  write-up centrepiece is the second call. — #40, ADR-0003
+
+- **`already_decided` is not a decision about the caller, so it is not in the
+  chain.** Every principal gets it on a decided row, and no role, scope or person
+  changes that — which is exactly what a relationship rule is not. It is answered
+  by the handler, **after** the chain permits, so a caller who may not decide a
+  row learns nothing about whether it has been decided; and **at** the write
+  rather than against the row hydration returned, because a check that is not the
+  write is a race two callers both pass. The tempting version is a third entry in
+  `Action.rules`, which reads tidier and puts a fact about the row in the field
+  the vocabulary reserves for facts about the pair. — #40, ADR-0013, ADR-0002
+
+- **A denial class stopped being unreachable, and the honest report is the same
+  shape as the admission was.** #39 shipped `role_missing` declared, shaped and
+  with no caller that reached it at the wire, and said so rather than inventing a
+  role gate to tick a criterion. The first role-gated tool made it reachable, and
+  Priya Raman is why: ADR-0007 gives her `approver` in the realm and nothing at
+  the server, so the realm issues her `erp.decide` and the server refuses her —
+  a divergence between two stores of the same truth, engineered on purpose, doing
+  the work it was engineered for. — #40, ADR-0007, ADR-0002
+
 ---
 
 ## Findings

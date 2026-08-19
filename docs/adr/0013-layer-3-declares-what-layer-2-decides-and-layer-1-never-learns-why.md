@@ -10,6 +10,7 @@
 - **Amended:** 2026-08-19 — additive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which built the chain. **Gate 5 runs in middleware, not at dispatch**, because its wire shape is an HTTP status and header that a JSON-RPC envelope cannot carry; gate 6 stays at dispatch. And there is a **fifth test directory**, `tests/wire/`, for the wire assertions that belong to no proof artifact. See *The gate chain sits in middleware, in two tiers* and *Four test directories, named for artifacts*. No decision here is reversed.
 - **Amended:** 2026-08-19 — substantive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37). [ADR-0002](0002-refusal-shape-follows-the-remedy.md) cut the SSE response mode, so **response mode is no longer keyed on cardinality — there is one wire shape.** N outcomes **fold** into one result body; the fold is specified here and **not implemented**, and [#41](https://github.com/marcosfsousa/mcp-erp/issues/41) lands it. See *Streaming, restated portably*. This reverses the cardinality keying and nothing else.
 - **Amended:** 2026-08-19 — additive, by [#39](https://github.com/marcosfsousa/mcp-erp/issues/39), which built the second and third tools. A handler's third answer — **an argument its own declaration forbids** — is signalled with `ValueError` and rendered as `-32602`, and is deliberately **not** a fourth denial class. And a tool's declaration is **one module per tool** inside layer 3. See *Handlers in layer 3, adapters in layer 1* and *Three sibling packages, one composition root*. No decision here is reversed.
+- **Amended:** 2026-08-19 — additive, by [#40](https://github.com/marcosfsousa/mcp-erp/issues/40), which built the first hydrated resource. `load` is built as a **factory binding the store**, so the step's own signature is this document's two parameters and nothing is injected into the chain. And a handler has a **domain precondition** to answer as well as a decision — it constructs a refused `Decision` layer 2 never produced, *after* the chain permits and *at* the write. See *Resource hydration is a named layer-3 step* and *Handlers in layer 3, adapters in layer 1*. No decision here is reversed.
 
 ## Question
 
@@ -113,6 +114,14 @@ Rule 3 traverses two entities: *"Submitter ≠ approver, tested against `Requisi
 
 `load` returning nothing and `decide_item` returning `not_found` reach the same single return site, per the convergence consequence above.
 
+*Amended 2026-08-19 by [#40](https://github.com/marcosfsousa/mcp-erp/issues/40), which built the first tool needing it.* **The step is a factory over the store, and the two callers share one.**
+
+The signature above is the step's, not the function that builds it: `load(requisitions) -> Load` binds the store, and what the handler calls takes `(action, arguments)` exactly as written here. That is what keeps hydration a *step* rather than a collaborator — there is nothing to inject into the policy function, because the injection happens one level out, in layer 3, where a database dependency already lives.
+
+`get_requisition` and `approve_requisition` call the same one. Two copies of *load by identifier and hand the answer through untouched* would be two places for a handler to start looking at what it got, and the convergence claim is that neither can tell an absent row from a foreign one.
+
+**`action` is not read yet and is kept anyway.** The resource an action is decided against is a property of the action: both callers today name a `Requisition` by identifier, and `record_invoice` is decided against a `PurchaseOrder`, which is the call that makes the parameter select an entity. A narrower signature would be a second shape for a step this document already fixed, and would have to grow the parameter back at #42.
+
 ### The principal directory
 
 `lookup(claims) -> Principal | None`, where `Claims` is layer 2's own frozen type carrying issuer, subject and granted scopes. Claims and Principal are not two halves of one thing but two **stages** — the unverified caller the token asserts, and the resolved principal the server stands behind — and that distinction is this exhibit's subject, so making it a type boundary is legible rather than incidental.
@@ -170,6 +179,14 @@ The sentence above gives a handler two answers: a domain outcome, or a refused `
 **It answers `-32602`, and it carries no `Reason`.** Nothing was authorized or denied, so giving it one would amend [ADR-0002](0002-refusal-shape-follows-the-remedy.md)'s closed vocabulary for a spelling mistake — and would tell a model to route around a wall that is not there, which is the same collapse the three denial classes exist to prevent, arriving through a fourth door. The three shapes are unchanged and this is not a fourth one.
 
 **The signal is `ValueError`**, the standard library's name for exactly this, so a handler raises it without importing anything layer 1 owns and layer 1 catches it around the handler's own iteration and nowhere else. The alternative — layer 1 validating arguments against the declared schema itself — would put a JSON Schema implementation in the layer that must not learn what a tool is, for a rule the declaration already states. The negative guarantee holds: the message is the handler's, and layer 1 never inspects it.
+
+*Amended 2026-08-19 by [#40](https://github.com/marcosfsousa/mcp-erp/issues/40), which built the first tool with a state to be in.* **A handler answers domain preconditions as well as decisions, and it answers them last.**
+
+`already_decided` is not a decision about the caller. Every principal gets it on a decided requisition, and no role, scope or person changes that — so the chain, which decides about callers, is the wrong place for it, and `Action.rules` is the wrong field: `CONTEXT.md` defines a relationship rule as one *"decided by the identities and amounts involved"*, which names segregation of duties and the threshold and does not name this.
+
+So the handler constructs a refused `Decision` of its own. That is inside the letter of *a domain outcome or a refused `Decision`* above, and it is worth stating because the record now arrives from two places: layer 2's chain, and layer 3 answering for the row's state. Layer 1 is unaffected — it keys on `denial_class` and cannot tell which produced it, which is the negative guarantee holding under a case it was not written for.
+
+**Two orderings fall out, and both are load-bearing.** It is answered *after* the chain permits, so a caller who may not decide a row learns nothing about whether it has been decided — the same non-disclosure `not_found` keeps, applied to state instead of existence. And it is answered *at* the write rather than against the row `load` returned: a check against a row read a moment ago is a check against what was true then, and two callers deciding at once both pass it. The predicate rides in the `UPDATE`, so exactly one wins and the loser is told.
 
 ### The gate chain sits in middleware, in two tiers
 

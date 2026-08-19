@@ -2,11 +2,11 @@
 
 The assertions that belong to no proof artifact: the endpoints that answer and
 the ones that do not, the tool listing's filter and its freshness hint, two
-replicas behind no sticky routing, and — since #39 — what `submit_requisition`
-charges and how the named-versus-discovered contract behaves across all three
-live tools.
+replicas behind no sticky routing, what `submit_requisition` charges, how the
+named-versus-discovered contract behaves across the live tools, and — since #40 —
+everything `approve_requisition` decides.
 
-Needs Compose. Landed with #37; #39 added the last two.
+Needs Compose. Landed with #37; #39 added two, #40 a third.
 
 ## Why there is a fifth directory
 
@@ -28,6 +28,15 @@ places these three.
   a principal and a tool mapped to an expected answer is a matrix row, and there
   is still nothing to generate it from. It is not `state_handle_hijack` either —
   that row is a refused write against a *named* resource, and this tool has none.
+- **Everything `approve_requisition` decides** (#40) is the same case again, and
+  the largest of them: a threshold, a submitter edge, a terminal state and two
+  denial classes, every one of which is a `(principal × tool × resource →
+  expected)` row waiting for a file to be generated from. Two of its assertions
+  are *not* matrix rows and would not become ones — that the rules run in the
+  declared order, and that CC-4300's remedy names a class of action no available
+  human fills. The first is a property of the `Action` rather than of a row; the
+  second is a property of the organisation's shape, which is what makes it worth
+  a named test rather than a matrix row that happens to expect `over_threshold`.
 - **The named-versus-discovered contract across all three tools** (#39) is the
   seam between two attack-suite rows rather than a third one. Each of
   `row_probe_indistinguishable` and `list_partition_scoped` asserts its own half

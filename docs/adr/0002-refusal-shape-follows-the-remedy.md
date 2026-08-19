@@ -8,6 +8,7 @@
 - **Amended:** 2026-08-11 — substantive, by [#7](https://github.com/marcosfsousa/mcp-erp/issues/7). The stated evidence for the unlisted-tool rule is wrong — RFC 9728 publishes no tool names. The rule survives on repaired reasoning, recorded in [ADR-0006](0006-fail-closed-in-a-fixed-order.md) *§The gate order is a security property* and back-amended here 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). See *Disclose the shape of the API*. No decision here is reversed.
 - **Amended:** 2026-08-18 — substantive, by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). The closed reason vocabulary is **split by layer**; the indistinguishability claim narrows to **byte-identity, with constant time explicitly not measured**; the `ttlMs` proof gains the invariant it depends on. See *Surviving contact with a retrying client*, *Disclose the shape of the API*, *Transport* and *`tools/list`*. No decision here is reversed.
 - **Amended:** 2026-08-19 — substantive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37). **Option 5 is taken: the SSE response mode is cut.** Every POST is answered `application/json`; the position the one earned stream was protecting moves to the normative register, as its *No streamed response mode* interpretation. See *Transport* and *Options considered*. This reverses one decision — the rejection of option 5 — and nothing else here changes.
+- **Amended:** 2026-08-19 — additive, by [#40](https://github.com/marcosfsousa/mcp-erp/issues/40), which built the tool. `approve_requisition` **ships single-item first**: the list below is deferred to [#41](https://github.com/marcosfsousa/mcp-erp/issues/41), which lands the fold that N outcomes need. See *Five tools*. Nothing here is reversed — the batch is postponed, not cut.
 
 ## Question
 
@@ -28,6 +29,12 @@ What tools does the server expose, what are their contracts, and — the substan
 `PurchaseOrder` is emitted as a side effect of approval and has **no tool of its own**; it is the record that carries the approver identity and cost centre forward for the invoice to match against. `Vendor` has no tool either — its legal values are a JSON Schema `enum` of names inside `submit_requisition`, so the tool definition *is* the lookup. `approve_requisition` takes a list and a `decision: "approve" | "reject"`; rejection is the same authorization decision as approval, so a separate tool would add a `tools/list` row without adding an authorization behaviour.
 
 Every read tool cut — `list_vendors`, `get_vendor`, `list_invoices`, `list_purchase_orders` — was cut for the same reason: it demonstrated no authorization behaviour the surviving two do not.
+
+*Amended 2026-08-19 by [#40](https://github.com/marcosfsousa/mcp-erp/issues/40), which built it.* **The list is deferred, and the shipped schema takes one identifier.**
+
+`approve_requisition` takes `{id, decision}` today. The reason is the cut above rather than a change of mind about the batch: [ADR-0013](0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md) §Streaming, restated portably specifies the **fold** — N outcomes into one result body — as unimplemented, and dispatch refuses a cardinality above one loudly, naming #41. A list argument shipped ahead of it would publish a schema whose second element is an internal error, which is a worse artifact than a tool that does one item and says so.
+
+**Nothing else in this document moves.** *Rejection is the same authorization decision as approval* is why `decision` is an argument rather than a second tool, and that is shipped. *Caller-level refusals are whole-call; item-level refusals are per-item* is reasoned from the batch two sections below and is **unaffected**: the axis it names is the one the split was already using, and a single-item call is the degenerate case of it rather than an exception to it. #41 restores the list, and the per-item idempotency this ticket built as `already_decided` is what it will then be per-item *of*.
 
 ### Schema shape
 

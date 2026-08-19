@@ -1,4 +1,4 @@
-"""Where the ERP's rows come from, and the three queries the tools need.
+"""Where the ERP's rows come from, and the queries the tools need.
 
 Layer 3's only input or output. It lives here rather than anywhere else in
 `src/` because a database dependency in layer 2 would be a layer-2 implementation
@@ -36,6 +36,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import TupleRow
 from psycopg_pool import AsyncConnectionPool
 
+from mcp_erp.purchase_to_pay.purchase_order import Decided, PurchaseOrder
 from mcp_erp.purchase_to_pay.requisition import Requisition
 
 _COLUMNS: Final = """
@@ -120,6 +121,53 @@ shown is the row that was written and not a later read of the same identifier.
 left to the column default, because the caller stated it.
 """
 
+_DECIDE: Final = """
+    UPDATE requisition
+    SET status = %s
+    WHERE id = %s AND status = 'submitted'
+"""
+"""Move one requisition to a terminal state, **if it is not in one already**.
+
+``AND status = 'submitted'`` is what makes the terminal-state rule true rather
+than usually true. The handler holds a row loaded a moment earlier, and a check
+against that row is a check against what was true when it was read: two callers
+deciding the same requisition at once would both pass it. The predicate here is
+evaluated by the database against the row it is about to write, so exactly one of
+the two updates matches and the loser is told ``already_decided`` — which is what
+ADR-0002's promise that a retrying model cannot double-approve actually rests on.
+
+No ``RETURNING``: the decided row is read back by :data:`_SELECT_ONE` inside the
+same transaction, because ``RETURNING`` cannot join and the row a caller is shown
+carries its vendor's and submitter's names.
+"""
+
+_INSERT_ORDER: Final = """
+    WITH minted AS (
+        INSERT INTO purchase_order (id, requisition_id, approved_by)
+        SELECT
+            'po_' || lpad(
+                (coalesce(max(substring(id from '[0-9]+$')::integer), 0) + 1)::text, 4, '0'
+            ),
+            %s, %s
+        FROM purchase_order
+        RETURNING *
+    )
+    SELECT minted.id, minted.requisition_id, minted.approved_by, person.name, minted.status
+    FROM minted
+    JOIN person ON person.subject = minted.approved_by
+"""
+"""Emit the order an approval produces, minting its identifier the same way.
+
+Sequential and legible for the same reason a requisition's is — the normative
+register's *Legible identifiers* deviation — and derived from the highest that
+exists rather than from a sequence, so reloading fixtures with explicit
+identifiers cannot leave a sequence to mint a duplicate key.
+
+``status`` and ``id`` are the server's; the cost centre is **not written at all**,
+which is ADR-0003's correction to ADR-0002 expressed in the statement rather than
+only in the schema.
+"""
+
 _MINT_LOCK: Final = 0x726571
 """``req`` in ASCII, as an advisory lock key. One writer mints at a time.
 
@@ -130,6 +178,14 @@ sticky routing is a property this exhibit **tests** (map constraint `#5`), so
 concurrent submissions are a real shape rather than a hypothetical one. A
 transaction-scoped advisory lock is one line and releases itself on commit or
 rollback, where a table lock would serialise the reads as well.
+"""
+
+_ORDER_MINT_LOCK: Final = 0x706F
+"""``po`` in ASCII. The same argument as :data:`_MINT_LOCK`, on the other table.
+
+A second key rather than the same one, because the two mints are independent: a
+submission and an approval have no reason to wait for each other, and sharing a
+key would serialise them for a race neither is in.
 """
 
 
@@ -177,6 +233,33 @@ class Requisitions(Protocol):
         principal before this is called; the rest are the caller's. Keyword-only,
         because two adjacent identifier-shaped strings passed positionally is how
         a submitter ends up charged to a vendor.
+        """
+        ...
+
+    async def decide(self, identifier: str, *, approve: bool, approved_by: str) -> Decided | None:
+        """Move one requisition to a terminal state, and emit an order if approved.
+
+        Returns ``None`` when the row was decided already — **the terminal-state
+        rule, evaluated where the write happens.** A check against the row the
+        handler loaded a moment earlier is a check against what was true when it
+        was read, and two callers deciding at once would both pass it; the
+        predicate is in the update, so exactly one of them wins.
+
+        Authorization is not consulted here and must have been decided before this
+        is called. The store answers *whether the row was still decidable*, which
+        is a domain precondition rather than a decision about a caller.
+
+        Args:
+            identifier: The requisition to decide, already hydrated and permitted.
+            approve: Approve it, or reject it. A rejection is equally terminal and
+                emits nothing.
+            approved_by: The approver's subject, from the principal. The caller
+                supplies no identity, which is what makes the submitter rule a
+                check against a position on the chain.
+
+        Returns:
+            What the decision produced, or ``None`` if there was nothing left to
+            decide.
         """
         ...
 
@@ -239,6 +322,76 @@ class PostgresRequisitions:
         if row is None:
             raise RuntimeError("the requisition insert returned no row")
         return _as_requisition(row)
+
+    async def decide(self, identifier: str, *, approve: bool, approved_by: str) -> Decided | None:
+        """Decide one requisition and emit its order, inside one transaction.
+
+        Three statements and one transaction, which is what makes the pair
+        atomic: a requisition marked ``approved`` with no order beside it would be
+        a chain with a missing link, and an order against a row still marked
+        ``submitted`` would be one that could be minted twice.
+
+        Raises:
+            RuntimeError: The decided row could not be read back, or the order
+                insert returned nothing. Both mean a statement stopped being what
+                it says it is — refused here rather than three assertions later.
+        """
+        async with self._pool.connection() as connection:
+            # The caller's word is a verb and the column's is a state, which are
+            # two vocabularies rather than one written twice. This is the whole
+            # of the translation, and it lives here because the column's values
+            # are the store's to know.
+            decided = await connection.execute(
+                _DECIDE, ("approved" if approve else "rejected", identifier)
+            )
+            if decided.rowcount != 1:
+                # Nothing matched, so the row was in a terminal state already.
+                # Not an error and not an authorization refusal: the handler
+                # turns it into `already_decided`, which is the domain's word.
+                return None
+
+            cursor = await connection.execute(_SELECT_ONE, (identifier,))
+            row = await cursor.fetchone()
+            if row is None:
+                raise RuntimeError(f"the decided requisition {identifier!r} could not be read")
+            requisition = _as_requisition(row)
+
+            if not approve:
+                return Decided(requisition=requisition, purchase_order=None)
+
+            await connection.execute("SELECT pg_advisory_xact_lock(%s)", (_ORDER_MINT_LOCK,))
+            cursor = await connection.execute(_INSERT_ORDER, (identifier, approved_by))
+            order = await cursor.fetchone()
+
+            # **Inside the block, and that is the point of the claim above.**
+            # Raised after it, the update has already committed and the refusal
+            # ships exactly the missing link this docstring says is impossible:
+            # a requisition marked `approved` with no order beside it. Here the
+            # exception leaves the transaction, so nothing is written at all.
+            if order is None:
+                raise RuntimeError("the purchase order insert returned no row")
+
+            return Decided(
+                requisition=requisition,
+                purchase_order=_as_purchase_order(order, label=requisition.description),
+            )
+
+
+def _as_purchase_order(row: TupleRow, *, label: str) -> PurchaseOrder:
+    """One order row as the entity, read positionally against :data:`_INSERT_ORDER`.
+
+    ``label`` comes from the requisition this transaction just decided rather than
+    from a fourth join: the row is in hand, and joining back to it to read a
+    column already held would be a second reading of the same fact.
+    """
+    return PurchaseOrder(
+        id=str(row[0]),
+        requisition_id=str(row[1]),
+        requisition_label=label,
+        approved_by=str(row[2]),
+        approver_name=str(row[3]),
+        status=str(row[4]),
+    )
 
 
 def _as_requisition(row: TupleRow) -> Requisition:

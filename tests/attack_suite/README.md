@@ -41,3 +41,13 @@ is what made a named resource reachable at all, and its acceptance criteria name
 the assertion — byte-identical `not_found` for a foreign row and a row that never
 existed. The row was already in `scenarios.yaml` with `status: asserted` and
 nothing asserting it, so no count moved.
+
+**And its pair landed with #40**, `state_handle_hijack`, in
+`test_state_handle_hijack.py`. It is the write half of the same clause and #39
+handed it here by name — *"the scenario this is not is `state_handle_hijack`:
+that row is a refused write against a named resource, and this tool has no
+resource at all. Its falsifier arrives with the first write that takes one."*
+`approve_requisition` is that write. The row was `status: asserted` with nothing
+asserting it, so again no count moved; what did move is its `removal`, which was
+written at #9 and named what ADR-0013 later made the design. The correction is
+recorded in the row's own `note`.

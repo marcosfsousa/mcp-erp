@@ -363,7 +363,7 @@ scenarios:
       quote: MCP servers MUST NOT treat possession of a state handle as authentication.
       retrieved: 2026-08-12
     normative_strength: MUST NOT
-    removal: Look the requisition up by identifier alone, without the cost-centre predicate.
+    removal: Take the decision before the chain has permitted it, so a guessed identifier reaches the write.
     status: asserted
     floor: false
     note: >-
@@ -372,6 +372,15 @@ scenarios:
       row_probe_indistinguishable, which is the read path. See ADR-0003's
       amendment: identifiers are deliberately guessable, so this is reached by
       guessing rather than by being handed the identifier.
+      Removal corrected 2026-08-19 by #40, which built the write it names and
+      asserted it. It read "Look the requisition up by identifier alone, without
+      the cost-centre predicate" — written at #9, before ADR-0013 made that the
+      design rather than the removal: the store loads by identifier alone and
+      layer 2 refuses, so the empty join and the foreign row converge at one
+      return site instead of in SQL. Pushing the predicate down would reach the
+      same answer by a mechanism no test in tests/authorization can see.
+      The deletion that makes this attack succeed against the shipped code is
+      deciding before the chain permits. Same clause, same split, same count.
 
   - name: get_stream_removed
     basis: clause

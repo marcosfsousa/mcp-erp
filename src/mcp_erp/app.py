@@ -70,14 +70,14 @@ def create_app(configuration: transport.Configuration | None = None) -> FastAPI:
     # and no isolation whatsoever.
     store = purchase_to_pay.PostgresRequisitions(pool)
 
-    # Three registrations, and the pairing is the whole of what this file does:
+    # Four registrations, and the pairing is the whole of what this file does:
     # the declaration comes from layer 3's module of that name, the handler from
     # layer 3's `handlers`, and the shape they are poured into is layer 1's.
     #
-    # Written out three times rather than looped over the three modules. A loop
-    # would need every declaration module to be one type, and they are three
-    # module objects with no common one — so the alternative is a protocol
-    # describing what a tool declaration holds, which is a fourth spelling of
+    # Written out once per tool rather than looped over the declaration modules.
+    # A loop would need every one of them to be one type, and they are module
+    # objects with no common one — so the alternative is a protocol describing
+    # what a tool declaration holds, which is a fourth spelling of
     # `ToolRegistration` living in the layer that must not learn what a tool is.
     registry = transport.Registry(
         [
@@ -107,6 +107,15 @@ def create_app(configuration: transport.Configuration | None = None) -> FastAPI:
                 output_schema=purchase_to_pay.submit_requisition.OUTPUT_SCHEMA,
                 action=purchase_to_pay.submit_requisition.ACTION,
                 handler=purchase_to_pay.handlers.submit_requisition(store),
+            ),
+            transport.ToolRegistration(
+                name=purchase_to_pay.approve_requisition.NAME,
+                title=purchase_to_pay.approve_requisition.TITLE,
+                description=purchase_to_pay.approve_requisition.DESCRIPTION,
+                input_schema=purchase_to_pay.approve_requisition.INPUT_SCHEMA,
+                output_schema=purchase_to_pay.approve_requisition.OUTPUT_SCHEMA,
+                action=purchase_to_pay.approve_requisition.ACTION,
+                handler=purchase_to_pay.handlers.approve_requisition(store),
             ),
         ]
     )

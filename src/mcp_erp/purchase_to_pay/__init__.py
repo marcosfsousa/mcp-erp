@@ -26,23 +26,31 @@ no entry point, so it is re-exported normally.
 """
 
 from mcp_erp.purchase_to_pay import (
+    approve_requisition,
     get_requisition,
     handlers,
     list_requisitions,
+    purchase_order,
+    reasons,
     requisition,
     submit_requisition,
     vendors,
 )
+from mcp_erp.purchase_to_pay.purchase_order import PurchaseOrder
 from mcp_erp.purchase_to_pay.repository import PostgresRequisitions, Requisitions
 from mcp_erp.purchase_to_pay.requisition import Requisition
 
 __all__ = [
     "PostgresRequisitions",
+    "PurchaseOrder",
     "Requisition",
     "Requisitions",
+    "approve_requisition",
     "get_requisition",
     "handlers",
     "list_requisitions",
+    "purchase_order",
+    "reasons",
     "requisition",
     "submit_requisition",
     "vendors",

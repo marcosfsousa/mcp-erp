@@ -30,9 +30,9 @@ def test_the_metadata_document_answers_without_a_token() -> None:
     # query string is refused because the document says only the header is read.
     assert document["bearer_methods_supported"] == ["header"]
     # Derived from the capabilities the registered tools declare, sorted and
-    # deduplicated: two read tools and one write contribute two strings.
-    # `erp.decide` joins them when the tool that declares it does.
-    assert document["scopes_supported"] == ["erp.read", "erp.write"]
+    # deduplicated: two read tools, one write and one decide contribute three
+    # strings. `erp.decide` joined them at #40, with the tool that declares it.
+    assert document["scopes_supported"] == ["erp.decide", "erp.read", "erp.write"]
     # A protected resource SHOULD NOT advertise this: refresh tokens are not a
     # resource requirement.
     assert "offline_access" not in document["scopes_supported"]
@@ -85,7 +85,7 @@ def test_the_tool_endpoint_challenges_a_request_with_no_credentials() -> None:
     assert parameters["resource_metadata"] == rpc.METADATA_URL
     # Every scope the server publishes, space-delimited, because a request with
     # no credentials named no tool either — there is nothing narrower to quote.
-    assert parameters["scope"] == "erp.read erp.write"
+    assert parameters["scope"] == "erp.decide erp.read erp.write"
 
 
 def test_server_discover_answers_without_a_token() -> None:
