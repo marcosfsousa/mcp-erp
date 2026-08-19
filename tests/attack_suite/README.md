@@ -22,10 +22,22 @@ reachable and its acceptance criteria name them: `list_partition_scoped`,
 `audience_missing` and `foreign_issuer_token`. Each declares its scenario by
 name in the module docstring, which is what the bijection check will read.
 
-`seeded_requisitions.py` is #37's too, and **#43 deletes it.** ADR-0003 has the
+`seeded_requisitions.py` is #37's too, and **#43 deletes it.** It shipped in
+this directory and moved up to `tests/` with #39, when the wire suites became a
+second caller — the rule `tokens.py` states, applied: shared tooling that lives
+in one artifact's directory becomes that artifact's and gets copied by the next.
+ADR-0003 has the
 per-row requisitions generated from the decision matrix definition, one fixture
 owned outright by one row; `matrix.yaml` does not exist yet, and set equality
 against an empty table asserts nothing. What is there is the smallest set that
 makes `list_partition_scoped` falsifiable — one cost centre with two rows and the
 other two with one each, so that *the caller's own partition*, *another
-partition* and *all three* are three different answers.
+partition* and *all three* are three different answers. The same four rows serve
+`row_probe_indistinguishable` unchanged.
+
+**One row landed early with #39**, `row_probe_indistinguishable`, in
+`test_row_probe_indistinguishable.py`. That ticket built `get_requisition`, which
+is what made a named resource reachable at all, and its acceptance criteria name
+the assertion — byte-identical `not_found` for a foreign row and a row that never
+existed. The row was already in `scenarios.yaml` with `status: asserted` and
+nothing asserting it, so no count moved.

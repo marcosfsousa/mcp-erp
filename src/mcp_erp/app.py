@@ -11,7 +11,7 @@ of scope by construction rather than by a carve-out someone has to justify.
 
 Ejecting layer 3 means deleting :mod:`mcp_erp.purchase_to_pay` and editing this
 file. That is the whole procedure: remove the import, remove the store, remove
-the one registration. Layer 1 then serves an empty tool set with an empty
+the registrations. Layer 1 then serves an empty tool set with an empty
 ``scopes_supported``, which is ADR-0012's own falsifier for the scope scheme
 being a pattern rather than a naming convention.
 
@@ -65,19 +65,49 @@ def create_app(configuration: transport.Configuration | None = None) -> FastAPI:
         settings.database_url, open=False
     )
 
+    # One store, shared by every handler. It holds nothing about who called — the
+    # pool is a connection cache — so a second instance would buy a second pool
+    # and no isolation whatsoever.
+    store = purchase_to_pay.PostgresRequisitions(pool)
+
+    # Three registrations, and the pairing is the whole of what this file does:
+    # the declaration comes from layer 3's module of that name, the handler from
+    # layer 3's `handlers`, and the shape they are poured into is layer 1's.
+    #
+    # Written out three times rather than looped over the three modules. A loop
+    # would need every declaration module to be one type, and they are three
+    # module objects with no common one — so the alternative is a protocol
+    # describing what a tool declaration holds, which is a fourth spelling of
+    # `ToolRegistration` living in the layer that must not learn what a tool is.
     registry = transport.Registry(
         [
             transport.ToolRegistration(
-                name=purchase_to_pay.requisition.NAME,
-                title=purchase_to_pay.requisition.TITLE,
-                description=purchase_to_pay.requisition.DESCRIPTION,
-                input_schema=purchase_to_pay.requisition.INPUT_SCHEMA,
-                output_schema=purchase_to_pay.requisition.OUTPUT_SCHEMA,
-                action=purchase_to_pay.LIST_REQUISITIONS,
-                handler=purchase_to_pay.handlers.list_requisitions(
-                    purchase_to_pay.PostgresRequisitions(pool)
-                ),
-            )
+                name=purchase_to_pay.list_requisitions.NAME,
+                title=purchase_to_pay.list_requisitions.TITLE,
+                description=purchase_to_pay.list_requisitions.DESCRIPTION,
+                input_schema=purchase_to_pay.list_requisitions.INPUT_SCHEMA,
+                output_schema=purchase_to_pay.list_requisitions.OUTPUT_SCHEMA,
+                action=purchase_to_pay.list_requisitions.ACTION,
+                handler=purchase_to_pay.handlers.list_requisitions(store),
+            ),
+            transport.ToolRegistration(
+                name=purchase_to_pay.get_requisition.NAME,
+                title=purchase_to_pay.get_requisition.TITLE,
+                description=purchase_to_pay.get_requisition.DESCRIPTION,
+                input_schema=purchase_to_pay.get_requisition.INPUT_SCHEMA,
+                output_schema=purchase_to_pay.get_requisition.OUTPUT_SCHEMA,
+                action=purchase_to_pay.get_requisition.ACTION,
+                handler=purchase_to_pay.handlers.get_requisition(store),
+            ),
+            transport.ToolRegistration(
+                name=purchase_to_pay.submit_requisition.NAME,
+                title=purchase_to_pay.submit_requisition.TITLE,
+                description=purchase_to_pay.submit_requisition.DESCRIPTION,
+                input_schema=purchase_to_pay.submit_requisition.INPUT_SCHEMA,
+                output_schema=purchase_to_pay.submit_requisition.OUTPUT_SCHEMA,
+                action=purchase_to_pay.submit_requisition.ACTION,
+                handler=purchase_to_pay.handlers.submit_requisition(store),
+            ),
         ]
     )
 

@@ -24,12 +24,12 @@ from collections.abc import Iterator
 
 import httpx2
 import pytest
-import seeded_requisitions
 from mcp.shared.inbound import MCP_METHOD_HEADER
 from mcp_types.jsonrpc import METHOD_NOT_FOUND
 from mcp_types.version import HANDSHAKE_PROTOCOL_VERSIONS, LATEST_MODERN_VERSION
 
 import rpc
+import seeded_requisitions
 from tokens import mint
 
 TOOL = "list_requisitions"

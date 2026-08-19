@@ -11,16 +11,40 @@ Layer 2 splits ``decide_call`` from ``decide_item`` so a whole-call permit canno
 be *used* as an item permit, but a handler that calls only the first and returns
 every row type-checks cleanly and fails open. That residual is structurally
 untestable in ``tests/authorization/`` — handlers are layer 3, and that directory
-survives ejection precisely by having none — so its falsifier is at the wire, in
-``list_partition_scoped``.
+survives ejection precisely by having none — so its falsifiers are at the wire,
+in ``list_partition_scoped`` and ``row_probe_indistinguishable``.
+
+**All three entry points are exercised here, one per handler**, which is what
+makes the split visible in one file:
+
+======================  ====================  =========================================
+Handler                 Entry point           Why it stops there
+======================  ====================  =========================================
+``list_requisitions``   both                  a call gate, then a decision per row
+``get_requisition``     ``decide_item``       one named row, hydrated before deciding
+``submit_requisition``  ``decide_call``       no resource at all; the partition is ours
+======================  ====================  =========================================
+
+**An argument a schema forbade raises ``ValueError``.** That is not a refusal:
+nothing was authorized or denied, and giving it a ``Reason`` would amend a closed
+vocabulary for a spelling mistake. Layer 1 renders it as *invalid params*, which
+is what the protocol says about a request it cannot act on, and the exception
+type is the standard library's rather than one this package invents — so a
+handler signals it without importing anything layer 1 owns.
 """
 
+import re
 from collections.abc import AsyncIterator, Callable, Mapping
+from decimal import Decimal
 from typing import Any
 
 from mcp_erp.authorization import Decision, Principal, decide_call, decide_item
+from mcp_erp.purchase_to_pay import vendors
+from mcp_erp.purchase_to_pay.get_requisition import ACTION as GET_REQUISITION
+from mcp_erp.purchase_to_pay.list_requisitions import ACTION as LIST_REQUISITIONS
 from mcp_erp.purchase_to_pay.repository import Requisitions
-from mcp_erp.purchase_to_pay.requisition import LIST_REQUISITIONS
+from mcp_erp.purchase_to_pay.submit_requisition import ACTION as SUBMIT_REQUISITION
+from mcp_erp.purchase_to_pay.submit_requisition import AMOUNT_PATTERN, CURRENCY
 
 Handler = Callable[[Principal, Mapping[str, Any]], AsyncIterator[Mapping[str, Any] | Decision]]
 """The shape layer 1 calls, written here as well as there.
@@ -82,3 +106,158 @@ def list_requisitions(requisitions: Requisitions) -> Handler:
         yield {"requisitions": [row.as_row() for row in visible]}
 
     return handler
+
+
+def get_requisition(requisitions: Requisitions) -> Handler:
+    """Build the ``get_requisition`` handler over a store.
+
+    Returns:
+        The handler, in the shape layer 1's registry declares.
+    """
+
+    async def handler(
+        principal: Principal, arguments: Mapping[str, Any]
+    ) -> AsyncIterator[Mapping[str, Any] | Decision]:
+        """One named requisition, or the refusal that says nothing about why.
+
+        **Hydrate, then decide, and pass the result straight through.** The row
+        is loaded by identifier alone and handed to
+        :func:`~mcp_erp.authorization.policy.decide_item` exactly as the store
+        answered — ``None`` included. That is what makes the empty join and the
+        foreign row converge on layer 2's single return site instead of on a
+        branch here: this handler cannot tell the two apart, because it never
+        looks.
+
+        Raises:
+            ValueError: No ``id`` was named, or it was not a string. Distinct
+                from ``not_found`` on purpose — nothing was named, so nothing was
+                looked for, and answering *not found* would claim a search that
+                did not happen.
+        """
+        identifier = arguments.get("id")
+        if not isinstance(identifier, str):
+            raise ValueError("get_requisition requires an 'id' argument")
+
+        resource = await requisitions.by_id(identifier)
+        decision = decide_item(principal, GET_REQUISITION, resource)
+        if decision.reason is not None:
+            yield decision
+            return
+
+        # Reachable only on a permit, and a permit means the chain saw a row.
+        assert resource is not None
+        yield {"requisition": resource.as_row()}
+
+    return handler
+
+
+def submit_requisition(requisitions: Requisitions) -> Handler:
+    """Build the ``submit_requisition`` handler over a store.
+
+    Returns:
+        The handler, in the shape layer 1's registry declares.
+    """
+
+    async def handler(
+        principal: Principal, arguments: Mapping[str, Any]
+    ) -> AsyncIterator[Mapping[str, Any] | Decision]:
+        """Raise a requisition against the caller's own cost centre.
+
+        **One entry point, because there is no resource.** Submitting is
+        scope-only, so :func:`~mcp_erp.authorization.policy.decide_call` is the
+        whole of the decision — and the partition is not decided at all. It is
+        *supplied*, from the principal the directory resolved, which is what
+        makes an out-of-partition write inexpressible rather than refused.
+
+        The chain runs **before** the store is touched, so a refused call writes
+        nothing. That ordering is the write path's half of fail-closed: a row
+        minted and then refused would still have consumed an identifier.
+
+        Raises:
+            ValueError: An argument the input schema forbade — an unknown vendor,
+                a currency that is not the one legal value, or an amount that is
+                not a positive decimal.
+        """
+        call = decide_call(principal, SUBMIT_REQUISITION)
+        if call.reason is not None:
+            yield Decision(reason=call.reason)
+            return
+
+        written = await requisitions.create(
+            # The principal's, never the caller's. There is no argument to
+            # prefer over it, which is the point of the schema having none.
+            cost_centre=principal.partition,
+            submitted_by=principal.subject,
+            vendor=vendors.identifier_for(_string(arguments, "vendor")),
+            amount=_amount(arguments),
+            currency=_currency(arguments),
+            description=_string(arguments, "description"),
+        )
+
+        yield {"requisition": written.as_row()}
+
+    return handler
+
+
+def _string(arguments: Mapping[str, Any], name: str) -> str:
+    """One required string argument.
+
+    Raises:
+        ValueError: It is absent or is not a string.
+    """
+    value = arguments.get(name)
+    if not isinstance(value, str):
+        raise ValueError(f"{name!r} must be a string")
+    return value
+
+
+def _currency(arguments: Mapping[str, Any]) -> str:
+    """The currency, which has exactly one legal value.
+
+    Checked rather than defaulted: the schema declares a one-member ``enum``, so
+    a caller sending something else has sent something the declaration forbade,
+    and silently substituting the legal value would charge them for a currency
+    they did not name.
+
+    Raises:
+        ValueError: It is absent or is not the one legal value.
+    """
+    value = _string(arguments, "currency")
+    if value != CURRENCY:
+        raise ValueError(f"'currency' must be {CURRENCY!r}")
+    return value
+
+
+def _amount(arguments: Mapping[str, Any]) -> Decimal:
+    """The amount, as the decimal string ADR-0002 fixed the shape as.
+
+    A string on the wire and a ``Decimal`` here, never a float: the column is
+    ``numeric(12, 2)`` and binary floating point cannot represent what an
+    accounting amount means.
+
+    **Matched against the declared pattern rather than against a second reading
+    of it.** ``Decimal`` is far more permissive than
+    :data:`~mcp_erp.purchase_to_pay.submit_requisition.AMOUNT_PATTERN` — it
+    accepts ``1e2``, ``+5``, surrounding whitespace, Python's ``1_0`` digit
+    separators, and any number of decimal places — so parsing alone would let
+    through values the declaration forbids. Two of those reach the column and
+    change what a caller gets: ``1.555`` is silently rounded by
+    ``numeric(12, 2)``, and eleven integer digits overflow it and surface as a
+    database error rather than as *invalid params*. So the constant a model reads
+    is the constant this matches, and the rule is stated once.
+
+    Raises:
+        ValueError: It is absent, is not a string, is not the shape the schema
+            declares, or is not positive. The last is the one rule the pattern
+            deliberately does not carry — the column's own ``CHECK (amount > 0)``,
+            checked here so a caller gets a message about their argument rather
+            than an integrity error about a constraint they cannot see.
+    """
+    value = _string(arguments, "amount")
+    if re.fullmatch(AMOUNT_PATTERN, value) is None:
+        raise ValueError(f"'amount' is not a decimal amount: {value!r}")
+
+    amount = Decimal(value)
+    if amount <= 0:
+        raise ValueError(f"'amount' must be positive: {value!r}")
+    return amount
