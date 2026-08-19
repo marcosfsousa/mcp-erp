@@ -121,15 +121,6 @@ shown is the row that was written and not a later read of the same identifier.
 left to the column default, because the caller stated it.
 """
 
-_STATUSES: Final = {True: "approved", False: "rejected"}
-"""What a decision writes, keyed on which way it went.
-
-The two values the column's own ``requisition_status`` enum permits beside
-``submitted``, written here so the statement above takes a status rather than a
-verb — a decision is one update with one parameter, not two statements that could
-drift apart.
-"""
-
 _DECIDE: Final = """
     UPDATE requisition
     SET status = %s
@@ -346,7 +337,13 @@ class PostgresRequisitions:
                 it says it is — refused here rather than three assertions later.
         """
         async with self._pool.connection() as connection:
-            decided = await connection.execute(_DECIDE, (_STATUSES[approve], identifier))
+            # The caller's word is a verb and the column's is a state, which are
+            # two vocabularies rather than one written twice. This is the whole
+            # of the translation, and it lives here because the column's values
+            # are the store's to know.
+            decided = await connection.execute(
+                _DECIDE, ("approved" if approve else "rejected", identifier)
+            )
             if decided.rowcount != 1:
                 # Nothing matched, so the row was in a terminal state already.
                 # Not an error and not an authorization refusal: the handler
@@ -366,12 +363,18 @@ class PostgresRequisitions:
             cursor = await connection.execute(_INSERT_ORDER, (identifier, approved_by))
             order = await cursor.fetchone()
 
-        if order is None:
-            raise RuntimeError("the purchase order insert returned no row")
-        return Decided(
-            requisition=requisition,
-            purchase_order=_as_purchase_order(order, label=requisition.description),
-        )
+            # **Inside the block, and that is the point of the claim above.**
+            # Raised after it, the update has already committed and the refusal
+            # ships exactly the missing link this docstring says is impossible:
+            # a requisition marked `approved` with no order beside it. Here the
+            # exception leaves the transaction, so nothing is written at all.
+            if order is None:
+                raise RuntimeError("the purchase order insert returned no row")
+
+            return Decided(
+                requisition=requisition,
+                purchase_order=_as_purchase_order(order, label=requisition.description),
+            )
 
 
 def _as_purchase_order(row: TupleRow, *, label: str) -> PurchaseOrder:

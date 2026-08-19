@@ -138,13 +138,6 @@ def _decide(username: str, identifier: str, decision: str = "approve") -> httpx2
     )
 
 
-def _decided(username: str, identifier: str, decision: str = "approve") -> dict[str, Any]:
-    """The structured half of one decision, whatever it says."""
-    result = rpc.result(_decide(username, identifier, decision))
-    payload: dict[str, Any] = result["structuredContent"]
-    return payload
-
-
 def _permitted(username: str, identifier: str, decision: str = "approve") -> dict[str, Any]:
     """One decision that went through.
 
@@ -490,3 +483,40 @@ def test_a_decision_the_enum_forbids_is_a_protocol_error_and_not_a_refusal() -> 
 
     assert rpc.error(_decide(APPROVER, identifier, "maybe"))["code"] == -32602
     assert _status(SUBMITTER, identifier) == "submitted"
+
+
+def test_a_refused_caller_is_answered_before_their_other_arguments_are_read() -> None:
+    """The chain runs first, so a refusal cannot be told apart from a refusal with a typo.
+
+    The same forbidden `decision` the test above answers `-32602` for. Sent by
+    somebody the chain refuses, it never gets that far: what comes back is their
+    refusal, unchanged. `submit_requisition` keeps the same order — the chain,
+    then the arguments — and the identifier is the one exception, because
+    hydration cannot happen without one.
+    """
+    identifier = _raise(SUBMITTER, "480.00")
+
+    assert _refused(OUTSIDER, identifier, "maybe")["reason"] == "not_found"
+    assert rpc.error(_decide(SUBMITTER, identifier, "maybe"))["code"] == -31010
+
+
+def test_a_single_item_decision_answers_application_json() -> None:
+    """One wire shape, on the tool that used to be the reason there were two.
+
+    ADR-0002 earned the streamed response mode on this tool alone — *"a batch is
+    N independent decisions with N independent outcomes"* — and then took its own
+    option 5 and cut it, because no proof tier opened a stream, asserted on one,
+    or depended on one. So the mode is not chosen per call: **every POST is
+    answered `application/json`**, and the register's *No streamed response mode*
+    interpretation carries the reading — the `MUST` naming both modes binds a
+    client's ability to read them, never a server's obligation to produce one.
+
+    The request asks for both, as a faithful client does, which is what makes the
+    answer a decision rather than the only thing that would parse.
+    """
+    identifier = _raise(SUBMITTER, "480.00")
+
+    response = _decide(APPROVER, identifier)
+
+    assert "text/event-stream" in rpc.TRANSPORT_HEADERS["accept"]
+    assert response.headers["content-type"].split(";")[0] == "application/json"

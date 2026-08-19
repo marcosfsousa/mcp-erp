@@ -294,11 +294,17 @@ def approve_requisition(requisitions: Requisitions) -> Handler:
         Yields exactly one outcome, for one item. The batch and the fold that
         turns N outcomes into one result body are #41's.
 
+        **The chain runs before the rest of the arguments are read**, which is
+        the order ``submit_requisition`` already keeps: a caller the chain
+        refuses is answered without their other arguments being looked at, and a
+        refused call cannot be told apart from a refused call that also had a
+        typo in it. The identifier is the exception and has to be, because
+        hydration cannot happen without one.
+
         Raises:
             ValueError: An argument the input schema forbade — no identifier, or
                 a ``decision`` that is not one of the two declared values.
         """
-        decision_argument = _decision(arguments)
         resource = await hydrate(APPROVE_REQUISITION, arguments)
 
         decision = decide_item(principal, APPROVE_REQUISITION, resource)
@@ -308,19 +314,20 @@ def approve_requisition(requisitions: Requisitions) -> Handler:
 
         # Reachable only on a permit, and a permit means the chain saw a row.
         assert resource is not None
-        decided = await requisitions.decide(
+        requested = _decision(arguments)
+        written = await requisitions.decide(
             resource.id,
-            approve=decision_argument == APPROVE,
+            approve=requested == APPROVE,
             # The principal's, never the caller's: no argument names an approver,
             # which is what makes the submitter rule a check against a position
             # occupied on this chain.
             approved_by=principal.subject,
         )
-        if decided is None:
+        if written is None:
             yield Decision(reason=ALREADY_DECIDED)
             return
 
-        yield decided.as_row()
+        yield written.as_row()
 
     return handler
 

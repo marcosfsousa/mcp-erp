@@ -110,6 +110,14 @@ class PurchaseOrder:
 class Decided:
     """What one decision produced, and the only thing a decided call answers with.
 
+    **Not a ``Decision`` by another name**, and the near-miss is worth stating in
+    the exhibit built to keep exactly this vocabulary straight. ``CONTEXT.md``
+    gives *Decision* to what the chain answers for one item — a permit or the
+    reason it refuses on — which is a fact about a **caller**. This is a fact
+    about the **rows**: what was written once a decision had already been
+    permitted. A handler holds both within four lines of each other, and they
+    never stand in for one another.
+
     Two entities in one record because a decision touches two: the requisition
     moves to a terminal state, and an approval additionally emits an order. A
     rejection produces the first alone, which is why :attr:`purchase_order` is

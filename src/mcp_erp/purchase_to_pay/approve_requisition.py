@@ -9,12 +9,13 @@ collaborators, so the row cannot arrive any other way (ADR-0013).
 what approval *emits*; it does not exist when the decision is taken, and *the
 resource is the thing acted against, never the thing created*.
 
-**Single item, and the batch is #41's.** ADR-0002 specifies this tool as taking a
-list; this module takes one identifier, because the fold that turns N outcomes
-into one result body is unbuilt and dispatch refuses a cardinality above one
-rather than rendering the first answer and dropping the rest. A list schema
-shipped ahead of the fold would publish an argument whose second element is a
-loud internal error.
+**Single item, and the batch is #41's.** ADR-0002 specified this tool as taking a
+list and is amended to defer it: the fold that turns N outcomes into one result
+body is unbuilt, and dispatch refuses a cardinality above one rather than
+rendering the first answer and dropping the rest. A list schema shipped ahead of
+the fold would publish an argument whose second element is a loud internal error.
+The batch is postponed rather than cut, and the deferral is recorded in the trail
+rather than only here.
 
 **Rejection is the same authorization decision as approval**, so it is a
 ``decision`` argument rather than a second tool: a separate one would add a
