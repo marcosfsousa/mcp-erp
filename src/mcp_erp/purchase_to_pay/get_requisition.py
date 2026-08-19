@@ -91,6 +91,8 @@ widening, never a write grant.
 
 ``required_roles`` is empty because reading is gated by scope alone. A
 consequence worth stating: the ``role_missing`` denial class is therefore not
-reachable through this tool or through ``submit_requisition``, and it stays that
-way until a role-gated tool exists (#40).
+reachable through this tool or through ``submit_requisition``. It became
+reachable at #40, through :mod:`~mcp_erp.purchase_to_pay.approve_requisition`,
+which is the first tool to declare a role — and reachable *here* is still what it
+is not.
 """

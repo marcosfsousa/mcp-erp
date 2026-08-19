@@ -31,6 +31,11 @@ READ_TOOLS = {"list_requisitions", "get_requisition"}
 WRITE_TOOLS = {"submit_requisition"}
 """The one tool declaring `write` so far; `record_invoice` joins it at #42."""
 
+DECIDE_TOOLS = {"approve_requisition"}
+"""The one tool declaring `decide`, and the only one of the three sets that is
+gated by a role as well — which is what makes the listing's *scope alone* filter
+observable rather than merely stated."""
+
 
 def _listing(minted: Minted) -> dict[str, object]:
     """The `tools/list` result for one minted token."""
@@ -84,6 +89,22 @@ def test_both_scopes_reach_the_union_and_nothing_else() -> None:
     _token_and_not_of_the_person` makes from the other direction.
     """
     assert _names(mint("priya.raman", ["erp.read", "erp.write"])) == READ_TOOLS | WRITE_TOOLS
+    assert not (READ_TOOLS | WRITE_TOOLS) & DECIDE_TOOLS
+
+
+def test_the_deciding_scope_reaches_the_deciding_tool_for_a_person_who_may_not_use_it() -> None:
+    """The listing filters on granted scope **alone**, so a role gate is invisible here.
+
+    Priya Raman holds `approver` in the realm and no ERP role at all, so the
+    realm issues her `erp.decide` and the server refuses her at the role gate.
+    She sees the tool anyway — and that is the design: filtering on the
+    intersection would hide it from her, and the `-31010` denial class would
+    collapse into an absence with no wire shape at all.
+
+    That refusal is asserted where it happens, in `test_approve_requisition.py`.
+    What is asserted here is that she gets far enough to be refused.
+    """
+    assert _names(mint("priya.raman", ["erp.decide"])) == DECIDE_TOOLS
 
 
 def test_the_listing_is_a_function_of_the_token_and_not_of_the_person() -> None:
@@ -126,11 +147,11 @@ def test_the_listing_declares_the_schemas_layer_three_authored() -> None:
     free-text one would leak which centres exist. The named read takes exactly
     one argument, which is the identifier it is named for and nothing beside it.
     """
-    tools = _listing(mint("priya.raman", ["erp.read", "erp.write"]))["tools"]
+    tools = _listing(mint("priya.raman", ["erp.read", "erp.write", "erp.decide"]))["tools"]
     assert isinstance(tools, list)
     declared = {tool["name"]: tool for tool in tools}
 
-    assert set(declared) == READ_TOOLS | WRITE_TOOLS
+    assert set(declared) == READ_TOOLS | WRITE_TOOLS | DECIDE_TOOLS
     for tool in declared.values():
         assert tool["inputSchema"]["additionalProperties"] is False
         assert tool["outputSchema"]["additionalProperties"] is False
@@ -145,6 +166,10 @@ def test_the_listing_declares_the_schemas_layer_three_authored() -> None:
     # server-derived, so an out-of-partition write is inexpressible rather than
     # refused, and no schema enumerates the organisation's centres.
     assert "cost_centre" not in declared["submit_requisition"]["inputSchema"]["properties"]
+    assert "cost_centre" not in declared["approve_requisition"]["inputSchema"]["properties"]
+    # And no `amount` either: the threshold is decided on the row the server
+    # holds, never on a number the caller restated.
+    assert "amount" not in declared["approve_requisition"]["inputSchema"]["properties"]
 
 
 def test_the_tool_set_is_fixed_at_deploy() -> None:

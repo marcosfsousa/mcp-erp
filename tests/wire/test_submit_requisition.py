@@ -9,7 +9,8 @@ move when there is something to generate them from.
 
 The scenario this is *not* is `state_handle_hijack`: that row is a refused write
 against a named resource, and this tool has no resource at all. Its falsifier
-arrives with the first write that takes one (#40).
+arrived with the first write that takes one — `approve_requisition`, at #40, in
+`tests/attack_suite/test_state_handle_hijack.py`.
 
 **The thing being asserted is an absence.** ADR-0002 designed the cost-centre
 input out and ADR-0003 closed the question that would have brought it back, so
