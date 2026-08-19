@@ -6,6 +6,7 @@
 - **Evidence:** [`docs/research/0003-2026-07-28-authorization-requirements.md`](../research/0003-2026-07-28-authorization-requirements.md) (fifteen-clause list, §2.2 path insertion, §2.4 challenge parameters), [`docs/research/0004-mcp-client-landscape.md`](../research/0004-mcp-client-landscape.md); RFC 9728 §3.1, RFC 6750 §3, RFC 9700 §4.14.2; [ADR-0002](0002-refusal-shape-follows-the-remedy.md), [ADR-0005](0005-the-authorization-server-is-a-dependency-not-a-deliverable.md)
 - **Amended:** 2026-08-11 — substantive, by [#8](https://github.com/marcosfsousa/mcp-erp/issues/8). The chain below is **not uniform across both protocol eras**, and one refinement passed to #12 is void. See *The order describes the modern leg* and *Input to other tickets*. No decision here is reversed.
 - **Amended:** 2026-08-18 — additive, by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). A **resolution step** sits between gates 4 and 5, and the chain runs in mount-level middleware rather than in a route dependency. See *The gate order is a security property, not a style choice*. No decision here is reversed.
+- **Amended:** 2026-08-19 — additive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which built the validator. The rejection vocabulary gains a **seventh** value, `issuer_mismatch`. See *Refusals disclose the caller's own token, and nothing else*. No decision here is reversed.
 
 ## Question
 
@@ -82,11 +83,20 @@ token rejected:
 
   token_expired | audience_mismatch | audience_missing
   | signature_invalid | unknown_key | malformed
+  | issuer_mismatch
 ```
 
-The vocabulary is closed, for the same reason ADR-0002 closed its refusal reasons: the attack suite asserts on a fixed identifier rather than on prose someone will later reword. Four of those six are named scenarios, and without distinguishable descriptions they would all assert the same `401`.
+The vocabulary is closed, for the same reason ADR-0002 closed its refusal reasons: the attack suite asserts on a fixed identifier rather than on prose someone will later reword. ~~Four of those six are named scenarios~~ **every value here is reached by a named scenario** *(count restated 2026-08-19 by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which added the seventh; a stored count in a list that grows is the defect this trail keeps finding in itself)*, and without distinguishable descriptions they would all assert the same `401`.
 
 Nothing here discloses anything ADR-0002's rule protects. Every fact in play is a property of the caller's own token, which they already hold.
+
+*Amended 2026-08-19 by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37) — a seventh value, `issuer_mismatch`, added while building the validator this section specifies.*
+
+**The six above have no member for a token from another issuer, and without one the `iss` check is unobservable.** `foreign_issuer_token`'s recorded removal is *"skip the `iss` check against the configured issuer"*, and the neighbour realm signs with its own keys — so a server that had deleted the comparison would still refuse that token, as `unknown_key`, and the row would stay green on its own removal. Every row records the exact deletion that makes it pass; a deletion nothing can see is not one.
+
+So the check runs **before** the key lookup, against the token's unverified payload, and refuses with its own word. Reading an unverified claim there is safe for the same reason reading the unverified key identifier is: it selects *which* key must have signed this token, and lying about it only brings a caller to a signature check they cannot pass. The order is structure, then issuer, then key, then signature and the remaining claims.
+
+This is an addition to a closed vocabulary rather than a reversal of the closure. The rule the closure exists for is unchanged — the set is fixed, declared in one place, and every member is a property of the caller's own token. **One member is deliberately absent even so**: there is no value for *not yet valid*, because the thirty-second leeway above is what that clause is about and no client of this realm can produce a token beyond it. The residual is refused as `malformed`, and a member nothing can reach would weaken the claim that this vocabulary is observable rather than strengthen it.
 
 ### `server/discover` answers without a token, and says nothing about purchasing
 

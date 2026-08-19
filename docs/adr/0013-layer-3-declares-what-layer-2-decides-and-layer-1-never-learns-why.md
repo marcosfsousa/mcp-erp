@@ -7,6 +7,7 @@
 - **Amended:** 2026-08-18 — substantive, by [#32](https://github.com/marcosfsousa/mcp-erp/issues/32). `Mount` becomes `Route`, and the accepted cost on exception handling is withdrawn. See *The gate chain sits in middleware, in two tiers*. No decision here is reversed. *(Header added 2026-08-18 by [#34](https://github.com/marcosfsousa/mcp-erp/issues/34); the in-body marker has stood since the amendment landed.)*
 - **Amended:** 2026-08-18 — additive, by [#34](https://github.com/marcosfsousa/mcp-erp/issues/34). `Rule` and `Action` are **parameterised on the resource type** as built. See *The `Action` is the seam*. No decision here is reversed.
 - **Amended:** 2026-08-18 — additive, by [#35](https://github.com/marcosfsousa/mcp-erp/issues/35). The seed's third rendering needs a generator of its own, so there are **three generators, not two**, and layer 3 holds two of them: the organisation renderer beside the fixture generator. See *Both generators, split by the vocabulary each speaks*. The rule that decides where each lives is unchanged, and no decision here is reversed.
+- **Amended:** 2026-08-19 — additive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which built the chain. **Gate 5 runs in middleware, not at dispatch**, because its wire shape is an HTTP status and header that a JSON-RPC envelope cannot carry; gate 6 stays at dispatch. And there is a **fifth test directory**, `tests/wire/`, for the wire assertions that belong to no proof artifact. See *The gate chain sits in middleware, in two tiers* and *Four test directories, named for artifacts*. No decision here is reversed.
 
 ## Question
 
@@ -176,7 +177,23 @@ Two constraints ride along, both load-bearing and neither obvious:
 - **`mcp_asgi_app` is `StreamableHTTPASGIApp(server.session_manager)`, not the `Starlette` that `streamable_http_app()` returns.** That wrapper carries its own inner `Route(streamable_http_path)` — defaulting to `/mcp`, so nesting it under `/mcp` serves `/mcp/mcp` — and its own router's redirect. A `Route` endpoint must also be a non-function callable: Starlette wraps an `async def` endpoint as a request/response handler and calls it with a `Request`, so a bare ASGI function `500`s where a class instance works.
 - **The composition root runs `server.session_manager.run()` in its own lifespan.** A nested app's lifespan is never run by its parent, and there is no quiet degradation to catch later — every request answers `500` until it is wired.
 
-The unauthenticated endpoints sit outside the token gate **structurally** rather than by a path allow-list — preferring an attack to be impossible over defended-against, the move ADR-0006 already made once. Gates 5 and 6 are the chain, at dispatch, where the `Action` is known.
+The unauthenticated endpoints sit outside the token gate **structurally** rather than by a path allow-list — preferring an attack to be impossible over defended-against, the move ADR-0006 already made once. ~~Gates 5 and 6 are the chain, at dispatch, where the `Action` is known.~~
+
+*Amended 2026-08-19 by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which built it.* **Gate 5 is a third route-level middleware; gate 6 is at dispatch.** The sentence above split them by where the `Action` is known, and that turned out not to be the thing that decides it.
+
+The `Action` is known in middleware too. Gate 2 has already proved the `Mcp-Name` header equal to the body's `name` parameter, and layer 1 holds the registry that maps a tool name to its declaration — so a middleware can reach the same `Action` dispatch would, through a header the ordering has already made safe.
+
+**What decides it is the wire shape.** ADR-0002 specifies the scope refusal as a `403` carrying `WWW-Authenticate: Bearer error="insufficient_scope", scope=…, resource_metadata=…`. By the time dispatch runs, the response is a JSON-RPC envelope at `200`, and nothing inside it can set a status code or a header. Gate 6's two shapes — the `-31010` protocol error and the tool result marked in error — both fit inside that envelope, which is why they stay where they were.
+
+```python
+Route("/mcp", endpoint=mcp_asgi_app, middleware=[
+    Middleware(ShapeGate),   # gate 2
+    Middleware(TokenGate),   # gates 3, 4, then directory resolution
+    Middleware(ScopeGate),   # gate 5
+])
+```
+
+**The scope rule still has one implementation.** `ScopeGate` and the handler's `decide_call` both call `permits_scope`, which is the same deliberate N+1 the chain already pays inside a batch — and it is what keeps *listing is a strict prefix of the call gate* true rather than nearly true. A tool name nothing is registered under is left alone: dispatch owns *no such tool*, and answering it at gate 5 would make an unknown name and an unpermitted one distinguishable in the wrong direction.
 
 **Route-level middleware reaches everything the two tiers need.** Confirmed by execution at #32: the chain runs `OriginGate → ShapeGate → TokenGate → mcp_asgi_app`, exactly as drawn; `ShapeGate` reads the `Mcp-Method` header and the parsed body together and sees ADR-0006's own attack payload disagree; and a value written to the ASGI scope's `state` by `TokenGate` is readable at dispatch as `ctx.request.state.<name>`, which is where the `Principal` goes.
 
@@ -211,6 +228,19 @@ tests/
 ```
 
 **The ejection test is a command, not a file** — `rm -rf src/mcp_erp/purchase_to_pay && pytest tests/authorization` — so that directory imports nothing from layer 3, and this ticket's *"unit tests of the policy function"* are those same files. Layers 1 and 3 get no directory of their own; ADR-0008 routes every assertion about them over the wire.
+
+*Amended 2026-08-19 by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which built the first slice through all three layers.* **A fifth directory, `tests/wire/`.**
+
+```
+tests/
+  wire/            # wire; the server's own posture — endpoints, listing, replicas
+```
+
+Three assertions in that slice belong to none of the four. The **metadata route answering without a token, and every other path being gated** is ADR-0006's discovery decision, defending nothing named in `scenarios.yaml` and expecting no `(principal × tool × resource)` row. **Two replicas, round-robin, nothing remembered** is map constraint `#5`, a property of the deployment rather than of a caller. The **tool listing's filter and its freshness hint** become four rows of `matrix.yaml` when #43 writes it, and until that file exists there is nothing to generate them from — `tests/matrix/` is generated in its entirety.
+
+The alternative was to mint scenario rows for the first two, and it was declined: membership is ADR-0010's rule — one row per distinct clause this project *enforces*, each recording the exact removal that makes it pass — and the row count is a derived artifact under map constraint `#12`. Inventing two rows to house three tests would move a number three documents track, to record something that is not an attack.
+
+**The prohibition above is untouched.** It bars a directory named for a layer collecting in-process unit tests of that layer; `tests/wire/` is named for the altitude every assertion in it shares, and every one of them drives real HTTP against Compose like the three suites beside it. The count of directories was never the claim — *named for artifacts* was, and this one is named for the only thing its contents have in common.
 
 ### Both generators, split by the vocabulary each speaks
 

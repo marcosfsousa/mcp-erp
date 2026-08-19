@@ -2,11 +2,18 @@
 # file is where the exhibit runs — on the reader's machine and nowhere else.
 #
 #
-# WHAT IS HERE, AND WHAT IS NOT
-# -----------------------------
-# The authorization server and the database. The MCP server itself arrives with
-# #37, as two replicas behind no sticky routing, which is what makes map
-# constraint `#5`'s statelessness falsifiable rather than asserted.
+# WHAT IS HERE
+# ------------
+# The authorization server, the database, and the resource server as **two
+# replicas behind no sticky routing** — which is what makes map constraint
+# `#5`'s statelessness falsifiable rather than asserted.
+#
+# The two replicas are two named services rather than `deploy: replicas: 2`, and
+# the reason is the gateway in front of them: nginx resolves an upstream name
+# once at start-up, so one scaled name would leave the alternation depending on
+# a resolver's ordering. `gateway/nginx.conf` carries the argument, and the
+# fourth service's own justification with it — one resource identifier means one
+# address, and Compose publishes a host port to one container.
 #
 #
 # NOTHING EXTERNAL FLOATS
@@ -48,6 +55,63 @@
 # deviation carried deliberately and not closed here.
 
 name: mcp-erp
+
+# One definition, two replicas. An anchor rather than `extends:` or a scaled
+# service, because the two must be **identical in every respect a caller can
+# observe** — same image, same configuration, same issuer, same resource
+# identifier — and the way to guarantee that is for there to be one text.
+x-server: &server
+  build:
+    context: .
+    dockerfile: server/Dockerfile
+  image: mcp-erp-server:0.1.0
+  environment:
+    # The three strings the server is configured with, and nothing else.
+    #
+    # The issuer is the Compose service name rather than `localhost`, and that
+    # is load-bearing: ADR-0005 configures the resource server with the issuer
+    # and has it discover the rest, so this one string has to resolve
+    # identically inside the network and outside it. Inside, Compose's own DNS
+    # answers; outside, one `127.0.0.1 keycloak` line in the reader's hosts
+    # file does.
+    MCP_ISSUER: http://keycloak:8081/realms/mcp-erp
+    # What the realm's audience mapper stamps into every token, so the value a
+    # token carries and the value this server demands are one string set in one
+    # place. It is also the address the gateway publishes, which is what makes
+    # the audience a claim about the URL a caller actually used.
+    MCP_RESOURCE_URL: http://localhost:8080/mcp
+    DATABASE_URL: postgresql://mcp_erp:not-a-secret-demo-password@postgres:5432/mcp_erp
+  depends_on:
+    # Realm readiness and an initialised database, not process readiness. The
+    # server tolerates both being down — it fetches nothing at start-up — but a
+    # replica answering `role_missing` because Postgres had not loaded the
+    # organisation yet is a failure that reads as an authorization defect.
+    keycloak:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+  healthcheck:
+    # The protected resource metadata document, which is the one route that
+    # answers without a token — so the probe needs no credential and is a real
+    # assertion rather than a liveness ping: a `200` here means the application
+    # built, the route table is right, and the gate chain let the one
+    # unauthenticated path through.
+    #
+    # Python rather than curl, because the base image is slim and carries
+    # neither curl nor wget, and the interpreter is already the reason the
+    # image exists.
+    test:
+      - CMD
+      - python
+      - -c
+      - >-
+        import urllib.request;
+        urllib.request.urlopen(
+        'http://localhost:8080/.well-known/oauth-protected-resource/mcp', timeout=3)
+    interval: 5s
+    timeout: 5s
+    retries: 30
+    start_period: 5s
 
 services:
   # The exhibit, in ADR-0007's words: a reader opens the realm files to see the
@@ -151,3 +215,40 @@ services:
       timeout: 5s
       retries: 30
       start_period: 10s
+
+  # The exhibit's own server, twice. Neither publishes a port: the gateway is
+  # the only way in, which is what stops a caller pinning themselves to one
+  # replica and getting a statelessness claim that was never tested.
+  server-1:
+    <<: *server
+  server-2:
+    <<: *server
+
+  # The one address, in front of the two. It exists so that "requests round
+  # robin across both replicas with no sticky routing" is a thing a reader can
+  # watch — `gateway/nginx.conf` carries the reasoning and the `X-Served-By`
+  # header that makes it observable.
+  gateway:
+    image: nginx:1.29.4-alpine@sha256:4870c12cd2ca986de501a804b4f506ad3875a0b1874940ba0a2c7f763f1855b2
+    ports:
+      # The published address, and the one the resource identifier names. The
+      # port appears in the audience of every token the realm mints, so moving
+      # it means moving `MCP_RESOURCE_URL` above and the realm's placeholder
+      # default with it.
+      - "8080:8080"
+    volumes:
+      # Named individually rather than by mounting `gateway/`, on the same terms
+      # as `db/`: adding a README beside this file should not silently become
+      # part of the configuration.
+      # The whole configuration, not a fragment in `conf.d/`: the directive that
+      # makes the round robin deterministic — `worker_processes 1` — is a
+      # main-context one, and round-robin state is per worker.
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      # Health rather than start, because nginx resolves both upstream names
+      # when it loads its configuration. A replica that does not exist yet is a
+      # start-up failure with a resolver's error message on it.
+      server-1:
+        condition: service_healthy
+      server-2:
+        condition: service_healthy

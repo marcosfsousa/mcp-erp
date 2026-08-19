@@ -162,6 +162,30 @@ rediscover.
   performs over *derived* artifacts — which the seed, being a source, is not.
   — #36, #35
 
+- **A closed vocabulary with no word for a refusal makes that refusal's removal
+  unobservable.** ADR-0006 fixed six rejection descriptions and none of them was
+  *issuer*. A token from the neighbour realm is signed by keys we do not have, so
+  a server that had deleted the `iss` check entirely would still refuse it — as
+  `unknown_key` — and `foreign_issuer_token` would stay green on its own recorded
+  removal. Every attack row records the exact deletion that makes it pass, and a
+  deletion nothing can see is not one. The seventh word is what turns the control
+  from present into observable. — #37, ADR-0006
+
+- **Where a gate lives is decided by the shape of its refusal, not by where its
+  inputs are known.** ADR-0013 put gates 5 and 6 at dispatch *"where the `Action`
+  is known"*, and the `Action` is knowable in middleware too. What actually
+  decides it is that the scope refusal is a `403` carrying a
+  `WWW-Authenticate` header, and by dispatch the response is a JSON-RPC envelope
+  at `200` with no status code left to set. Gate 6's two shapes fit inside that
+  envelope; gate 5's does not. — #37, ADR-0013, ADR-0002
+
+- **The freshness hint is per caller, and a per-server setting cannot express
+  it.** `ttlMs = min(5 minutes, remaining token lifetime)` depends on the token in
+  front of you, so the protocol package's server-wide cache hint is the wrong
+  granularity by exactly one dimension — the same shape of mistake ADR-0013
+  rejected when it refused a per-tool streaming flag on the `Action`. Both times
+  the wrong granularity was the convenient one. — #37, ADR-0002
+
 ---
 
 ## Findings
