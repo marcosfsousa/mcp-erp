@@ -6,11 +6,14 @@ falsifiable rather than asserted* — is something a reader can watch.
 
 ## Why a fourth service
 
-The resource identifier is one URL, `http://localhost:8080/mcp`, and it is what
-every token's audience names. Two replicas therefore have to answer at one
-address, and Compose publishes a host port to one container. The alternative —
-two replicas on two host ports — would make the audience a claim about a port no
-caller used.
+**ADR-0006 §Discovery is published both ways, at one address** holds the
+argument: one resource identifier means one published address, two replicas mean
+something has to stand in front of them, and the audience check is why the
+alternative — two replicas on two host ports — hollows out a control while
+leaving it green.
+
+It is not restated here. What follows is the mechanics of the thing that stands
+in front.
 
 ## Why two named upstreams rather than a scaled service
 
@@ -37,8 +40,8 @@ ones this exhibit makes are over the JSON-RPC body, which no proxy touches.
 
 ## What it does not do
 
-No TLS. Plain HTTP on both identifiers is normative register row 2, a hard
-`MUST` deviation carried deliberately, and the route that would close it —
+No TLS. Plain HTTP on both identifiers is the normative register's *Plain-HTTP
+identifiers* deviation, a hard `MUST` departure carried deliberately, and the route that would close it —
 terminating TLS at a fixed hostname as a **non-default opt-in profile** — is
 declined for v1 on setup cost rather than on impossibility. This file is where
 that profile would land.

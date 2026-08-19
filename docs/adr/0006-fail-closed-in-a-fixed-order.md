@@ -7,6 +7,7 @@
 - **Amended:** 2026-08-11 — substantive, by [#8](https://github.com/marcosfsousa/mcp-erp/issues/8). The chain below is **not uniform across both protocol eras**, and one refinement passed to #12 is void. See *The order describes the modern leg* and *Input to other tickets*. No decision here is reversed.
 - **Amended:** 2026-08-18 — additive, by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). A **resolution step** sits between gates 4 and 5, and the chain runs in mount-level middleware rather than in a route dependency. See *The gate order is a security property, not a style choice*. No decision here is reversed.
 - **Amended:** 2026-08-19 — additive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which built the validator. The rejection vocabulary gains a **seventh** value, `issuer_mismatch`. See *Refusals disclose the caller's own token, and nothing else*. No decision here is reversed.
+- **Amended:** 2026-08-19 — additive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which deployed it. One resource identifier means **one published address**, which is why two replicas answer behind a gateway. The derivation was argued only in `gateway/README.md`. See *Discovery is published both ways, at one address*. No decision here is reversed.
 
 ## Question
 
@@ -68,6 +69,18 @@ The document declares the two required fields plus three that earn their place:
 ```
 
 `scopes_supported` publishes the scope vocabulary. `bearer_methods_supported: ["header"]` turns attack-suite clause #5 — a token in the query string — from a behaviour we merely exhibit into a **published contract we then keep**. `resource_documentation` is where a reviewer goes next. `offline_access` is deliberately absent: the specification says a protected resource **SHOULD NOT** list it, since refresh tokens are not a resource requirement.
+
+#### One identifier, therefore one published address
+
+*Added 2026-08-19 by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which deployed the server. This section already fixed the identifier and the document; what it did not say is what the identifier costs at deployment time.*
+
+`http://localhost:8080/mcp` above is not only a name. It is the value [ADR-0005](0005-the-authorization-server-is-a-dependency-not-a-deliverable.md) puts in every token's `aud` via the realm's audience mapper, and the value this server compares that `aud` against — so a caller who reaches the server at any other address is holding a token whose audience names an address they did not use. The identifier is therefore **one URL in the deployment sense**, not merely one string in a document.
+
+Two replicas follow from map constraint `#5`, which wants statelessness falsifiable rather than asserted. **One identifier plus two replicas forces something in front of them**, because Compose publishes a host port to one container. So the exhibit runs a gateway, and the two replicas publish no port of their own.
+
+The alternative was two replicas on two host ports. It fails on this section's own terms: the audience would name a port no caller used, and the audience check is the load-bearing control — the normative register's *Resource indicators unhonoured* deviation records that Keycloak does not honour RFC 8707's `resource` parameter, so the resource server's own comparison is all there is. Making that comparison pass against an address the caller did not reach would hollow it out while leaving it green.
+
+**The consequence is a deployment fact, not a protocol one**, which is why it lands here as a corollary rather than as a decision of its own: nothing about the wire changes, and a reader who deploys this behind any single-address load balancer has satisfied it. `gateway/README.md` holds the nginx mechanics — why two upstreams are named individually rather than scaled, and why one worker makes the rotation observable — and points here for why there is one address at all.
 
 ### Refusals disclose the caller's own token, and nothing else
 
