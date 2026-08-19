@@ -1,3 +1,15 @@
+# Every text file is LF in the index and LF in the working tree, on every
+# platform. Without this, a tool that writes a newline through Python's text
+# mode on Windows silently produces CRLF, and the whole file lands rewritten in
+# a diff that nothing goes red over: ruff, mypy and pytest all pass on it, and
+# every later `git blame` points at that commit instead of the one that wrote
+# the code.
+#
+# Order matters. Later lines win for the same attribute, so this entry must stay
+# ABOVE the `-text` entries below or it would override them. Those four globs
+# are compared byte for byte and have to keep `-text`; each says why.
+* text=auto eol=lf
+
 # The preflight step hashes the fetched document against the committed copy, so
 # the committed copy's bytes must not depend on whose machine checked it out.
 # `-text` disables line-ending conversion outright rather than normalising it,
