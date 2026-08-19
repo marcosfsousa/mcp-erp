@@ -4,6 +4,7 @@
 - **Date:** 2026-08-11
 - **Ticket:** [#8 Decide what performs the run](https://github.com/marcosfsousa/mcp-erp/issues/8)
 - **Evidence:** [ADR-0006](0006-fail-closed-in-a-fixed-order.md) (the gate order), [ADR-0008](0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md) (the substrate this follows from), [ADR-0001](0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md); [`docs/research/0004-mcp-client-landscape.md`](../research/0004-mcp-client-landscape.md); map constraints #4, #8, and the standing *legacy: discussable, not built*; official Python `mcp` 2.0.0 documentation, read 2026-08-11
+- **Amended:** 2026-08-19 — additive, by [#38](https://github.com/marcosfsousa/mcp-erp/issues/38), which ran the three assertions. **The open condition is discharged: token verification sits ahead of era routing**, and all three pass. See *The first run, and what it settled*. No decision here is reversed — this is the branch the decision was written for.
 
 ## Question
 
@@ -61,6 +62,22 @@ The third assertion earns its place separately from the first two. *Cannot claim
 If token verification turns out not to sit ahead of era routing, the answer changes rather than the wording. Refusing the era at the edge becomes the live option again, and the cost accounting above — which trades a clean modern-only story for third-party reach — has to be redone against a leg that is genuinely open rather than merely undescribed.
 
 That is recorded here as a condition, not a risk to be managed, so that whoever runs the assertions first knows what a red one means.
+
+### The first run, and what it settled
+
+*Added 2026-08-19 by [#38](https://github.com/marcosfsousa/mcp-erp/issues/38), which ran them.*
+
+**All three pass. Token verification sits ahead of era routing, and the condition above is discharged rather than met.** Refusing the era at the edge does not become live again, the cost accounting stands unrevised, and this decision needs no rewording — the branch it was written for is the one that happened.
+
+By the time the assertions ran they were already expected to be green, because [ADR-0013](0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md) settled the placement by construction: the gate chain is route-level middleware wrapping the protocol package's ASGI application, so era routing is strictly below it whatever the package does internally. **That made them confirm rather than discover, and it did not make them redundant.** The wiring being right is a claim about the wiring; what these assert is that the wiring produces the refusal, on a leg no other test in the repository touches.
+
+**What made the ordering observable rather than inferred.** `initialize` is the instrument, because it is the one method that exists on exactly one leg — the `2026-07-28` revision removed connection initialization entirely. Sent with no version header and a valid token it is *answered*, with a handshake-era `protocolVersion`, which can only have happened after era routing chose the legacy transport. Sent with the modern envelope it is `-32601`. Sent with no token it is `401` and a challenge, which the legacy transport has no concept of and could not have produced. A request that demonstrably reaches an era-routed handler is refused before it gets there.
+
+**The legacy leg is live, and that is what the refusals are worth something against.** With a token, a legacy `tools/call` reaches the same handler, the same policy chain and the same row scoping as its modern twin, and returns rows. A `401` on a leg that was never reachable would have asserted the absence of a surface rather than the guarding of one, so the control is part of the proof rather than beside it.
+
+**Each recorded removal was confirmed by hand**, which `scenarios.yaml` asks for when a scenario is written and which these three could not have had before there was a server to remove anything from. Applying token verification below era routing turns all three red, and turns an unauthenticated legacy `tools/call` into a `200` carrying rows. Skipping the scope gate on the legacy leg turns exactly the second red. Keying the exemption on a defaulted method name turns exactly the third red — including a legacy `tools/call` sending `Mcp-Method: server/discover`, which under that removal executes the tool for a caller holding nothing.
+
+**Where their value went.** ADR-0009 said it was *"concentrated entirely in the first run"*, and after that run it is not. What is left is a regression check on an always-on leg that nothing else exercises, which is why they keep their place in the floor of 11 rather than being retired as spent.
 
 ## Options considered
 

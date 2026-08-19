@@ -163,6 +163,57 @@ def post(
         )
 
 
+def legacy_post(
+    method: str,
+    params: Mapping[str, Any] | None = None,
+    *,
+    token: str | None = None,
+    headers: Mapping[str, str] | None = None,
+    request_id: int = 1,
+) -> httpx2.Response:
+    """The **second request shape**: a legacy-era call, which is a call with no envelope.
+
+    ADR-0009's cost line names this — *"a second request shape in the suites that
+    exists only to be refused"* — and it is here rather than in the one suite that
+    uses it for the reason this module exists: what a request on the wire looks
+    like is one set of decisions, and the legacy shape is decided by subtraction
+    from the modern one.
+
+    **Everything the modern era added is absent, and the absence is the whole
+    definition.** No ``MCP-Protocol-Version``, no ``Mcp-Method``, no ``Mcp-Name``,
+    and no ``params._meta``: the handshake era establishes once, at
+    ``initialize``, what the `2026-07-28` revision carries per request. Era
+    routing keys on the version header alone and an absent one routes as legacy,
+    so what makes this a legacy request is precisely what it does not send.
+
+    ``Accept`` and ``Content-Type`` stay, because they are HTTP rather than era.
+
+    Args:
+        method: The JSON-RPC method, sent in the body and nowhere else.
+        params: The method's parameters, verbatim — no envelope is merged in.
+        token: A bearer credential, when the request is meant to carry one.
+        headers: Extra headers, for the one assertion that sends a routing
+            header the leg cannot earn anything with. Merged last, so a caller
+            can add a header this shape defines itself by omitting — which is
+            the point of the parameter and the only reason it exists.
+        request_id: The JSON-RPC identifier.
+    """
+    sent = {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+    }
+    if token is not None:
+        sent["authorization"] = f"Bearer {token}"
+    sent.update(headers or {})
+
+    body: dict[str, Any] = {"jsonrpc": "2.0", "id": request_id, "method": method}
+    if params is not None:
+        body["params"] = dict(params)
+
+    with httpx2.Client(base_url=BASE_URL, timeout=TIMEOUT) as http:
+        return http.post(ENDPOINT, headers=sent, json=body)
+
+
 def result(response: httpx2.Response) -> dict[str, Any]:
     """The ``result`` object of a successful JSON-RPC response.
 

@@ -63,6 +63,13 @@ meta:
         ADR-0009 voided the -32022 observation because era routing precedes the
         gate chain. Becomes a row only if the seam assertions show a modern-era
         request declaring an unsupported version still reaches it.
+        CONDITION MET, 2026-08-19 (#38): it does. A request carrying an
+        unrecognised `MCP-Protocol-Version` routes to the modern entry rather
+        than the legacy one, is refused `401` unauthenticated, and answers
+        -32022 with a supported-version list once past the token gate. #44 mints
+        the row: it moves `total`, `basis_split` and the write-up's rendered
+        table, which are derived counts map constraint `#12` tracks across three
+        documents, and it needs a test to stay in bijection with.
 
 scenarios:
 

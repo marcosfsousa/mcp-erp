@@ -5,7 +5,20 @@
 canonical for named attacks; `matrix.yaml` is canonical for the decision matrix.
 The two are disjoint and neither arbitrates the other.
 
-Needs Compose. The bulk lands with #44 (the seam assertions with #38).
+Needs Compose. The bulk lands with #44.
+
+**The three `basis: seam` rows landed with #38**, in `test_legacy_era_seam.py`,
+and they are the reason that ticket ran on its own rather than inside #44.
+ADR-0009 left an open condition — *where token verification sits relative to era
+routing*, which no documentation settles — and wrote three assertions to falsify
+it. **All three pass**, so the condition is discharged and refusing the legacy
+era at the edge does not become live again. ADR-0009's *The first run, and what
+it settled* records it, and the module docstring carries the short version.
+
+They keep running afterwards for a different reason than they were written for:
+the legacy leg is always on, nothing else in this repository touches it, and a
+regression there would be invisible everywhere else. That is what their place in
+the floor of 11 protects.
 
 **Three rows landed early, with #37**, because that slice is what made them
 reachable and its acceptance criteria name them: `list_partition_scoped`,
