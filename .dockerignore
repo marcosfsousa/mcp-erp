@@ -1,0 +1,29 @@
+# What never reaches a build context, and why the list is short.
+#
+# The server image copies four things — `pyproject.toml`, `uv.lock`,
+# `CONTEXT.md` and `src/` — so most of this repository would be sent to the
+# daemon, read once, and ignored. The entries below are the ones that would
+# either be large, or would change on every run and so invalidate the cache for
+# a reason that has nothing to do with the image.
+#
+# `.git/` is first for both reasons at once.
+.git/
+.github/
+.claude/
+
+# Materialised environments and tool caches. The image builds its own from the
+# lockfile, and a host's `.venv/` is the wrong platform anyway.
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Proof artifacts and prose. Neither is in the image: the suites run against a
+# running server from outside it, and the ADR trail is read in a browser.
+tests/
+docs/
+keycloak/
+db/
+public/

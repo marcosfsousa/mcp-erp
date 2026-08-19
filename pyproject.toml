@@ -7,14 +7,49 @@ readme = "CONTEXT.md"
 # Dockerfile. A split leaves CI testing a runtime the deploy image does not use,
 # which is a green suite that proves nothing about the artifact.
 requires-python = "==3.13.*"
-# One runtime dependency, and it sits here rather than in the dev group on
-# purpose. The identity generator ships inside layer 2 — ADR-0013 rejected
-# putting provisioning outside `src/`, because that would let it survive
-# ejection by sitting outside the blast radius — so the seed parser it imports
-# is a dependency of the distribution, not of the test tooling. A dev-group
-# placement would leave a module in `src/` that imports fine on a runner and
-# fails at container start, which is the exact failure the note below refuses.
-dependencies = ["pyyaml"]
+# The deploy manifest: what the image carries. Every entry is needed by the
+# artifact — all but one because a module under `src/` imports it, and `uvicorn`
+# because the container has no entry point without it. Nothing here is needed
+# only by a test: a dev-group placement would leave a module in `src/` that
+# imports fine on a runner and fails at container start, which is the exact
+# failure the note below refuses.
+dependencies = [
+    # The composition root's application. ADR-0013 drew it as `FastAPI(routes=…)`
+    # and #32 executed that drawing, so it is the shape the code is diffed
+    # against. It contributes no route of its own: the two routes are a plain
+    # `Route` each, because a mounted ASGI application is not a route and
+    # dependency solving never reaches one. See `mcp_erp.app` for what that
+    # costs and what is switched off because of it.
+    "fastapi",
+    # What discovery and the key-set fetch speak. The 2.x line, because it is
+    # the client the protocol package already carries and a second HTTP stack in
+    # one image would be a second set of timeout and redirect defaults to keep
+    # honest. The dev group's `httpx` is the 0.x line and belongs to the token
+    # helper, which is test-only.
+    "httpx2",
+    # Layer 1's substrate. ADR-0008 chose it after finding that it serves both
+    # protocol eras from one endpoint with no way to disable either, which is
+    # what turned dual-era support from a feature built into a fact documented.
+    "mcp",
+    # Local token validation, which ADR-0006 keeps in our own code rather than
+    # handing to introspection. The `crypto` extra is what verifies an RS256
+    # signature; without it a token would be decoded and not verified, which is
+    # the one thing this server exists to do properly.
+    "pyjwt[crypto]",
+    # The ERP's rows. Layer 3's only I/O dependency, and it stays out of layer 2
+    # deliberately: the principal directory is a committed file held in memory,
+    # so the ejection suite runs the real implementation with no database.
+    "psycopg[binary,pool]",
+    # The identity generator ships inside layer 2 — ADR-0013 rejected putting
+    # provisioning outside `src/`, because that would let it survive ejection by
+    # sitting outside the blast radius — so the seed parser it imports is a
+    # dependency of the distribution rather than of the test tooling.
+    "pyyaml",
+    # What the image runs. It is a dependency of the artifact rather than of any
+    # module: nothing under `src/` imports it, and the container has no entry
+    # point without it.
+    "uvicorn",
+]
 
 [dependency-groups]
 # Test-only tooling, installed separately from the deploy manifest above.

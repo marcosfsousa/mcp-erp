@@ -5,6 +5,7 @@
 - **Ticket:** [#7 Choose the authorization server](https://github.com/marcosfsousa/mcp-erp/issues/7)
 - **Evidence:** [`docs/research/0003-2026-07-28-authorization-requirements.md`](../research/0003-2026-07-28-authorization-requirements.md), [`docs/research/0004-mcp-client-landscape.md`](../research/0004-mcp-client-landscape.md); [ADR-0001](0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md); map constraints #1, #5, #8, #9; live verification against Keycloak 26.7.1, 2026-08-11
 - **Amended:** 2026-08-15 — substantive, by [#10](https://github.com/marcosfsousa/mcp-erp/issues/10). Deviation 2's *"property of the local harness, not of the design"* framing is **withdrawn** and replaced with *not closed here*, with the route that would close it named; one *Input to other tickets* entry is void. See *Deviations 2* and *Consequences*. No decision here is reversed.
+- **Amended:** 2026-08-19 — cosmetic, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37). One cross-reference: this ADR says the audience is the resource's own URL without fixing that URL, and [ADR-0006](0006-fail-closed-in-a-fixed-order.md) is what fixes it — including what it costs at deployment time. See *Audience binding, and the gap underneath it*. No decision here is changed.
 
 ## Question
 
@@ -66,6 +67,8 @@ Also verified, and it de-risks the online proof: Claude selects the metadata-doc
 The audience arrives via an **Audience mapper on a *default* client scope per resource server**, so the audience is a property of the resource rather than of the request. The value is the **resource's own URL in the environment it is running in**, injected through Keycloak's `${VAR}` placeholder — resolved from operating-system environment variables only, textually, before the realm JSON is parsed.
 
 Deliberately *not* the scope-selected variant, which would mix "what I may do" with "who this token is for" in one vocabulary — a cost #11 and constraint #10 would then have to absorb. And deliberately not a stable abstract identifier: blessed by RFC 8707 §2, but `aud` would stop equalling the `resource` a client sends, which breaks the moment we move to a server that honours it — precisely the phase-two direction.
+
+*Cross-reference added 2026-08-19 by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37).* **This section says which URL the audience is without saying what that URL is; [ADR-0006](0006-fail-closed-in-a-fixed-order.md) §Discovery is published both ways, at one address is what fixes it** — the identifier, the path-inserted metadata address derived from it, and, since #37 deployed the server, **what having exactly one identifier costs at deployment time**: one published address, and therefore a gateway in front of the two replicas map constraint `#5` asks for. The audience check named above is why that matters rather than being a hosting detail — it is the load-bearing control, per deviation 1 below, and an audience naming an address no caller reached would pass while proving nothing.
 
 ### How the exhibit is proved
 
