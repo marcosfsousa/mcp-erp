@@ -63,13 +63,19 @@ meta:
         ADR-0009 voided the -32022 observation because era routing precedes the
         gate chain. Becomes a row only if the seam assertions show a modern-era
         request declaring an unsupported version still reaches it.
-        CONDITION MET, 2026-08-19 (#38): it does. A request carrying an
-        unrecognised `MCP-Protocol-Version` routes to the modern entry rather
-        than the legacy one, is refused `401` unauthenticated, and answers
-        -32022 with a supported-version list once past the token gate. #44 mints
-        the row: it moves `total`, `basis_split` and the write-up's rendered
-        table, which are derived counts map constraint `#12` tracks across three
-        documents, and it needs a test to stay in bijection with.
+        CONDITION MET BY HAND, NOT BY ARTIFACT — 2026-08-19 (#38). Run against
+        Compose while writing the seam rows, never committed: a request carrying
+        `MCP-Protocol-Version: 1999-01-01` with a matching envelope version routes
+        to the modern entry rather than the legacy one, is refused `401`
+        unauthenticated, and answers -32022 with `supported: [2026-07-28]` once
+        past the token gate. So the condition holds and this stops being held
+        out — but nothing in the repository asserts it yet, and a reader should
+        treat the line above as a note to #44 rather than as a proven row.
+        #44 mints it, because the row moves `total`, `basis_split` and the
+        write-up's rendered table — derived counts map constraint `#12` tracks
+        across three documents — and needs a test to stay in bijection with.
+        ADR-0010 §One candidate is held outside the thirty-one states the same
+        condition and is now met too; it is amended when the row lands, not here.
 
 scenarios:
 
@@ -631,9 +637,20 @@ scenarios:
     citation:
       source: ADR-0009 §Three assertions, and they exist to falsify rather than to sample
     normative_strength: null
-    removal: Resolve scope from the era-specific handler rather than the shared policy function.
+    removal: >-
+      Run the scope gate on the modern leg alone, skipping it when no
+      `MCP-Protocol-Version` header is present.
     status: asserted
     floor: true
+    note: >-
+      REMOVAL REWORDED 2026-08-19 (#38), on confirming it by hand. It read
+      "resolve scope from the era-specific handler rather than the shared policy
+      function", which was written against ADR-0013's original placement of gate
+      5 at dispatch. #37 moved gate 5 into middleware ahead of era routing, so
+      there is no era-specific handler left for scope to be resolved from and the
+      old wording names a deletion nothing can perform. The rule it protects is
+      unchanged — one scope rule, one implementation, both legs — and the
+      reworded deletion is the one that reaches it on the chain as built.
 
   - name: legacy_discover_exemption_unavailable
     basis: seam

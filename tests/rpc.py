@@ -75,6 +75,23 @@ two, which is the property under test.
 CLIENT_INFO: Final = {"name": "mcp-erp-suite", "version": "0"}
 """Optional by the specification and sent anyway, because a real client sends it."""
 
+TRANSPORT_HEADERS: Final = {
+    "content-type": "application/json",
+    "accept": "application/json, text/event-stream",
+}
+"""What a request carries in either era, because both of these are HTTP rather than protocol.
+
+``Accept`` names both response modes although this server answers only the first.
+The `MUST` that names the two binds a **client's** ability to read them — *"the
+client MUST support both"* — and a suite that stopped sending
+``text/event-stream`` would stop being a faithful client. The register's *No
+streamed response mode* interpretation carries the reading.
+
+One definition rather than one per shape: the two shapes differ by what the
+modern era **added**, and a constant that both start from is what keeps that the
+only difference between them.
+"""
+
 TIMEOUT: Final = 30.0
 
 
@@ -107,14 +124,7 @@ def routing_headers(
     that are about it build the disagreement explicitly.
     """
     headers = {
-        "content-type": "application/json",
-        # Both, although this server answers only the first. The `MUST` that
-        # names the two response modes binds a **client's** ability to read
-        # them — "the client MUST support both" — and a suite that stopped
-        # sending `text/event-stream` would stop being a faithful client.
-        # The register's *No streamed response mode* interpretation carries
-        # the reading.
-        "accept": "application/json, text/event-stream",
+        **TRANSPORT_HEADERS,
         MCP_PROTOCOL_VERSION_HEADER: LATEST_PROTOCOL_VERSION,
         MCP_METHOD_HEADER: method,
     }
@@ -123,10 +133,7 @@ def routing_headers(
     if name_key is not None and params is not None and name_key in params:
         headers[MCP_NAME_HEADER] = encode_header_value(str(params[name_key]))
 
-    if token is not None:
-        headers["authorization"] = f"Bearer {token}"
-
-    return headers
+    return _credentialed(headers, token)
 
 
 def get(path: str) -> httpx2.Response:
@@ -155,12 +162,11 @@ def post(
     suites that call this, and a helper that raised would make them assert
     against an exception rather than against the wire.
     """
-    with httpx2.Client(base_url=base_url or BASE_URL, timeout=TIMEOUT) as http:
-        return http.post(
-            ENDPOINT,
-            headers=routing_headers(method, params, token=token),
-            json=envelope(method, params, request_id=request_id),
-        )
+    return _send(
+        routing_headers(method, params, token=token),
+        envelope(method, params, request_id=request_id),
+        base_url=base_url,
+    )
 
 
 def legacy_post(
@@ -186,32 +192,27 @@ def legacy_post(
     routing keys on the version header alone and an absent one routes as legacy,
     so what makes this a legacy request is precisely what it does not send.
 
-    ``Accept`` and ``Content-Type`` stay, because they are HTTP rather than era.
+    :data:`TRANSPORT_HEADERS` stays, because both of those are HTTP rather than era.
 
     Args:
         method: The JSON-RPC method, sent in the body and nowhere else.
         params: The method's parameters, verbatim — no envelope is merged in.
         token: A bearer credential, when the request is meant to carry one.
-        headers: Extra headers, for the one assertion that sends a routing
-            header the leg cannot earn anything with. Merged last, so a caller
-            can add a header this shape defines itself by omitting — which is
-            the point of the parameter and the only reason it exists.
+        headers: Extra headers, merged last, so a caller can add a header this
+            shape defines itself by omitting. That is the parameter's only
+            purpose and the seam assertions are its only callers: they send
+            ``Mcp-Method`` on a leg that can prove nothing with it, which is how
+            they show the ``server/discover`` exemption follows from absence
+            rather than from a default.
         request_id: The JSON-RPC identifier.
     """
-    sent = {
-        "content-type": "application/json",
-        "accept": "application/json, text/event-stream",
-    }
-    if token is not None:
-        sent["authorization"] = f"Bearer {token}"
+    sent = _credentialed(dict(TRANSPORT_HEADERS), token)
     sent.update(headers or {})
 
-    body: dict[str, Any] = {"jsonrpc": "2.0", "id": request_id, "method": method}
-    if params is not None:
-        body["params"] = dict(params)
-
-    with httpx2.Client(base_url=BASE_URL, timeout=TIMEOUT) as http:
-        return http.post(ENDPOINT, headers=sent, json=body)
+    return _send(
+        sent,
+        {"jsonrpc": "2.0", "id": request_id, "method": method, "params": dict(params or {})},
+    )
 
 
 def result(response: httpx2.Response) -> dict[str, Any]:
@@ -267,6 +268,32 @@ def challenge(response: httpx2.Response) -> dict[str, str]:
         name, _, value = pair.partition("=")
         parameters[name.strip()] = value.strip().strip('"')
     return parameters
+
+
+def _send(
+    headers: Mapping[str, str], body: Mapping[str, Any], *, base_url: str | None = None
+) -> httpx2.Response:
+    """One POST to the tool endpoint, and the only place either shape builds a client.
+
+    The two shapes differ in what they send and in nothing else. Keeping the
+    address, the timeout and the decision not to raise on a `4xx` in one function
+    is what makes that true rather than merely intended — the same argument
+    :func:`get` states, applied to the second shape that arrived after it.
+    """
+    with httpx2.Client(base_url=base_url or BASE_URL, timeout=TIMEOUT) as http:
+        return http.post(ENDPOINT, headers=dict(headers), json=dict(body))
+
+
+def _credentialed(headers: dict[str, str], token: str | None) -> dict[str, str]:
+    """The headers with a bearer credential added, when there is one to add.
+
+    Both shapes present a token the same way, because the token is the seam and
+    the seam is era-independent — which is the property the legacy rows assert.
+    Two spellings of this would be two ways for that to stop being true.
+    """
+    if token is not None:
+        headers["authorization"] = f"Bearer {token}"
+    return headers
 
 
 def _split(parameters: str) -> list[str]:
