@@ -1,5 +1,13 @@
 """Four requisitions, so that a listing has something to scope.
 
+**Above the test directories, beside `rpc.py` and `tokens.py`.** It shipped
+inside `tests/attack_suite/` with the one suite that needed it, and moved here
+the moment a second directory did — which is the rule `tokens.py` already
+states: shared tooling that lives in one artifact's directory becomes that
+artifact's and gets copied by the next. `tests/conftest.py` is what puts this
+directory on the import path, so `import seeded_requisitions` reads the same
+from any of the five.
+
 **This file is temporary and its replacement is already specified.** ADR-0003
 splits the seed in two: the organisation is authored, and the per-row
 requisitions are **generated from the decision matrix definition**, one fixture
@@ -10,7 +18,10 @@ equality against an empty table would assert nothing at all.
 What is here is therefore the smallest set that makes `list_partition_scoped`
 falsifiable, and no more: one cost centre with two rows, and the other two with
 one each, so that *the caller's own partition*, *another partition* and *all
-three* are three different answers. #43 deletes this file.
+three* are three different answers. The same four rows serve
+`row_probe_indistinguishable` unchanged — a named row in another centre is one
+of these, and a row that never existed is any identifier past the last of them.
+#43 deletes this file.
 
 **The wipe is once per run, not between rows**, which is the shape ADR-0003
 already chose. The alternative it rejected is worth restating because it is the
@@ -89,6 +100,17 @@ Every submitter raises against **their own** cost centre, because that is what
 the domain makes inexpressible otherwise: `submit_requisition` takes no cost
 centre and stamps the submitter's. A row that broke that would be data no tool
 could have produced.
+"""
+
+
+ABSENT_IDENTIFIER: Final = "req_9999"
+"""An identifier in the right shape that no row carries, and none will.
+
+The *never existed* half of `row_probe_indistinguishable`. Written out rather
+than derived from :data:`ROWS`, because it has to stay absent for the whole run
+and `submit_requisition` mints the next identifier after the highest that
+exists — a value one past the last seeded row would be handed out by the fourth
+submission of a suite. Nothing reaches four figures in a test run.
 """
 
 

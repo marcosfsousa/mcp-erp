@@ -9,6 +9,7 @@
 - **Amended:** 2026-08-18 — additive, by [#35](https://github.com/marcosfsousa/mcp-erp/issues/35). The seed's third rendering needs a generator of its own, so there are **three generators, not two**, and layer 3 holds two of them: the organisation renderer beside the fixture generator. See *Both generators, split by the vocabulary each speaks*. The rule that decides where each lives is unchanged, and no decision here is reversed.
 - **Amended:** 2026-08-19 — additive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which built the chain. **Gate 5 runs in middleware, not at dispatch**, because its wire shape is an HTTP status and header that a JSON-RPC envelope cannot carry; gate 6 stays at dispatch. And there is a **fifth test directory**, `tests/wire/`, for the wire assertions that belong to no proof artifact. See *The gate chain sits in middleware, in two tiers* and *Four test directories, named for artifacts*. No decision here is reversed.
 - **Amended:** 2026-08-19 — substantive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37). [ADR-0002](0002-refusal-shape-follows-the-remedy.md) cut the SSE response mode, so **response mode is no longer keyed on cardinality — there is one wire shape.** N outcomes **fold** into one result body; the fold is specified here and **not implemented**, and [#41](https://github.com/marcosfsousa/mcp-erp/issues/41) lands it. See *Streaming, restated portably*. This reverses the cardinality keying and nothing else.
+- **Amended:** 2026-08-19 — additive, by [#39](https://github.com/marcosfsousa/mcp-erp/issues/39), which built the second and third tools. A handler's third answer — **an argument its own declaration forbids** — is signalled with `ValueError` and rendered as `-32602`, and is deliberately **not** a fourth denial class. And a tool's declaration is **one module per tool** inside layer 3. See *Handlers in layer 3, adapters in layer 1* and *Three sibling packages, one composition root*. No decision here is reversed.
 
 ## Question
 
@@ -162,6 +163,14 @@ A handler takes a `Principal` and parsed arguments, calls `load` and the chain, 
 
 **Layer 1 learns the shape of a refusal, never its grounds.** It sees `denial_class` and cardinality; it never sees which rule fired, against which attribute, on which row. That is the precise form of the title's claim.
 
+*Amended 2026-08-19 by [#39](https://github.com/marcosfsousa/mcp-erp/issues/39), which built the first tools taking arguments.* **A handler has a third thing to say, and it is not a refusal.**
+
+The sentence above gives a handler two answers: a domain outcome, or a refused `Decision`. A tool that takes arguments has a third case — an argument its own declaration forbids, like a vendor absent from the `enum` [ADR-0002](0002-refusal-shape-follows-the-remedy.md) put in `submit_requisition`'s schema. Nothing on this stack validates arguments against a declared `inputSchema`, so the case arrives at the handler rather than being refused ahead of it.
+
+**It answers `-32602`, and it carries no `Reason`.** Nothing was authorized or denied, so giving it one would amend [ADR-0002](0002-refusal-shape-follows-the-remedy.md)'s closed vocabulary for a spelling mistake — and would tell a model to route around a wall that is not there, which is the same collapse the three denial classes exist to prevent, arriving through a fourth door. The three shapes are unchanged and this is not a fourth one.
+
+**The signal is `ValueError`**, the standard library's name for exactly this, so a handler raises it without importing anything layer 1 owns and layer 1 catches it around the handler's own iteration and nowhere else. The alternative — layer 1 validating arguments against the declared schema itself — would put a JSON Schema implementation in the layer that must not learn what a tool is, for a rule the declaration already states. The negative guarantee holds: the message is the handler's, and layer 1 never inspects it.
+
 ### The gate chain sits in middleware, in two tiers
 
 *Amended 2026-08-18 by [#32](https://github.com/marcosfsousa/mcp-erp/issues/32) — the two tiers and their order survived contact; the carrier under them did not. `Mount` becomes `Route`, and the accepted cost below is withdrawn.*
@@ -225,6 +234,12 @@ src/mcp_erp/
 ```
 
 Ejection is one `rm -rf` plus editing one file. ADR-0004 option 3 already rejected extracting layer 2 as a separate installable distribution, and nothing here reopens it.
+
+*Amended 2026-08-19 by [#39](https://github.com/marcosfsousa/mcp-erp/issues/39), which built the second and third tools.* **Inside layer 3, a tool's declaration is one module per tool.**
+
+A tool declares five module-level names — `NAME`, `TITLE`, `DESCRIPTION`, `INPUT_SCHEMA`, `OUTPUT_SCHEMA` — plus its `Action`. One module holding three tools has to prefix all six, which is the flattening layer 3's `__init__` already refuses at the package level, arriving one level down. So `purchase_to_pay/` holds `requisition.py` for the entity and the row shape its readers share, and `list_requisitions.py`, `get_requisition.py` and `submit_requisition.py` for the declarations, each naming its `Action` `ACTION` — the tool's identity is the module's and is never repeated inside it. The handlers stay together in `handlers.py`, which is what makes the three entry points visible in one file.
+
+The composition root pairs them by hand, three times, rather than looping: the three declaration modules have no common type, and giving them one means a protocol describing what a tool declaration holds — a fourth spelling of `ToolRegistration`, living in the layer that must not learn what a tool is.
 
 ### Four test directories, named for artifacts
 

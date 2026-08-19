@@ -217,6 +217,38 @@ rediscover.
   second draft also had to qualify `405`: unauthenticated is `401`, from the
   token gate, before the transport is reached. — #37, ADR-0008, ADR-0009
 
+- **Not every wrong request is a refusal, and treating one as a refusal is how a
+  vocabulary rots.** A vendor absent from `submit_requisition`'s `enum` is a
+  caller's spelling mistake: nothing was authorized, nothing was denied, and the
+  tempting move is to reach for the closed reason vocabulary because there is one
+  and it is right there. It answers `-32602` and carries no `reason` — a refusal
+  shape here would tell a model to route around a wall that is not there, which
+  is the collapse the three denial classes exist to prevent arriving through a
+  fourth door. The three shapes describe *decisions about a caller*, and that is
+  the line, not *anything that went wrong*. — #39, ADR-0013, ADR-0002
+
+- **A denial class can be built, shaped and unreachable, and the honest report
+  says which.** Both tools in the first slice that exercises all three policy
+  entry points are gated by scope alone — reading is, and ADR-0003 rejected a
+  fifth role for submitting — so `role_missing`'s `-31010` has no caller that
+  reaches it at the wire until a role-gated tool exists. It is declared, its
+  record states its own shape, and layer 2 asserts it; nothing over HTTP does.
+  The alternative was to invent a role requirement so a criterion could be ticked,
+  which would have contradicted an ADR to make a test green. — #39, ADR-0002,
+  ADR-0003
+
+- **The tool with no resource still declares the field it never consults.**
+  `submit_requisition` stops at `decide_call`, and only `decide_item` reads
+  `partition_bypass` — so its empty set changes no behaviour today. Declaring it
+  anyway is what stops the value being a latent grant the day the tool acquires a
+  resource, and this is the one ticket that declares one of each, so the
+  asymmetry `{auditor}`-on-reads / empty-on-writes is visible in a single diff
+  rather than tool by tool. Nothing in the type objects to the wrong value, and
+  ADR-0013 records that as a known cost rather than closing it: a constructor
+  check reading *bypass is legal only on a read* would be layer 2 legislating a
+  rule the ADR left open, on a field whose whole point is that layer 3 owns it.
+  — #39, ADR-0013, ADR-0007
+
 ---
 
 ## Findings

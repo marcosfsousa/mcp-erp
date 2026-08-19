@@ -22,6 +22,12 @@ and the refusal names the ticket that lands it. That is stated here and in
 ADR-0013 §Streaming, restated portably, rather than left as a difference between
 a document and this module.
 
+**A fourth thing is rendered here and is not a refusal.** Arguments a tool's
+declared schema does not permit answer ``-32602``, the protocol's own code for a
+request that cannot be acted on. Nothing was authorized or denied, so it carries
+no ``Reason`` and no ``denial_class`` — giving it one would amend a closed
+vocabulary for a spelling mistake.
+
 Nothing here keys on a tool's name — the negative guarantee the cut did not
 touch, and the one worth keeping.
 """
@@ -118,7 +124,8 @@ def build(registry: Registry) -> Server[None]:
         """Run one tool's handler and render its outcomes.
 
         Raises:
-            MCPError: No tool has that name, or the handler refused with a
+            MCPError: No tool has that name, the arguments are not ones the
+                tool's schema permits, or the handler refused with a
                 protocol-error denial class.
         """
         registration = registry.get(parameters.name)
@@ -126,9 +133,24 @@ def build(registry: Registry) -> Server[None]:
             raise MCPError(INVALID_PARAMS, f"no such tool: {parameters.name!r}")
 
         principal = _principal(context)
-        outcomes = [
-            outcome async for outcome in registration.handler(principal, parameters.arguments or {})
-        ]
+        try:
+            outcomes = [
+                outcome
+                async for outcome in registration.handler(principal, parameters.arguments or {})
+            ]
+        except ValueError as unusable:
+            # **Not a refusal, and deliberately not one.** Nothing was authorized
+            # or denied here — the arguments are not ones the declared schema
+            # permits — so it gets the protocol's own code for a request that
+            # cannot be acted on rather than a `Reason`, which would amend a
+            # closed vocabulary for a spelling mistake.
+            #
+            # `ValueError` because it is the standard library's name for exactly
+            # this, so a handler signals it without importing anything layer 1
+            # owns. The catch stays wrapped around the handler's own iteration
+            # and nothing else, and layer 1 still learns no grounds: the message
+            # is the handler's, and this module never inspects it.
+            raise MCPError(INVALID_PARAMS, str(unusable)) from unusable
 
         if len(outcomes) != 1:
             # N outcomes fold into one result body — specified by ADR-0013 and
