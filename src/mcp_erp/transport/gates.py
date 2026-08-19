@@ -19,8 +19,9 @@ an authentication bypass — send ``Mcp-Method: server/discover`` with
 ``tools/call`` in the body, and if the exemption is granted on the header before
 header and body are compared, the token check never runs on a tool call. The fix
 is ordering rather than a special case: prove header and body agree **first**,
-and the attack becomes structurally impossible. Normative register row 4 records
-that reading, and ``auth_bypass_via_method_header_mismatch`` is its falsifier.
+and the attack becomes structurally impossible. The normative register's *Validate
+before processing* interpretation records that reading, and
+``auth_bypass_via_method_header_mismatch`` is its falsifier.
 
 **Middleware rather than a dependency, and route-level rather than mount-level.**
 Layer 1's substrate supplies its own ASGI application, and a mounted ASGI app is

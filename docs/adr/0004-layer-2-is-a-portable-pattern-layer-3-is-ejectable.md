@@ -5,6 +5,7 @@
 - **Ticket:** none. A standing constraint, deliberately not raised through the map, so it is argued on its own merits rather than absorbed as a settled premise.
 - **Evidence:** [ADR-0001](0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md), [ADR-0002](0002-refusal-shape-follows-the-remedy.md), [ADR-0003](0003-the-schema-is-the-policy-functions-argument-list.md); map constraints #2, #3, #4, #6
 - **Amended:** 2026-08-18 — additive, by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). All five acceptance criteria are discharged and all four tabled couplings resolved; see [ADR-0013](0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md). No decision here is reversed.
+- **Amended:** 2026-08-19 — additive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37). The fourth tabled coupling **dissolves rather than being resolved**, because [ADR-0002](0002-refusal-shape-follows-the-remedy.md) cut the stream it coupled on; criterion 5 is discharged and then moot. See the coupling table and *Acceptance criteria for #12*. No decision here is reversed.
 
 ## Question
 
@@ -49,6 +50,8 @@ Not one of those mentions a requisition. That set *is* the layer-2 pattern, and 
 
 Two lesser ones, noted rather than tabled: the fixture generator knows domain field names, and tool schemas are partly data-derived. Both are sound as patterns and currently exist only as domain-specific instances.
 
+*Amended 2026-08-19 by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37) — the fourth coupling **dissolves**.* ADR-0002 cut the SSE response mode, so there is no layer-1 decision left for a layer-3 fact to justify: every POST is answered `application/json` whatever the tool, and ejecting purchasing no longer costs a demonstration. The row stays in the table because it records a coupling this design genuinely had, and because the way it was closed is the interesting part — the coupling was real, it was restated portably by ADR-0013 rather than removed, and then the thing it coupled to was cut on evidence. Resolved and then moot is a different history from never-coupled, and the table should not read as the second.
+
 ### Acceptance criteria for #12
 
 *Amended 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12) — all five are discharged in [ADR-0013](0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md). The criteria below are unchanged.*
@@ -57,7 +60,7 @@ Two lesser ones, noted rather than tabled: the fixture generator knows domain fi
 2. **The reason vocabulary splits.** Layer 2 owns a fixed set plus an extension point; layer 3 contributes its own values. `remedy` and the retry booleans stay wholly in layer 2, since they describe client behaviour rather than domain facts.
 3. **Row scoping is named after a principal attribute at the boundary**, with "cost centre" appearing only on the layer-3 side of it.
 4. **A principal directory is a layer-2 seam** — layer 2 defines the shape mapping an issuer-and-subject pair to roles and a scoping attribute; layer 3 supplies the rows. Provisioning then survives ejection.
-5. **The streaming justification is restated in layer-2 terms** — a tool whose call yields N independent outcomes — so the argument survives a different domain.
+5. **The streaming justification is restated in layer-2 terms** — a tool whose call yields N independent outcomes — so the argument survives a different domain. *(Discharged by ADR-0013, then **moot** from 2026-08-19: [#37](https://github.com/marcosfsousa/mcp-erp/issues/37) cut the stream the justification was for. The restatement it produced survives the cut and does the work now — **a call that yields N independent outcomes** is what the fold folds, and it is domain-free for the same reason it was then.)*
 
 ### The falsifiable form
 

@@ -108,8 +108,12 @@ def routing_headers(
     """
     headers = {
         "content-type": "application/json",
-        # Both, because a POST may be answered either way and the transport
-        # refuses a caller that has not said it can read the answer.
+        # Both, although this server answers only the first. The `MUST` that
+        # names the two response modes binds a **client's** ability to read
+        # them — "the client MUST support both" — and a suite that stopped
+        # sending `text/event-stream` would stop being a faithful client.
+        # The register's *No streamed response mode* interpretation carries
+        # the reading.
         "accept": "application/json, text/event-stream",
         MCP_PROTOCOL_VERSION_HEADER: LATEST_PROTOCOL_VERSION,
         MCP_METHOD_HEADER: method,

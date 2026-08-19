@@ -182,9 +182,40 @@ rediscover.
 - **The freshness hint is per caller, and a per-server setting cannot express
   it.** `ttlMs = min(5 minutes, remaining token lifetime)` depends on the token in
   front of you, so the protocol package's server-wide cache hint is the wrong
-  granularity by exactly one dimension — the same shape of mistake ADR-0013
-  rejected when it refused a per-tool streaming flag on the `Action`. Both times
-  the wrong granularity was the convenient one. — #37, ADR-0002
+  granularity by exactly one dimension. The comparison this note originally drew
+  — to ADR-0013 refusing a per-tool streaming flag on the `Action` — went moot
+  four days later when the stream was cut and a flag choosing between one thing
+  stopped being a granularity question at all. The cache hint stands on its own.
+  — #37, ADR-0002
+
+- **A design position that rests on having the thing it refuses is one
+  verification away from nothing.** ADR-0002 declined to cut SSE because *having
+  exactly one stream is what makes the refusal of a standalone stream a position
+  rather than an absence*. The one stream was on an unbuilt tool, so the position
+  rested on a promise; and when #37 checked all three proof tiers, none opened,
+  asserted on, or depended on a stream. What replaces it is a normative register
+  row saying the thing outright — the `MUST` that names both response modes binds
+  a **client's** ability to read them, never a server's obligation to produce
+  one. Stating a position is stronger than arranging to imply it. — #37, ADR-0002
+
+- **The cut order was never a sequence, and the record proved it before anyone
+  read it that way.** Map `#9` ranks four things from most expendable to least.
+  Both cuts taken so far were taken out of order — ADR-0005 took rank 4 first —
+  and rank 1 has never been defined, so a sequence reading was never executable.
+  The bullet recording the first taking said *"the first cut is spent"*, meaning
+  *one cut* and reading as *rank 1*. Restated as a ranking rather than corrected
+  into an order, because the ranking is what both takings actually honoured.
+  — #37, ADR-0005, ADR-0011
+
+- **A constraint that is false at the wire is worse than one that is silent.**
+  The first draft of `#6`'s replacement said *there is no standalone
+  server-initiated stream*. Executing it found one: a `GET` carrying a token
+  with no version header opens `text/event-stream` on the legacy leg and holds
+  it. The constraint is a **modern-era** claim, and the legacy stream is
+  inherited, gated, and named — which is the same amendment ADR-0006 already
+  took when its gate chain turned out to describe the modern leg only. The
+  second draft also had to qualify `405`: unauthenticated is `401`, from the
+  token gate, before the transport is reached. — #37, ADR-0008, ADR-0009
 
 ---
 

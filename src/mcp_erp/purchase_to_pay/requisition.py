@@ -124,9 +124,9 @@ class Requisition:
 
     Attributes:
         id: The opaque prefixed handle, sequential and legible against a
-            specification ``SHOULD`` — normative register row 3, taken so that
-            the probe scenario can *guess* a foreign identifier rather than be
-            handed one.
+            specification ``SHOULD`` — the normative register's *Legible
+            identifiers* deviation, taken so that the probe scenario can
+            *guess* a foreign identifier rather than be handed one.
         cost_centre: The submitter's own, stamped at submission. Layer 3's name
             for what layer 2 compares as the partition.
         vendor: The vendor's identifier.

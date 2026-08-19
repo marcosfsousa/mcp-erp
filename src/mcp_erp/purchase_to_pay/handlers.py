@@ -78,7 +78,7 @@ def list_requisitions(requisitions: Requisitions) -> Handler:
         visible = [row for row in rows if decide_item(principal, LIST_REQUISITIONS, row).permitted]
 
         # One outcome containing many rows, which is why a list tool never
-        # reaches layer 1's cardinality decision: result rows are not outcomes.
+        # reaches layer 1's fold: result rows are not outcomes.
         yield {"requisitions": [row.as_row() for row in visible]}
 
     return handler

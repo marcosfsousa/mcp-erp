@@ -11,11 +11,19 @@ The third — a ``403`` carrying a challenge — cannot be produced once the
 response is an envelope at ``200``, so gate 5 refuses it earlier, in
 :class:`~mcp_erp.transport.gates.ScopeGate`.
 
-**Response mode is keyed on cardinality**, one outcome answering
-``application/json`` and more than one opening the stream. Only single-outcome
-tools exist today, so the transport is configured for the first of those and the
-second arrives with the batch tool that earns it. Nothing here keys on a tool's
-name, which is the property that has to survive that arrival.
+**There is one wire shape: every POST is answered ``application/json``.**
+ADR-0002 cut the SSE response mode, so nothing here chooses a mode. What
+cardinality still decides is the *body*: one outcome renders directly, and N
+outcomes **fold** into one result carrying N answers.
+
+**The fold is specified and not implemented.** No tool yields more than one
+outcome yet, so a cardinality above one is refused loudly rather than folded,
+and the refusal names the ticket that lands it. That is stated here and in
+ADR-0013 §Streaming, restated portably, rather than left as a difference between
+a document and this module.
+
+Nothing here keys on a tool's name — the negative guarantee the cut did not
+touch, and the one worth keeping.
 """
 
 import json
@@ -123,14 +131,19 @@ def build(registry: Registry) -> Server[None]:
         ]
 
         if len(outcomes) != 1:
-            # Cardinality above one is the stream, and no tool yields it yet.
-            # Loud rather than silently rendering the first outcome, because a
-            # batch quietly answering for one item is the failure the rule
-            # "outcomes equal items requested" exists to prevent.
+            # N outcomes fold into one result body — specified by ADR-0013 and
+            # not implemented, because no tool yields more than one yet. Loud
+            # rather than silently rendering the first, because a batch quietly
+            # answering for one item is the failure the rule "outcomes equal
+            # items requested" exists to prevent.
+            #
+            # The message names a ticket rather than a capability, so it stays
+            # true until the fold lands rather than until something is "built".
             raise MCPError(
                 INTERNAL_ERROR,
                 f"{registration.name!r} produced {len(outcomes)} outcomes; "
-                "the streaming response mode is not built yet",
+                "no tool yields more than one yet, and the fold that folds them "
+                "into one result lands with issue 41",
             )
 
         return _render(outcomes[0])

@@ -116,8 +116,12 @@ def test_the_tool_set_is_fixed_at_deploy() -> None:
 
     That notification announces that the **server's** tool set changed; ours is
     fixed at deploy. What varies here is per-caller, which the notification
-    cannot express — and declaring it would additionally require a second
-    streaming endpoint that map constraint `#6` refuses.
+    cannot express — and declaring it would additionally require a streaming
+    endpoint that map constraint `#6` refuses.
+
+    "A **second** streaming endpoint" until 2026-08-19, when ADR-0002 cut the
+    first one. The clause still refuses this: `#6`'s standalone-stream half is
+    untouched by the cut, and it is the half this cites.
     """
     capabilities = rpc.result(rpc.post("server/discover"))["capabilities"]
     assert capabilities["tools"]["listChanged"] is False

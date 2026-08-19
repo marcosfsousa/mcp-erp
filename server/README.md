@@ -32,9 +32,9 @@ DATABASE_URL      the ERP's rows
 
 A missing value is a boot failure rather than a server that starts and validates
 against a guess. The audience check is the load-bearing control — Keycloak does
-not honour RFC 8707's `resource` parameter, which is normative register row 1 —
-and a defaulted resource identifier would make the one string it compares
-against something nobody chose.
+not honour RFC 8707's `resource` parameter, which is the normative register's
+*Resource indicators unhonoured* deviation — and a defaulted resource identifier
+would make the one string it compares against something nobody chose.
 
 Everything else is **discovered** from the issuer: the authorization server's
 metadata document, and through it the key set. That is what makes swapping

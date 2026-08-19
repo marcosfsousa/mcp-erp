@@ -67,7 +67,12 @@ class Decision:
 
     Refusals here are per-item: a batch yields one outcome per item **named in
     the request** — permit or refusal, never a silent drop. That is what makes
-    the response mode a function of the request rather than of the data.
+    the *answer* a function of the request rather than of the data.
+
+    It said "the response mode" until ADR-0002 cut the streamed mode, leaving
+    one wire shape and nothing to key. The rule is unchanged and now carries
+    more: layer 1 folds N outcomes into one result body, and this is the
+    invariant that fold rests on.
     """
 
     reason: Reason | None

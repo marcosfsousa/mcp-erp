@@ -90,12 +90,17 @@ def create_app(configuration: transport.Configuration | None = None) -> FastAPI:
         # replicas behind no sticky routing is what makes that falsifiable
         # rather than asserted.
         stateless=True,
-        # A single-outcome call answers `application/json`, which is every call
-        # the server can make today. ADR-0002 keys the mode on **cardinality**,
-        # and this flag is server-wide rather than per call — the batch tool
-        # that earns the stream is what has to reconcile them, and it is not
-        # built yet. Nothing in `mcp_erp.transport.dispatch` keys on a tool's
-        # name, which is the property that has to survive that reconciliation.
+        # **Every POST is answered `application/json`.** ADR-0002 took its own
+        # option 5 and cut the SSE response mode, so this flag is not a
+        # temporary setting standing in for a per-call decision — it is the
+        # whole of the response-mode policy, and there is one wire shape to
+        # have. The normative register's *No streamed response mode*
+        # interpretation states the reading: the `MUST` naming both modes
+        # binds a client's ability to read them, never a server's obligation
+        # to produce one.
+        #
+        # It does not reach the legacy `GET` stream, which the package serves
+        # from its own handler and which ADR-0009 authorises as inherited.
         json_response=True,
     )
 

@@ -38,12 +38,15 @@ as though the word had one owner, which is what building this found.
 Handler = Callable[[Principal, Mapping[str, Any]], AsyncIterator[Outcome]]
 """A tool's implementation: a principal and parsed arguments in, outcomes out.
 
-**Yielding rather than returning** is what makes ADR-0013's streaming rule
-structural: layer 1 keys the response mode on **cardinality** — one outcome
-answers ``application/json``, more than one opens the stream — and so never
-learns which argument is the batch, nor that a tool is called
-``approve_requisition``. A per-tool flag on the ``Action`` was rejected on
-granularity: the mode is a property of the call, and one tool answers both ways.
+**Yielding rather than returning** is what keeps ADR-0013's rule structural.
+There is one wire shape — every POST is answered ``application/json`` — so
+cardinality no longer chooses a response mode; it chooses a body. One outcome
+renders directly; N **fold** into one result carrying N answers, which is
+*outcomes equal items requested* reached through a different door.
+
+Layer 1 still never learns which argument is the batch, nor that a tool is
+called ``approve_requisition``. That negative guarantee survived the cut, and it
+is what yielding buys.
 """
 
 

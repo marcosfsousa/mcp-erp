@@ -34,8 +34,9 @@ def test_audience_missing() -> None:
     is why the row carries a project-ADR basis and a null normative strength.
 
     It is also the row the audience check as a whole rests on. Keycloak does not
-    honour RFC 8707's `resource` parameter (normative register row 1), so the
-    resource server's own audience check is the load-bearing control; a server
+    honour RFC 8707's `resource` parameter — the normative register's *Resource
+    indicators unhonoured* deviation — so the resource server's own audience check
+    is the load-bearing control; a server
     that waved through a token with no audience would have no control left.
     """
     minted = mint("priya.raman", ["erp.read"], client_id="mcp-conformance-bare")

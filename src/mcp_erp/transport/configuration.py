@@ -16,8 +16,9 @@ both.
 **Nothing has a default.** A missing issuer or resource identifier is a boot
 failure, not a server that starts and validates against a guess: the audience
 check is the load-bearing control that RFC 8707's unhonoured ``resource``
-parameter left carrying everything (normative register row 1), and a default
-would make the one string it compares against something nobody chose. The
+parameter left carrying everything — the register's *Resource indicators
+unhonoured* deviation — and a default would make the one string it compares against
+something nobody chose. The
 authorization server's realm gives its placeholders defaults for the opposite
 reason — an unresolved ``${VAR}`` is left literally in place rather than
 erroring — so the asymmetry is deliberate on both sides.
