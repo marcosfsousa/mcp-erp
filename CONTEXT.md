@@ -111,7 +111,7 @@ _Avoid_: limit, ceiling, spending cap
 
 **Decision**:
 What the chain answers for one item — a permit, or the Reason it refuses on. Distinct from a **Gate outcome**, which answers for a whole call: they are two types rather than one, so a whole-call permit cannot be used as an item permit.
-_Avoid_: result, verdict, judgement, outcome (which is the whole-call half)
+_Avoid_: result, verdict, judgement, outcome **as another word for this one**. The bare word is spent twice over and neither spending is a Decision: `Gate outcome` above is the whole-call half, and ADR-0013 gives handlers *"yield outcomes"* for what crosses to layer 1 per item — a domain payload, or a refused Decision inside one. So a Decision is never called an outcome, and an outcome is not a kind of Decision. *(Second sense recorded 2026-08-19 by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which built it; ADR-0013 established it and this entry still read as though the word had one owner.)*
 
 **Refusal**:
 Any authorization decision that stops a call. Deliberately not "error" — two of the three kinds are not errors in any protocol sense.

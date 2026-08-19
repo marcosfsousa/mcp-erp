@@ -7,10 +7,12 @@ readme = "CONTEXT.md"
 # Dockerfile. A split leaves CI testing a runtime the deploy image does not use,
 # which is a green suite that proves nothing about the artifact.
 requires-python = "==3.13.*"
-# The deploy manifest. Everything here is imported by something under `src/`,
-# and nothing here is imported only by a test — a dev-group placement would
-# leave a module in `src/` that imports fine on a runner and fails at container
-# start, which is the exact failure the note below refuses.
+# The deploy manifest: what the image carries. Every entry is needed by the
+# artifact — all but one because a module under `src/` imports it, and `uvicorn`
+# because the container has no entry point without it. Nothing here is needed
+# only by a test: a dev-group placement would leave a module in `src/` that
+# imports fine on a runner and fails at container start, which is the exact
+# failure the note below refuses.
 dependencies = [
     # The composition root's application. ADR-0013 drew it as `FastAPI(routes=…)`
     # and #32 executed that drawing, so it is the shape the code is diffed

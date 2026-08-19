@@ -15,8 +15,7 @@ from tokens import ISSUER, mint
 
 def test_the_metadata_document_answers_without_a_token() -> None:
     """The one route outside the token gate, and it is outside it structurally."""
-    with httpx2.Client(base_url=rpc.BASE_URL, timeout=rpc.TIMEOUT) as http:
-        response = http.get(rpc.METADATA_PATH)
+    response = rpc.get(rpc.METADATA_PATH)
 
     assert response.status_code == httpx2.codes.OK
     document = response.json()
@@ -45,18 +44,14 @@ def test_the_bare_well_known_root_is_refused() -> None:
     which is a different resource from ours. Answering there would be a
     conformance error dressed as helpfulness.
     """
-    with httpx2.Client(base_url=rpc.BASE_URL, timeout=rpc.TIMEOUT) as http:
-        response = http.get("/.well-known/oauth-protected-resource")
-
-    assert response.status_code == httpx2.codes.NOT_FOUND
+    assert rpc.get("/.well-known/oauth-protected-resource").status_code == httpx2.codes.NOT_FOUND
 
 
 def test_the_appended_form_is_refused() -> None:
     """The mis-implementation the clause exists to prevent, asserted directly."""
-    with httpx2.Client(base_url=rpc.BASE_URL, timeout=rpc.TIMEOUT) as http:
-        response = http.get("/mcp/.well-known/oauth-protected-resource")
-
-    assert response.status_code == httpx2.codes.NOT_FOUND
+    assert (
+        rpc.get("/mcp/.well-known/oauth-protected-resource").status_code == httpx2.codes.NOT_FOUND
+    )
 
 
 def test_nothing_else_is_served() -> None:
@@ -67,9 +62,8 @@ def test_nothing_else_is_served() -> None:
     this asserts: the metadata document is the only path on this server that
     answers a stranger with content.
     """
-    with httpx2.Client(base_url=rpc.BASE_URL, timeout=rpc.TIMEOUT) as http:
-        for path in ("/", "/openapi.json", "/docs", "/redoc", "/health"):
-            assert http.get(path).status_code == httpx2.codes.NOT_FOUND, path
+    for path in ("/", "/openapi.json", "/docs", "/redoc", "/health"):
+        assert rpc.get(path).status_code == httpx2.codes.NOT_FOUND, path
 
 
 def test_the_tool_endpoint_challenges_a_request_with_no_credentials() -> None:

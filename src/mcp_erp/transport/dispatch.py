@@ -147,10 +147,18 @@ def build(registry: Registry) -> Server[None]:
 def _render(outcome: Outcome) -> types.CallToolResult:
     """One outcome as a tool result, or as the protocol error its class demands.
 
+    **The challenge class is a stated residual, not a defended-against case.**
+    A handler's ``decide_call`` re-runs the scope step — the deliberate N+1 — so
+    it *can* return ``insufficient_scope``, and what keeps that unreachable is
+    gate 5 having already refused the same call. ADR-0002's ``403`` contract
+    therefore rests on one gate rather than on two, and the honest thing to do
+    when it is reached anyway is to fail loudly: rendering it as a tool result
+    would turn a re-authorize into a self-correct, which is the collapse
+    ADR-0002's three shapes exist to prevent.
+
     Raises:
-        MCPError: The refusal's denial class is ``protocol_error`` — or is
-            ``challenge``, which gate 5 should already have refused and which
-            nothing here can render.
+        MCPError: The refusal's denial class is ``protocol_error``, or is
+            ``challenge``, which nothing here can render.
     """
     if not isinstance(outcome, Decision):
         return _result(outcome, is_error=False)

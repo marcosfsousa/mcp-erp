@@ -73,9 +73,13 @@ def rejected_credentials(description: str, *, metadata_url: str) -> Response:
     """The challenge for a token that was presented and refused.
 
     ``error_description`` carries one word from
-    :data:`mcp_erp.transport.tokens.DESCRIPTIONS`. Four of those are named attack
-    scenarios, and without distinguishable descriptions they would all assert the
-    same ``401`` — which is why the vocabulary is closed rather than free prose.
+    :data:`mcp_erp.transport.tokens.DESCRIPTIONS`. **Every one of them is reached
+    by a named attack scenario**, and without distinguishable descriptions they
+    would all assert the same ``401`` — which is why the vocabulary is closed
+    rather than free prose. Stated as a property rather than as a count, because
+    a stored count in a list that grows is the defect this trail keeps finding in
+    itself, and ADR-0006 struck one in the same commit that added the seventh
+    value.
     """
     return _challenge(
         401,

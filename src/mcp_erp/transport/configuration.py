@@ -26,6 +26,7 @@ erroring — so the asymmetry is deliberate on both sides.
 import os
 from dataclasses import dataclass
 from typing import Final
+from urllib.parse import urlsplit
 
 ISSUER_VARIABLE: Final = "MCP_ISSUER"
 """The authorization server this resource server trusts, and the only one."""
@@ -71,7 +72,7 @@ class Configuration:
         which is a *different resource* from ours, and answering there would be
         a conformance error dressed as helpfulness.
         """
-        path = _path_of(self.resource)
+        path = path_of(self.resource)
         return f"/.well-known/oauth-protected-resource{path}"
 
     @property
@@ -84,7 +85,7 @@ class Configuration:
         document is served. One derivation, so a client following the header and
         a client guessing the well-known address arrive at the same place.
         """
-        return f"{_origin_of(self.resource)}{self.metadata_path}"
+        return f"{origin_of(self.resource)}{self.metadata_path}"
 
     @property
     def endpoint_path(self) -> str:
@@ -93,22 +94,22 @@ class Configuration:
         Derived rather than configured, so the address a client posts to and the
         address the audience names cannot come apart.
         """
-        return _path_of(self.resource) or "/"
+        return path_of(self.resource) or "/"
 
 
-def from_environment(environment: dict[str, str] | None = None) -> Configuration:
-    """Read the configuration, refusing to start without all three values.
+def from_environment() -> Configuration:
+    """Read the configuration from the process environment, or refuse to start.
 
-    Args:
-        environment: The mapping to read, defaulting to the process environment.
-            A parameter rather than a global read so that the composition root
-            stays testable without a process boundary.
+    No injection seam. ``create_app`` already takes a :class:`Configuration`
+    directly, so a second one here would be a parameter with no caller — and the
+    thing worth being able to build without an environment is the application,
+    not this function.
 
     Raises:
         RuntimeError: A required variable is unset or empty, named in the
             message so the failure says which one.
     """
-    source = dict(os.environ) if environment is None else environment
+    source = os.environ
     missing = [
         name
         for name in (ISSUER_VARIABLE, RESOURCE_VARIABLE, DATABASE_VARIABLE)
@@ -124,22 +125,19 @@ def from_environment(environment: dict[str, str] | None = None) -> Configuration
     )
 
 
-def _path_of(url: str) -> str:
+def path_of(url: str) -> str:
     """The path component of an absolute URL, without its trailing slash.
 
-    Written here rather than reached for from a URL library because both callers
-    want the same normalisation and a difference between them would move the
-    metadata document away from the endpoint it describes.
+    One normalisation, used by everything in layer 1 that has to take a URL
+    apart. A second hand-rolled parser somewhere else in the package is how the
+    metadata document ends up describing an address the endpoint is not served
+    at — so the split is the standard library's and the trailing-slash rule is
+    stated once.
     """
-    without_scheme = url.split("://", 1)[-1]
-    separator = without_scheme.find("/")
-    if separator == -1:
-        return ""
-    return without_scheme[separator:].rstrip("/")
+    return urlsplit(url).path.rstrip("/")
 
 
-def _origin_of(url: str) -> str:
+def origin_of(url: str) -> str:
     """The scheme and authority of an absolute URL, with no path."""
-    scheme, _, rest = url.partition("://")
-    authority, _, _remainder = rest.partition("/")
-    return f"{scheme}://{authority}"
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"

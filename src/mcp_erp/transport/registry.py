@@ -26,6 +26,13 @@ outcome or a refused ``Decision``, never anything protocol-shaped"* — a shared
 wrapper class would have to live somewhere, and the only package layers 1 and 3
 may both import is layer 2, which would then hold a type describing how layer 1
 renders. The union costs one ``isinstance`` at the single site that reads it.
+
+**The name is ADR-0013's, and it is not a Decision by another name.**
+``CONTEXT.md`` bars *outcome* as a word for a ``Decision``; it does not bar the
+word, which ``GateOutcome`` already spends on the whole-call half and which
+ADR-0013 spends again on what a handler yields per item. This alias is the
+second of those. The glossary entry said so from 2026-08-19; before that it read
+as though the word had one owner, which is what building this found.
 """
 
 Handler = Callable[[Principal, Mapping[str, Any]], AsyncIterator[Outcome]]

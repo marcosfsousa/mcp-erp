@@ -42,10 +42,13 @@ def test_requests_round_robin_across_both_replicas() -> None:
     )
 
     assert len(replicas) == 2, replicas
-    # Round robin rather than merely "both were used at some point": nginx's
-    # default over two equal upstreams alternates, so an even count each is what
-    # *no* affinity looks like.
-    assert set(replicas.values()) == {REQUESTS // 2}, replicas
+    # Both, and neither dominant. **Not an exact split**, deliberately: an even
+    # count is the *gateway's* arithmetic, and one upstream retry or a moment of
+    # mark-down would make it uneven while every claim this row is about still
+    # held. What falsifies "no sticky routing" is a caller reaching one replica
+    # and staying there, and a third of the requests is far below anything
+    # affinity could produce.
+    assert min(replicas.values()) >= REQUESTS // 3, replicas
 
 
 def test_neither_replica_issues_a_session() -> None:
@@ -85,7 +88,7 @@ def test_both_replicas_answer_identically() -> None:
     )
 
 
-def test_the_first_request_to_a_replica_is_the_same_as_the_hundredth() -> None:
+def test_the_first_request_is_the_same_as_the_last() -> None:
     """There is no warm-up state, which is the other direction of the same claim.
 
     A server that built something per caller on first contact would answer the

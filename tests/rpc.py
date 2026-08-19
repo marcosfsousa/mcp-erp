@@ -125,6 +125,18 @@ def routing_headers(
     return headers
 
 
+def get(path: str) -> httpx2.Response:
+    """One plain GET against the server, for the routes that are not the tool endpoint.
+
+    Here rather than in each suite for the reason this module exists at all: the
+    base address, the timeout and the decision not to raise on a `4xx` are one
+    set of choices, and four copies of a client constructor is four places for
+    them to come apart.
+    """
+    with httpx2.Client(base_url=BASE_URL, timeout=TIMEOUT) as http:
+        return http.get(path)
+
+
 def post(
     method: str,
     params: Mapping[str, Any] | None = None,

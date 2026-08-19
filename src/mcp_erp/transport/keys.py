@@ -34,6 +34,8 @@ import anyio
 import httpx2
 from jwt import PyJWK, PyJWKSet
 
+from mcp_erp.transport.configuration import origin_of, path_of
+
 DISCOVERY_SEGMENT: Final = "/.well-known/oauth-authorization-server"
 """Inserted between host and path, which is the half implementations miss."""
 
@@ -185,8 +187,8 @@ class KeySet:
         Raises:
             RuntimeError: The document names an issuer other than ours.
         """
-        origin, _, path = _split(self._issuer)
-        response = await self._client.get(f"{origin}{DISCOVERY_SEGMENT}{path}")
+        address = f"{origin_of(self._issuer)}{DISCOVERY_SEGMENT}{path_of(self._issuer)}"
+        response = await self._client.get(address)
         response.raise_for_status()
         document: dict[str, Any] = response.json()
 
@@ -198,10 +200,3 @@ class KeySet:
         return AuthorizationServerMetadata(
             issuer=str(document["issuer"]), jwks_uri=str(document["jwks_uri"])
         )
-
-
-def _split(issuer: str) -> tuple[str, str, str]:
-    """An issuer as ``(origin, authority, path)``, for the path insertion above."""
-    scheme, _, rest = issuer.partition("://")
-    authority, _, remainder = rest.partition("/")
-    return f"{scheme}://{authority}", authority, f"/{remainder}" if remainder else ""
