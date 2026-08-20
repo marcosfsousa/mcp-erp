@@ -108,6 +108,21 @@ def _next_identifier(prefix: str) -> str:
     reads ``id`` from whatever the enclosing statement selects from, so each
     caller's own ``FROM`` names it.
 
+    **Four digits is a floor and not a ceiling, since #84, and there is no bound
+    on what a table can hold.** ``lpad`` truncates from the right when its input
+    is already wider than the target, so a fixed ``4`` minted ``req_1000`` for the
+    ten-thousandth row — a handle the table already held. The insert failed on the
+    primary key, the retry recomputed the same maximum and collided again, and the
+    table could take no further writes: a hard stop at 9999 that nothing chose,
+    reported as a key violation that named no limit. Taking the width from the
+    number itself removes the stop rather than moving it. Everything below 10000
+    is unchanged, which is what the committed fixture rendering rests on, and the
+    row after ``req_9999`` is ``req_10000``.
+
+    The width is computed from the number, so the number is written once here and
+    interpolated twice. Postgres folds the two identical aggregates into one, and
+    a second literal copy would be the drift this helper exists to prevent.
+
     Args:
         prefix: The handle's leading token, without its separator.
 
@@ -116,10 +131,8 @@ def _next_identifier(prefix: str) -> str:
         no caller data — the only substitution is this literal — so it is not a
         parameterised value and must never become one.
     """
-    return (
-        f"'{prefix}_' || lpad("
-        "(coalesce(max(substring(id from '[0-9]+$')::integer), 0) + 1)::text, 4, '0')"
-    )
+    number = "(coalesce(max(substring(id from '[0-9]+$')::integer), 0) + 1)::text"
+    return f"'{prefix}_' || lpad({number}, greatest(4, length({number})), '0')"
 
 
 _INSERT: Final = f"""

@@ -162,10 +162,26 @@ out rather than derived from :data:`ROWS`, because it has to stay absent for the
 whole run and `submit_requisition` mints the next identifier after the highest
 that exists — a value one past the last fixture would be handed out by the next
 submission. Nothing reaches four figures in a test run.
+
+**One module writes this value deliberately**, since #84: :func:`at_the_ceiling`
+puts a row here so that the next write is the one crossing into five figures,
+which is the only way to drive that boundary at all. It reloads before and after
+every one of its tests, so the absence this docstring promises holds everywhere
+else.
 """
 
 ABSENT_ORDER: Final = "po_9999"
 """The same, one entity along, for the rows that hydrate a purchase order."""
+
+ABSENT_INVOICE: Final = "inv_9999"
+"""The same again, one entity further, and no suite hydrates one.
+
+There is no tool that takes an invoice's identifier — ADR-0002's count of five
+stops one entity short — so this names no resource and appears in no matrix row.
+It is here because :func:`at_the_ceiling` writes all three tables and the third
+value should be spelled where the other two are, rather than inline at its one
+use as a fourth place the ceiling's number is written down.
+"""
 
 
 def load() -> None:
@@ -217,6 +233,57 @@ def load() -> None:
         cursor.executemany(
             "INSERT INTO invoice (id, purchase_order_id, recorded_by) VALUES (%s, %s, %s)",
             [(bill.id, bill.purchase_order_id, bill.recorded_by) for bill in INVOICES],
+        )
+        connection.commit()
+
+
+def at_the_ceiling() -> None:
+    """Add one chain at ``9999`` to each of the three generated tables.
+
+    The mint derives the next identifier from the highest that exists, so this is
+    the whole of what it takes to put a table one write away from five figures —
+    and it is the only way to reach that boundary in a test, since nothing in the
+    tool set lets a caller choose an identifier.
+
+    **One chain rather than three loose rows.** ``purchase_order`` references a
+    requisition and ``invoice`` references an order, so a row in each table needs
+    two references anyway; pointing them at each other means the three rows this
+    writes reference nothing the rendering owns, and a suite reading the fixtures
+    sees them as one extra chain rather than as three tables it has to reconcile.
+    The identities on it are the requisition's own submitter, because no rule is
+    ever applied to these rows — they exist to be the maximum and nothing else.
+
+    **It leaves :data:`ABSENT_IDENTIFIER` and :data:`ABSENT_ORDER` present**,
+    which is exactly the two values it writes. Both are documented as absent for
+    a whole run, so a caller must restore the tables with :func:`load` before any
+    other module runs — see `tests/wire/test_the_identifier_mint.py`, which is
+    the only caller and reloads between its own tests as well as after them.
+    """
+    base = ROWS[0]
+    with psycopg.connect(DATABASE_URL) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO requisition
+                (id, cost_centre, vendor, amount, description, submitted_by, status)
+            VALUES (%s, %s, %s, %s, %s, %s, 'approved')
+            """,
+            (
+                ABSENT_IDENTIFIER,
+                base.cost_centre,
+                base.vendor,
+                base.amount,
+                base.description,
+                base.submitted_by,
+            ),
+        )
+        cursor.execute(
+            "INSERT INTO purchase_order (id, requisition_id, approved_by, status)"
+            " VALUES (%s, %s, %s, 'invoiced')",
+            (ABSENT_ORDER, ABSENT_IDENTIFIER, base.submitted_by),
+        )
+        cursor.execute(
+            "INSERT INTO invoice (id, purchase_order_id, recorded_by) VALUES (%s, %s, %s)",
+            (ABSENT_INVOICE, ABSENT_ORDER, base.submitted_by),
         )
         connection.commit()
 
