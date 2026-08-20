@@ -14,9 +14,9 @@ every partition* — arriving by the opposite route, as a handler that scopes ro
 without the chain ever being asked. So every candidate row is loaded and
 :func:`~mcp_erp.authorization.policy.decide_item` decides each one.
 
-That applies to :meth:`Requisitions.by_id` as much as to
-:meth:`Requisitions.all`, and it is load-bearing there rather than merely
-consistent. ``SELECT … WHERE id = %s AND cost_centre = %s`` is the removal the
+That applies to :meth:`Requisitions.by_id` and :meth:`PurchaseOrders.by_id` as
+much as to :meth:`Requisitions.all`, and it is load-bearing there rather than
+merely consistent. ``SELECT … WHERE id = %s AND cost_centre = %s`` is the removal the
 ``state_handle_hijack`` scenario names in the other direction, and it would make
 the empty join and the foreign row converge **in SQL** instead of at layer 2's
 single return site — the same answer today, reached by a mechanism no test in
@@ -36,6 +36,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import TupleRow
 from psycopg_pool import AsyncConnectionPool
 
+from mcp_erp.purchase_to_pay.invoice import Invoice, Recorded
 from mcp_erp.purchase_to_pay.purchase_order import Decided, PurchaseOrder
 from mcp_erp.purchase_to_pay.requisition import Requisition
 
@@ -141,7 +142,46 @@ same transaction, because ``RETURNING`` cannot join and the row a caller is show
 carries its vendor's and submitter's names.
 """
 
-_INSERT_ORDER: Final = """
+_ORDER_COLUMNS: Final = """
+    purchase_order.id,
+    purchase_order.requisition_id,
+    requisition.description,
+    requisition.cost_centre,
+    purchase_order.approved_by,
+    person.name,
+    purchase_order.status
+"""
+"""One purchase order's columns, with the three the entity needs from its joins.
+
+Two of those three are the ``{id, label}`` pairs' labels. The third is
+``requisition.cost_centre``, and reading it here is ADR-0003's *join away* made
+literal: the order stores no centre, and the partition row scoping compares it on
+is the requisition's. Written once because :func:`_as_purchase_order` reads them
+positionally, and two statements selecting *nearly* the same list is how a
+positional read comes apart.
+"""
+
+_ORDER_JOINS: Final = """
+    JOIN requisition ON requisition.id = purchase_order.requisition_id
+    JOIN person ON person.subject = purchase_order.approved_by
+"""
+"""The two joins :data:`_ORDER_COLUMNS` needs, written once for the same reason."""
+
+_SELECT_ORDER: Final = f"""
+    SELECT {_ORDER_COLUMNS}
+    FROM purchase_order
+    {_ORDER_JOINS}
+    WHERE purchase_order.id = %s
+"""
+"""One purchase order by identifier, and by identifier **alone**.
+
+The cost centre is selected and never predicated on, which is the same design
+:data:`_SELECT_ONE` keeps one entity up: a row in another partition is loaded and
+then refused by the chain, so the empty join and the foreign row converge at
+layer 2's single return site rather than in SQL.
+"""
+
+_INSERT_ORDER: Final = f"""
     WITH minted AS (
         INSERT INTO purchase_order (id, requisition_id, approved_by)
         SELECT
@@ -152,9 +192,9 @@ _INSERT_ORDER: Final = """
         FROM purchase_order
         RETURNING *
     )
-    SELECT minted.id, minted.requisition_id, minted.approved_by, person.name, minted.status
-    FROM minted
-    JOIN person ON person.subject = minted.approved_by
+    SELECT {_ORDER_COLUMNS}
+    FROM minted AS purchase_order
+    {_ORDER_JOINS}
 """
 """Emit the order an approval produces, minting its identifier the same way.
 
@@ -165,7 +205,65 @@ identifiers cannot leave a sequence to mint a duplicate key.
 
 ``status`` and ``id`` are the server's; the cost centre is **not written at all**,
 which is ADR-0003's correction to ADR-0002 expressed in the statement rather than
-only in the schema.
+only in the schema. It is *read back* through the join above, which is the other
+half of the same correction: the centre is a join away, and this is the join.
+
+**It re-selects the shared column list rather than a shorter one of its own.**
+Until #42 this statement was the only reader of an order and named its own five
+columns, and the decided requisition supplied the label from the row already in
+hand — a fourth join avoided. A second reader ended that: :data:`_SELECT_ORDER`
+cannot have the row in hand, so it must join, and two statements feeding one
+positional reader must select one list. The join bought here is what stops that
+reader having two shapes to agree with.
+"""
+
+_RECORD: Final = """
+    UPDATE purchase_order
+    SET status = 'invoiced'
+    WHERE id = %s AND status = 'open'
+"""
+"""Move one purchase order to its terminal state, **if it is not in one already**.
+
+``AND status = 'open'`` is what makes ``already_invoiced`` true rather than
+usually true, and the argument is :data:`_DECIDE`'s exactly: the handler holds a
+row loaded a moment earlier, a check against that row is a check against what was
+true when it was read, and two callers recording at once would both pass it. The
+predicate is evaluated by the database against the row it is about to write, so
+one of the two updates matches and the loser is told ``already_invoiced``.
+
+The ``UNIQUE`` on ``invoice.purchase_order_id`` is the backstop rather than the
+mechanism. It would refuse the second insert too, but as an integrity error about
+a constraint the caller cannot see — where this answers with the domain's own
+word.
+"""
+
+_INSERT_INVOICE: Final = """
+    WITH minted AS (
+        INSERT INTO invoice (id, purchase_order_id, recorded_by)
+        SELECT
+            'inv_' || lpad(
+                (coalesce(max(substring(id from '[0-9]+$')::integer), 0) + 1)::text, 4, '0'
+            ),
+            %s, %s
+        FROM invoice
+        RETURNING *
+    )
+    SELECT minted.id, minted.purchase_order_id, minted.recorded_by, person.name
+    FROM minted
+    JOIN person ON person.subject = minted.recorded_by
+"""
+"""Write the invoice, minting its identifier on the same terms as the other two.
+
+One join and not three. The label the ``{id, label}`` pair needs is the
+requisition's description, and the order this transaction has just billed is
+already in hand carrying it — so joining back through ``purchase_order`` to
+``requisition`` would be a second reading of a column already held. That is the
+argument :data:`_INSERT_ORDER` used to make and gave up when it acquired a second
+reader; this statement has one reader and keeps it.
+
+``id`` is the server's, and there is no ``status``: an invoice has no states to
+be in. It exists or it does not, which is what makes the order's own status the
+whole of the terminal-state rule.
 """
 
 _MINT_LOCK: Final = 0x726571
@@ -188,9 +286,17 @@ submission and an approval have no reason to wait for each other, and sharing a
 key would serialise them for a race neither is in.
 """
 
+_INVOICE_MINT_LOCK: Final = 0x696E76
+"""``inv`` in ASCII. The third key, on the third table, for the third mint.
+
+Three keys rather than one for the same reason there are two: a submission, an
+approval and a recording are independent, and one shared key would serialise
+every write on the server for a race no pair of them is in.
+"""
+
 
 class Requisitions(Protocol):
-    """What the handlers need from a store, which is three methods.
+    """What the requisition handlers need from a store, which is four methods.
 
     A protocol rather than a concrete type, so the handlers are written against
     what they use. It is not an injection seam for a stub: the wire suites drive
@@ -260,6 +366,53 @@ class Requisitions(Protocol):
         Returns:
             What the decision produced, or ``None`` if there was nothing left to
             decide.
+        """
+        ...
+
+
+class PurchaseOrders(Protocol):
+    """What ``record_invoice``'s handler needs from a store, which is two methods.
+
+    A second protocol rather than two more methods on :class:`Requisitions`,
+    because a handler is written against what it uses and this one uses no
+    requisition at all. It also makes :func:`~mcp_erp.purchase_to_pay.handlers.load`
+    honest: that step is parameterised on the entity it hydrates, and the two
+    protocols are what fix which entity each of its callers gets.
+
+    The concrete stores share a pool and nothing else. Neither holds anything
+    about who called.
+    """
+
+    async def by_id(self, identifier: str) -> PurchaseOrder | None:
+        """The order with this identifier, whoever it belongs to, or ``None``.
+
+        Unscoped for the same reason :meth:`Requisitions.by_id` is: the foreign
+        row is returned rather than hidden, so ``decide_item`` refuses it at the
+        same return site the absent row reaches.
+        """
+        ...
+
+    async def record_invoice(self, identifier: str, *, recorded_by: str) -> Recorded | None:
+        """Bill one purchase order, and write the invoice that bills it.
+
+        Returns ``None`` when the order was invoiced already — **the
+        terminal-state rule, evaluated where the write happens**, on the same
+        terms as :meth:`Requisitions.decide`.
+
+        Authorization is not consulted here and must have been decided before
+        this is called. The store answers *whether the order was still
+        billable*, which is a domain precondition rather than a decision about a
+        caller.
+
+        Args:
+            identifier: The order to bill, already hydrated and permitted.
+            recorded_by: The recorder's subject, from the principal. The caller
+                supplies no identity, which is what makes the second separation
+                edge a check against a position on the chain.
+
+        Returns:
+            What the recording produced, or ``None`` if there was nothing left
+            to bill.
         """
         ...
 
@@ -371,26 +524,101 @@ class PostgresRequisitions:
             if order is None:
                 raise RuntimeError("the purchase order insert returned no row")
 
-            return Decided(
-                requisition=requisition,
-                purchase_order=_as_purchase_order(order, label=requisition.description),
+            return Decided(requisition=requisition, purchase_order=_as_purchase_order(order))
+
+
+class PostgresPurchaseOrders:
+    """The shipped order store, over the same pool the requisition store holds.
+
+    A second instance rather than a second pool: the pool is a connection cache
+    and holds nothing about who called, so sharing it costs no isolation and
+    buys one place where connection limits are configured.
+    """
+
+    def __init__(self, pool: AsyncConnectionPool[AsyncConnection[TupleRow]]) -> None:
+        """Hold the pool the lifespan opened."""
+        self._pool = pool
+
+    async def by_id(self, identifier: str) -> PurchaseOrder | None:
+        """Read one order by identifier, without asking whose it is."""
+        async with self._pool.connection() as connection:
+            cursor = await connection.execute(_SELECT_ORDER, (identifier,))
+            row = await cursor.fetchone()
+
+        return None if row is None else _as_purchase_order(row)
+
+    async def record_invoice(self, identifier: str, *, recorded_by: str) -> Recorded | None:
+        """Bill one order and write its invoice, inside one transaction.
+
+        Three statements and one transaction, which is what makes the pair
+        atomic: an order marked ``invoiced`` with no invoice beside it would be
+        a chain with a missing link, and an invoice against an order still
+        marked ``open`` would be one that could be written twice.
+
+        Raises:
+            RuntimeError: The billed order could not be read back, or the
+                invoice insert returned nothing. Both mean a statement stopped
+                being what it says it is — refused here rather than three
+                assertions later, and refused **inside** the transaction, so the
+                update leaves nothing behind.
+        """
+        async with self._pool.connection() as connection:
+            recorded = await connection.execute(_RECORD, (identifier,))
+            if recorded.rowcount != 1:
+                # Nothing matched, so the order was billed already. Not an error
+                # and not an authorization refusal: the handler turns it into
+                # `already_invoiced`, which is the domain's word.
+                return None
+
+            cursor = await connection.execute(_SELECT_ORDER, (identifier,))
+            row = await cursor.fetchone()
+            if row is None:
+                raise RuntimeError(f"the billed purchase order {identifier!r} could not be read")
+            order = _as_purchase_order(row)
+
+            await connection.execute("SELECT pg_advisory_xact_lock(%s)", (_INVOICE_MINT_LOCK,))
+            cursor = await connection.execute(_INSERT_INVOICE, (identifier, recorded_by))
+            written = await cursor.fetchone()
+
+            # Inside the block, so the exception leaves the transaction and the
+            # update above is never committed. Raised after it, the refusal
+            # would ship the missing link this docstring says is impossible.
+            if written is None:
+                raise RuntimeError("the invoice insert returned no row")
+
+            return Recorded(
+                purchase_order=order,
+                invoice=_as_invoice(written, label=order.requisition_label),
             )
 
 
-def _as_purchase_order(row: TupleRow, *, label: str) -> PurchaseOrder:
-    """One order row as the entity, read positionally against :data:`_INSERT_ORDER`.
-
-    ``label`` comes from the requisition this transaction just decided rather than
-    from a fourth join: the row is in hand, and joining back to it to read a
-    column already held would be a second reading of the same fact.
-    """
+def _as_purchase_order(row: TupleRow) -> PurchaseOrder:
+    """One order row as the entity, read positionally against :data:`_ORDER_COLUMNS`."""
     return PurchaseOrder(
         id=str(row[0]),
         requisition_id=str(row[1]),
-        requisition_label=label,
-        approved_by=str(row[2]),
-        approver_name=str(row[3]),
-        status=str(row[4]),
+        requisition_label=str(row[2]),
+        cost_centre=str(row[3]),
+        approved_by=str(row[4]),
+        approver_name=str(row[5]),
+        status=str(row[6]),
+    )
+
+
+def _as_invoice(row: TupleRow, *, label: str) -> Invoice:
+    """One invoice row as the entity, read positionally against :data:`_INSERT_INVOICE`.
+
+    ``label`` comes from the order this transaction just billed rather than from
+    two further joins: the row is in hand carrying the requisition's description,
+    and joining back through it to read a column already held would be a second
+    reading of the same fact.
+    """
+    return Invoice(
+        id=str(row[0]),
+        purchase_order_id=str(row[1]),
+        purchase_order_label=label,
+        recorded_by=str(row[2]),
+        recorder_name=str(row[3]),
     )
 
 

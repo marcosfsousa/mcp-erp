@@ -1,21 +1,32 @@
-"""The second entity — the record an approval emits, and what one decision answers with.
+"""The second entity — emitted by one tool, and the resource the next one is decided against.
 
-**Emitted, never decided against.** ADR-0013 fixes the resource as *"the thing
-acted against, never the thing created"*, and a purchase order is the created
-half: it does not exist when ``approve_requisition`` is decided, so it satisfies
-no protocol here and layer 2 never sees it. It becomes a resource at #42, where
-``record_invoice`` is decided against it — and the field that makes that decision
-possible, :attr:`PurchaseOrder.approved_by`, is the whole reason this entity
-exists.
+**Emitted by an approval, never decided against by one.** ADR-0013 fixes the
+resource as *"the thing acted against, never the thing created"*, and a purchase
+order is the created half of ``approve_requisition``: it does not exist when that
+tool is decided, so the chain never sees one there.
 
-**It does not copy the cost centre forward.** ADR-0002 described it as carrying
-"the approver identity and cost centre forward"; ADR-0003 corrected that — the
-identity is load-bearing and the centre is a join away, so denormalising it would
-buy a shorter query and a second copy of a fact that can disagree with the first.
+**It is a resource on the other tool, and that is what this entity is for.**
+``record_invoice`` is decided against it, and the field that makes the decision
+possible — :attr:`PurchaseOrder.approved_by` — is the whole reason the entity
+exists. Being on both sides of ADR-0013's rule is not a contradiction in it: the
+rule is about one tool at a time, and *created here, acted against there* is what
+a chain is.
+
+**It does not copy the cost centre forward, and being a resource does not change
+that.** ADR-0002 described it as carrying "the approver identity and cost centre
+forward"; ADR-0003 corrected that — the identity is load-bearing and the centre
+is a join away, so denormalising it would buy a shorter query and a second copy
+of a fact that can disagree with the first. :attr:`PurchaseOrder.cost_centre` is
+that join's answer held in the entity, not a column: the row scoping
+``record_invoice`` runs needs a partition, and it reads the requisition's own
+rather than a second copy of it. The wire shape is unchanged, because no
+authorization decision anywhere is taken on what a *caller* was told the centre
+is.
 
 The tool that emits one is declared in a module of its own beside this,
-:mod:`~mcp_erp.purchase_to_pay.approve_requisition`, on the rule ADR-0013 states:
-the entity is here and the tools are not.
+:mod:`~mcp_erp.purchase_to_pay.approve_requisition`, and the tool decided against
+one in :mod:`~mcp_erp.purchase_to_pay.record_invoice`, on the rule ADR-0013
+states: the entity is here and the tools are not.
 
 **Nothing here is protocol-shaped.** The schemas are plain JSON Schema documents
 and the rows are plain mappings; layer 1 wraps them in whatever the protocol
@@ -120,7 +131,13 @@ the mixed case is inside the sentence rather than beside it.
 
 @dataclass(frozen=True, slots=True)
 class PurchaseOrder:
-    """The record emitted when a requisition is approved.
+    """The record emitted when a requisition is approved, and what an invoice bills.
+
+    The second type here to satisfy layer 2's one-member
+    :class:`~mcp_erp.authorization.action.Resource` protocol, through
+    :attr:`partition` alone. ``approved_by`` is what the second
+    segregation-of-duties edge reads, and it is read by a relationship rule
+    declared beside ``record_invoice`` rather than by layer 2 (ADR-0013).
 
     Attributes:
         id: The opaque prefixed handle, sequential and legible on the same terms
@@ -132,6 +149,10 @@ class PurchaseOrder:
         requisition_label: The requisition's description, for the ``{id, label}``
             pair. Carried rather than joined at render time for the same reason
             ``Requisition`` carries its vendor's name.
+        cost_centre: The requisition's, read through the join rather than stored
+            on the order — see the module docstring. It appears in no schema and
+            on no wire: it is here because row scoping needs a partition, and
+            :attr:`partition` is the whole of what reads it.
         approved_by: The approver's subject — an identity, not a role, because a
             position is occupied once on one chain while a role is held standing.
             This is what the second segregation-of-duties edge is tested against.
@@ -142,12 +163,30 @@ class PurchaseOrder:
     id: str
     requisition_id: str
     requisition_label: str
+    cost_centre: str
     approved_by: str
     approver_name: str
     status: str
 
+    @property
+    def partition(self) -> str:
+        """The partition row scoping compares, which here is the requisition's centre.
+
+        The same translation :attr:`Requisition.partition` makes, reaching one
+        link further up the chain for the value: an order has no centre of its
+        own, and the one it is scoped by is the one the requisition was charged
+        to. That is the join ADR-0003 chose over a denormalised column, arriving
+        where the decision is taken rather than where the row is rendered.
+        """
+        return self.cost_centre
+
     def as_row(self) -> dict[str, Any]:
-        """The wire shape of one purchase order, matching :data:`ORDER_SCHEMA`."""
+        """The wire shape of one purchase order, matching :data:`ORDER_SCHEMA`.
+
+        No ``cost_centre``, and the field above is not an omission from here: the
+        centre is the requisition's to state, the row this points at states it,
+        and a second copy on the wire is the disagreement ADR-0003 declined.
+        """
         return {
             "id": self.id,
             "requisition": {"id": self.requisition_id, "label": self.requisition_label},

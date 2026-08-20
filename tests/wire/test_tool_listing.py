@@ -28,8 +28,15 @@ TOOL = "list_requisitions"
 READ_TOOLS = {"list_requisitions", "get_requisition"}
 """The two tools declaring `read`, and therefore the whole of what `erp.read` reaches."""
 
-WRITE_TOOLS = {"submit_requisition"}
-"""The one tool declaring `write` so far; `record_invoice` joins it at #42."""
+WRITE_TOOLS = {"submit_requisition", "record_invoice"}
+"""The two tools declaring `write`, and the pair ADR-0012's coarse verbs are for.
+
+One scope reaches both, and the ERP role decides which of the two a caller
+actually achieves anything with — `submit_requisition` requires none and
+`record_invoice` requires `invoice_clerk`. That is the intersection doing visible
+work, and it is why `erp.write` is ungated at issuance: a role mapping on it would
+lock every submitter out of a scope ADR-0003 gives them.
+"""
 
 DECIDE_TOOLS = {"approve_requisition"}
 """The one tool declaring `decide`, and the only one of the three sets that is
@@ -76,6 +83,11 @@ def test_the_write_scope_reaches_the_write_tool_and_no_read_tool() -> None:
     would also produce. Now the two capabilities partition the tool set, and the
     assertion is that a token holding one reaches its own side and neither more
     nor less.
+
+    Since #42 the write side holds two tools, and the listing shows both to a
+    Person who can use neither: Priya Raman holds no ERP role, so she reaches
+    `record_invoice` here and is refused at its role gate when she calls it. That
+    refusal is asserted where it happens, in `test_record_invoice.py`.
     """
     assert _names(mint("priya.raman", ["erp.write"])) == WRITE_TOOLS
     assert not READ_TOOLS & WRITE_TOOLS
@@ -167,9 +179,12 @@ def test_the_listing_declares_the_schemas_layer_three_authored() -> None:
     # refused, and no schema enumerates the organisation's centres.
     assert "cost_centre" not in declared["submit_requisition"]["inputSchema"]["properties"]
     assert "cost_centre" not in declared["approve_requisition"]["inputSchema"]["properties"]
+    assert "cost_centre" not in declared["record_invoice"]["inputSchema"]["properties"]
     # And no `amount` either: the threshold is decided on the row the server
-    # holds, never on a number the caller restated.
+    # holds, never on a number the caller restated — and an invoice has no
+    # amount at all, because the order it bills fixes one.
     assert "amount" not in declared["approve_requisition"]["inputSchema"]["properties"]
+    assert "amount" not in declared["record_invoice"]["inputSchema"]["properties"]
 
 
 def test_the_tool_set_is_fixed_at_deploy() -> None:

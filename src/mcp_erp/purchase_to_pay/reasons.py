@@ -6,10 +6,12 @@ its four. There is no lookup table anywhere."* This is layer 3's half. Nothing i
 registered anywhere for them to work, and every one of them states its own wire
 shape, its own remedy and both retry booleans at the point of declaration.
 
-**Three of the four are here.** ``already_invoiced`` is ``record_invoice``'s and
-arrives with it (#42); declaring it early would be a value in the closed
-vocabulary that no tool can produce, which is the thing an exhibit about
-authorization can least afford.
+**All four are here, and the fourth arrived last on purpose.**
+``already_invoiced`` is ``record_invoice``'s, and #39 and #40 left it undeclared
+rather than declaring it early: a value in a closed vocabulary that no tool can
+produce is the thing an exhibit about authorization can least afford. It lands in
+the same commit as the tool that produces it (#42), which is what makes the
+vocabulary closed *and* whole for the first time.
 
 ``Remedy``, ``DenialClass`` and both retry booleans stay wholly in layer 2 — they
 describe client behaviour rather than domain facts, and ADR-0004's first coupling
@@ -79,7 +81,32 @@ decidable again. That is what ADR-0002's promise rests on: a model that ignores
 every field and retries cannot double-approve.
 """
 
-REASONS: frozenset[Reason] = frozenset({SEGREGATION_OF_DUTIES, OVER_THRESHOLD, ALREADY_DECIDED})
+ALREADY_INVOICED = Reason(
+    value="already_invoiced",
+    denial_class=DenialClass.TOOL_RESULT,
+    remedy=Remedy.NONE,
+    retry_identical_helps=False,
+    retry_as_other_person_helps=False,
+)
+"""The purchase order has been billed already.
+
+The other terminal state, and byte-identical in shape to :data:`ALREADY_DECIDED`
+for the same reasons: a billed order is billed for everybody, so the remedy is
+``none`` and no person and no token makes it billable again. Two reasons a client
+handles the same way, and a caller can still tell which of the two chains they
+reached the end of.
+
+**One order takes exactly one invoice**, which is what ADR-0003 rests the
+governing rule on — an amount field could only restate the order's — and it is
+also what makes this reachable at all. It is the second half of ADR-0002's
+promise that a model retrying a whole batch cannot double-write: the first half
+is ``already_decided``, and until this shipped a retry against the invoice step
+had nothing to refuse it.
+"""
+
+REASONS: frozenset[Reason] = frozenset(
+    {SEGREGATION_OF_DUTIES, OVER_THRESHOLD, ALREADY_DECIDED, ALREADY_INVOICED}
+)
 """Layer 3's declared set, in full.
 
 ADR-0003's *exactly one dedicated test* enumerates the union of this and layer
