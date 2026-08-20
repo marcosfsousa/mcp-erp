@@ -68,6 +68,8 @@ The check is **exact, case-sensitive set membership** against the three known st
 
 Every token will carry at least one string we did not define: `openid` at minimum, the decoy's `hr.read`, and the audience-bearing client scope's name where it is included in token scope. `erp.admin`, `ERP.READ` and `hr.read` are all inert for exactly the same reason `openid` is — they are not in the set. There is no unknown-scope code path, no namespace awareness, and nothing to fingerprint.
 
+*Amended 2026-08-20 by [#44](https://github.com/marcosfsousa/mcp-erp/issues/44), which built the row this section mints.* **Two of the three examples above were unmintable when this was written.** `ERP.READ` was not a client scope of this realm, so no authorization server would issue it — Keycloak validates a requested scope against the client's own assignments and answers `invalid_scope` — and `hr.read` could only be obtained through the decoy, whose token carries somebody else's audience and is refused a gate earlier. The paragraph was right about the rule and wrong about what could demonstrate it. ADR-0007 now provisions a fifth client, `mcp-scope-lookalike`, holding our audience and those two scopes and nothing else, so *inert* is a thing the wire shows rather than a thing this document asserts. `erp.admin` remains an example rather than a scope; one lookalike client is enough for a comparison that has a single site.
+
 This mints one attack-suite row, `scope_exact_match`, whose removal is *"replace exact case-sensitive set membership with any laxer comparison."* It carries `basis: adr` and `normative_strength: null`, because RFC 6749 §3.3's sentence is definitional and contains no normative keyword — the table forbids a row asserting a strength its quote does not contain. The RFC rides in the `context` field, which exists for *"a real clause that is NOT the basis… where one exists but governs a different party."* §3.3 governs how the authorization server represents the scope parameter, not how a resource server compares it. The fit is precise rather than convenient.
 
 ### Issuance: one role scope mapping, listing two roles
@@ -90,7 +92,7 @@ The mapping lists two roles because [ADR-0003](0003-the-schema-is-the-policy-fun
 
 Priya's drift row survives untouched: she holds `approver` in Keycloak and no role in the ERP, so her token carries `erp.decide` and the call refuses with `-31010`, which is the state ADR-0002's middle denial class needs and which a `403` would lie about.
 
-### Consent is required on all four clients
+### Consent is required on ~~all four clients~~ every client
 
 Each capability scope carries consent screen text; the audience-bearing default client scope has *Display on consent screen* off, because it is infrastructure rather than a permission. The screen therefore shows exactly three lines:
 

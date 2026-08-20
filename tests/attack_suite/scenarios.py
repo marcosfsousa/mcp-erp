@@ -1,0 +1,355 @@
+"""The canonical list, as this directory reads it, and the way a test declares a row.
+
+`docs/attack-suite/scenarios.yaml` is the single source of truth. This module is
+the only thing that parses it, and it does two jobs that have to agree:
+
+**It reads the rows**, so the invariants beside it assert against the file rather
+than against a restatement of it — the `meta` block's counts included, which is
+what map constraint `#12` asks of a derived number kept where it can be read.
+
+**It carries the declaration**, :func:`exercises`, which every test in this
+directory applies to say which row it falsifies. ADR-0010 fixed that shape — *"tests
+are hand-written and declare which scenario they exercise by name, with a drift
+check asserting a bijection and the threshold row as its single declared
+exemption"* — and the marker is what makes the declaration mechanical rather than
+a sentence in a docstring that nothing reads.
+
+**The declarations are collected from the source, never by importing.** Importing
+this directory's modules from inside a test would run them a second time under a
+second name, which is a pytest problem before it is anything else. Reading the
+decorators out of the syntax tree costs nothing, cannot execute a fixture by
+accident, and reports the module and function a stray declaration sits in.
+`tests/authorization/test_purity.py` reads layer 2's source for a comparable
+reason: some properties are about what is written, not about what happens.
+"""
+
+from __future__ import annotations
+
+import ast
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Final
+
+import pytest
+import yaml
+
+TestFunction = ast.FunctionDef | ast.AsyncFunctionDef
+"""What pytest collects as a test, in the syntax tree's terms — both spellings."""
+
+HERE: Final = Path(__file__).resolve().parent
+"""This directory, which is where the declarations live."""
+
+REPO: Final = HERE.parents[1]
+"""The checkout, from this file's own location — `tests/fixtures.py`'s resolution."""
+
+SCENARIOS: Final = "docs/attack-suite/scenarios.yaml"
+"""The canonical list, relative to the repository root."""
+
+DECLARATION: Final = "exercises"
+"""The name a test applies to declare its row, as it is written in the source.
+
+The collector matches on this spelling, so renaming the function means renaming
+it here — and a declaration written through an alias is not collected, which is
+a limitation stated out loud rather than defended against: every test in this
+directory writes `@exercises("row_name")` and the invariants refuse a test that
+does not.
+"""
+
+INVARIANTS: Final = "test_the_suite_holds_together.py"
+"""The one module in this directory that declares no row, and the only one.
+
+It is about the table rather than about an attack, so a declaration would name a
+row it does not falsify. Named here so the exemption is one string in one place
+instead of a rule about which files are exempt.
+"""
+
+DOCUMENTED: Final = "documented"
+ASSERTED: Final = "asserted"
+
+RETITLE_BELOW: Final = 20
+"""Below this many asserting rows the write-up stops calling this an attack suite.
+
+`scenarios.yaml`'s own invariant — *"Below 20 asserted rows the write-up retitles
+this from 'attack suite' to 'clause inventory, N proven'"* — asserted here so the
+title and the table cannot come apart quietly.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class Scenario:
+    """One row of the canonical list, with the fields the invariants read.
+
+    Deliberately not the whole row. The citation, the prevention line and the
+    notes are prose for a reader and nothing here asserts against them; parsing
+    them into fields would invite a test that checks a sentence's shape, which is
+    the kind of assertion that fails on a reworded note and means nothing when it
+    passes.
+
+    Attributes:
+        name: The stable identifier a test declares. Never reworded.
+        basis: `clause`, `adr` or `seam`.
+        normative_strength: The keyword the quoted sentence carries, or ``None``
+            for the two bases that quote no normative sentence at all.
+        status: `asserted` or `documented`.
+        floor: Whether the row may ever be downgraded to `documented`.
+        removal: The deletion that makes the attack succeed, or ``None`` on the
+            one row that prevents nothing.
+    """
+
+    name: str
+    basis: str
+    normative_strength: str | None
+    status: str
+    floor: bool
+    removal: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class Suite:
+    """The canonical list as a whole: the standing index, and the rows it indexes.
+
+    Attributes:
+        meta: The `meta` block verbatim, so the invariants can assert every
+            number in it against the rows rather than trusting it.
+        rows: The scenarios, in the order the file declares them.
+    """
+
+    meta: Mapping[str, Any]
+    rows: tuple[Scenario, ...]
+
+    @property
+    def names(self) -> set[str]:
+        """Every row's name, which is the set a declaration has to land in."""
+        return {row.name for row in self.rows}
+
+    @property
+    def asserted(self) -> tuple[Scenario, ...]:
+        """The rows carrying `status: asserted` — the ones a test has to exist for."""
+        return tuple(row for row in self.rows if row.status == ASSERTED)
+
+    @property
+    def documented(self) -> tuple[Scenario, ...]:
+        """The rows carrying `status: documented`, of which there may be exactly one."""
+        return tuple(row for row in self.rows if row.status == DOCUMENTED)
+
+
+@dataclass(frozen=True, slots=True)
+class Declaration:
+    """One test's statement of the row it falsifies.
+
+    Attributes:
+        scenario: The row's name, as written in the decorator.
+        module: The file it was written in.
+        test: The test function carrying it.
+    """
+
+    scenario: str
+    module: str
+    test: str
+
+
+def exercises(name: str) -> pytest.MarkDecorator:
+    """Declare the scenario this test falsifies, by name.
+
+    Applied to every test in this directory, and the drift check reads it back
+    out of the source. A marker rather than a bare attribute so the declaration
+    is visible to `pytest --collect-only` and selectable with `-m`, which is what
+    makes *run the rows that cover this defence* a thing a reader can do.
+
+    Args:
+        name: A row's `name` in `scenarios.yaml`, verbatim.
+
+    Returns:
+        The marker, for use as a decorator.
+    """
+    return pytest.mark.scenario(name)
+
+
+def read_suite(text: str) -> Suite:
+    """Parse the canonical list.
+
+    Args:
+        text: The contents of `scenarios.yaml`.
+
+    Returns:
+        The `meta` block and the rows.
+
+    Raises:
+        ValueError: The document is not a mapping carrying `meta` and
+            `scenarios`, or a row is missing a field the invariants read. A
+            refusal at the parse rather than a `KeyError` inside an assertion,
+            because a malformed table should say so once instead of four times.
+    """
+    document = yaml.safe_load(text)
+    if not isinstance(document, dict) or "meta" not in document or "scenarios" not in document:
+        raise ValueError("scenarios.yaml must be a mapping carrying `meta` and `scenarios`")
+
+    rows: list[Scenario] = []
+    for entry in document["scenarios"]:
+        if not isinstance(entry, dict):
+            raise ValueError(f"a scenario must be a mapping, got {entry!r}")
+        missing = [key for key in ("name", "basis", "status", "floor") if key not in entry]
+        if missing:
+            raise ValueError(f"{entry.get('name', entry)!r} is missing {', '.join(missing)}")
+        rows.append(
+            Scenario(
+                name=str(entry["name"]),
+                basis=str(entry["basis"]),
+                normative_strength=_optional(entry.get("normative_strength")),
+                status=str(entry["status"]),
+                floor=bool(entry["floor"]),
+                removal=_optional(entry.get("removal")),
+            )
+        )
+
+    return Suite(meta=document["meta"], rows=tuple(rows))
+
+
+def suite() -> Suite:
+    """The canonical list as committed, read from the checkout this run is in."""
+    return read_suite((REPO / SCENARIOS).read_text(encoding="utf-8"))
+
+
+def declarations(directory: Path = HERE) -> tuple[Declaration, ...]:
+    """Every `@exercises(...)` in this directory, read out of the source.
+
+    Statically, for the reason the module docstring gives: importing a test
+    module from inside a test is a second import under a second name, and the
+    question here is what is *written* rather than what runs.
+
+    Args:
+        directory: Where the test modules live. A parameter so the drift check's
+            own demonstration can point it at a directory it wrote itself.
+
+    Returns:
+        One entry per declaration, in file and then source order.
+    """
+    return tuple(
+        Declaration(scenario=name, module=path.name, test=function.name)
+        for path, function in _tests_in(directory)
+        for name in _declared_by(function)
+    )
+
+
+def tests_without_a_declaration(directory: Path = HERE) -> tuple[str, ...]:
+    """Tests in this directory that declare no row at all.
+
+    The half of the bijection that reads from the tests rather than from the
+    table. A test that declares nothing is not a defect in what it asserts — it
+    is a hole in the report: the suite's claim is that every row here has a
+    falsifier and every falsifier here is named by a row, and an undeclared test
+    is outside both halves of that sentence.
+
+    Args:
+        directory: Where the test modules live.
+
+    Returns:
+        ``module::test`` for each, in file and then source order.
+    """
+    return tuple(
+        f"{path.name}::{function.name}"
+        for path, function in _tests_in(directory)
+        if path.name != INVARIANTS and not _declared_by(function)
+    )
+
+
+def rows_without_a_test(rows: Suite, declared: tuple[Declaration, ...]) -> set[str]:
+    """Asserting rows that no test declares — the drift a new row arrives as.
+
+    The exemption is **derived from the row rather than written down here**: a
+    row carrying `status: documented` asserts nothing and therefore needs no
+    test, which is ADR-0010's *"the threshold row as its single declared
+    exemption"* expressed as the rule it is an instance of. Naming the row here
+    would make the exemption survive the row changing status, which is exactly
+    the drift this function exists to catch.
+
+    Args:
+        rows: The canonical list.
+        declared: Every declaration the tests carry.
+
+    Returns:
+        The names, or an empty set when the suite is whole.
+    """
+    return {row.name for row in rows.asserted} - {entry.scenario for entry in declared}
+
+
+def declarations_naming_no_row(rows: Suite, declared: tuple[Declaration, ...]) -> set[str]:
+    """Declarations that name nothing in the table — the other direction of the drift.
+
+    A test declaring a row that does not exist is a test nobody can find from the
+    table, and a renamed row leaves one behind. `name` is the field
+    `scenarios.yaml` says is *"never reworded"*, and this is what holds that.
+
+    Args:
+        rows: The canonical list.
+        declared: Every declaration the tests carry.
+
+    Returns:
+        ``module::test → scenario`` for each, so the message names where to look.
+    """
+    return {
+        f"{entry.module}::{entry.test} declares {entry.scenario!r}"
+        for entry in declared
+        if entry.scenario not in rows.names
+    }
+
+
+def _tests_in(directory: Path) -> Iterator[tuple[Path, TestFunction]]:
+    """Every test function in every test module of a directory, in file and source order.
+
+    One walk, because both halves of the bijection ask the same question of the
+    same files and a second `glob` would be a second answer to *what counts as a
+    test here*.
+
+    **`rglob`, not `glob`**, so a subdirectory cannot hold a test the check never
+    sees — pytest would collect it and this would not, which is the one asymmetry
+    that makes a bijection claim untrue while every assertion in it passes.
+
+    Module-level definitions only. A nested helper named `test_…` is not
+    collected by pytest either, so walking the whole tree would hold a
+    declaration against something that never runs.
+    """
+    for path in sorted(directory.rglob("test_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            # `async def` too: nothing here is asynchronous today, and a test
+            # that were would be invisible to the collector while pytest ran it
+            # — a hole in the load-bearing claim, closed for the cost of naming
+            # the second node type.
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith(
+                "test_"
+            ):
+                yield path, node
+
+
+def _declared_by(function: TestFunction) -> tuple[str, ...]:
+    """The scenario names one test's decorators declare.
+
+    Reads `@exercises("…")` and nothing else — not an alias, not a name computed
+    at import. The narrowness is the point: what the collector accepts is what a
+    reader can see by looking at the line above the test.
+    """
+    names: list[str] = []
+    for decorator in function.decorator_list:
+        if not isinstance(decorator, ast.Call):
+            continue
+        called = decorator.func
+        if not (isinstance(called, ast.Name) and called.id == DECLARATION):
+            continue
+        names.extend(
+            argument.value
+            for argument in decorator.args
+            if isinstance(argument, ast.Constant) and isinstance(argument.value, str)
+        )
+    return tuple(names)
+
+
+def _optional(value: object) -> str | None:
+    """A YAML scalar as a string, keeping `null` as ``None``.
+
+    `normative_strength` and `removal` are both deliberately nullable — the first
+    on every `adr` and `seam` row, the second on the one row that prevents
+    nothing — so an empty string here would erase a distinction the table makes.
+    """
+    return None if value is None else str(value)

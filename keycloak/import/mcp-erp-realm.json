@@ -168,6 +168,17 @@
         "consent.screen.text": "Read records in the neighbouring human resources system"
       },
       "protocolMappers": []
+    },
+    {
+      "name": "ERP.READ",
+      "description": "scope_exact_match. Not a permission: erp.read's letters in the other case, so any comparison laxer than exact case-sensitive membership has something to be caught by.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Nothing. This scope exists to be inert at the resource server"
+      },
+      "protocolMappers": []
     }
   ],
 
@@ -345,6 +356,31 @@
       },
       "defaultClientScopes": ["basic", "mcp-erp-audience"],
       "optionalClientScopes": ["erp.read", "erp.write", "erp.decide"]
+    },
+    {
+      "clientId": "mcp-scope-lookalike",
+      "name": "Scope lookalike client",
+      "description": "scope_exact_match. Our audience, so its token reaches the scope gate carrying two strings that resemble a capability scope and are not one. The decoy cannot: its audience is somebody else's, so it is refused a gate earlier.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": true,
+      "frontchannelLogout": false,
+      "redirectUris": [
+        "http://127.0.0.1:8085/callback",
+        "http://localhost:8085/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "defaultClientScopes": ["basic", "mcp-erp-audience"],
+      "optionalClientScopes": ["ERP.READ", "hr.read"]
     }
   ]
 }

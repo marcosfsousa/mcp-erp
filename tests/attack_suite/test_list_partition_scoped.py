@@ -27,6 +27,7 @@ no order to assert that the authorization model has an opinion about.
 from collections.abc import Iterator
 
 import pytest
+from scenarios import exercises
 
 import fixtures
 import requisitions as visible
@@ -55,6 +56,7 @@ def requisitions() -> Iterator[None]:
     yield
 
 
+@exercises("list_partition_scoped")
 def test_a_caller_sees_their_own_cost_centre_and_no_other() -> None:
     """Tomas Weber holds CC-4100, so he sees CC-4100's rows and exactly those.
 
@@ -66,6 +68,7 @@ def test_a_caller_sees_their_own_cost_centre_and_no_other() -> None:
     assert visible.visible_to("tomas.weber") == fixtures.identifiers_in("CC-4100")
 
 
+@exercises("list_partition_scoped")
 def test_another_partition_sees_a_disjoint_set() -> None:
     """Yusuf Demir is everything Tomas is, in another centre.
 
@@ -77,6 +80,7 @@ def test_another_partition_sees_a_disjoint_set() -> None:
     assert not visible.visible_to("yusuf.demir") & visible.visible_to("tomas.weber")
 
 
+@exercises("list_partition_scoped")
 def test_the_third_centre_is_its_own_answer() -> None:
     """Mei Tanaka's centre exists so that three of three is distinguishable from two.
 
@@ -88,6 +92,7 @@ def test_the_third_centre_is_its_own_answer() -> None:
     assert visible.visible_to("mei.tanaka") == fixtures.identifiers_in("CC-4300")
 
 
+@exercises("list_partition_scoped")
 def test_the_auditing_role_reads_across_every_partition() -> None:
     """Anna Lindqvist holds `auditor`, which is `partition_bypass` on this Action.
 
@@ -103,6 +108,7 @@ def test_the_auditing_role_reads_across_every_partition() -> None:
     assert len(fixtures.cost_centres()) == 3
 
 
+@exercises("list_partition_scoped")
 def test_a_scoped_away_row_is_omitted_rather_than_refused() -> None:
     """Omission, not refusal — the half of the contract this row exists for.
 

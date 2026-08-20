@@ -34,6 +34,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
+from scenarios import exercises
 
 import fixtures
 import rpc
@@ -86,6 +87,7 @@ def _status(username: str, identifier: str) -> str:
     return status
 
 
+@exercises("double_approval_via_batch_retry")
 def test_the_batch_is_two_rows_this_approver_may_decide() -> None:
     """The precondition, held by a test rather than by trust.
 
@@ -101,6 +103,7 @@ def test_the_batch_is_two_rows_this_approver_may_decide() -> None:
     assert fixtures.purchase_orders_for(*batch) == 0
 
 
+@exercises("double_approval_via_batch_retry")
 def test_a_retried_batch_answers_already_decided_for_every_item_and_mints_nothing() -> None:
     """The scenario. Twice the same call, once the effect.
 
@@ -141,6 +144,7 @@ def test_a_retried_batch_answers_already_decided_for_every_item_and_mints_nothin
         assert _status(APPROVER, identifier) == "approved"
 
 
+@exercises("double_approval_via_batch_retry")
 def test_a_partly_decided_batch_retries_into_one_answer_per_item() -> None:
     """The shape the retry actually arrives in, which is not all-or-nothing.
 

@@ -315,8 +315,8 @@ def redirect_error(location: str) -> str | None:
     return f"{query['error'][0]}: {description}".strip(": ")
 
 
-def authorization_code(location: str, *, expected_state: str) -> str:
-    """The `code` from a redirect back to the client, once its `state` checks out.
+def authorization_code(location: str, *, expected_state: str, expected_issuer: str) -> str:
+    """The `code` from a redirect back to the client, once the response is ours to read.
 
     Nothing here is a browser, so `state` is not doing the cross-site job it
     exists for. It is checked anyway because it is sent anyway: what it catches
@@ -324,12 +324,40 @@ def authorization_code(location: str, *, expected_state: str) -> str:
     different mint — which would otherwise surface as a token for the wrong
     Person, three assertions later, in a suite about something else.
 
+    **`iss` is checked first, and the order is the whole of what the mix-up row
+    asserts.** RFC 9207 §2.4 and the specification's authorization-response
+    rules put a client under a `MUST NOT` to *"act on or display error,
+    error_description, or error_uri"* from a response it has not attributed to
+    the authorization server it redirected to. An implementation that reads the
+    error first is the common shape and it fails exactly here: handed an honest
+    server's error response, it reports that server's words as though they
+    answered its own request. So the attribution runs before :func:`redirect_error`
+    is consulted, and `mixup_iss_mismatch` is the falsifier.
+
+    Args:
+        location: The `Location` of the redirect back to the client.
+        expected_state: The value sent with the authorization request.
+        expected_issuer: The issuer discovered **before** redirecting. Required
+            rather than defaulted: a check a caller can omit is a check the next
+            caller omits, and the omission is invisible until somebody replays
+            another server's response.
+
+    Returns:
+        The authorization code.
+
     Raises:
-        ValueError: The redirect carries an `error` instead, reported in the
-            authorization server's own words rather than as an absent code
-            three lines later; or it carries somebody else's `state`.
+        ValueError: The response is attributed to another issuer, or carries
+            somebody else's `state`; or it carries an `error` instead, reported
+            in the authorization server's own words rather than as an absent
+            code three lines later.
     """
     query = parse_qs(urlparse(location).query)
+
+    returned_issuer = query.get("iss", [""])[0]
+    if returned_issuer != expected_issuer:
+        raise ValueError(
+            f"redirect is attributed to issuer {returned_issuer!r}, expected {expected_issuer!r}"
+        )
 
     refusal = redirect_error(location)
     if refusal is not None:
@@ -432,7 +460,13 @@ def _perform(
             data={
                 "grant_type": "authorization_code",
                 "client_id": client_id,
-                "code": authorization_code(location, expected_state=state),
+                "code": authorization_code(
+                    location,
+                    expected_state=state,
+                    # The issuer discovered before redirecting, which is what
+                    # the response has to be attributable to.
+                    expected_issuer=str(document["issuer"]),
+                ),
                 "redirect_uri": REDIRECT_URI,
                 "code_verifier": verifier,
             },

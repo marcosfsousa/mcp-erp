@@ -21,7 +21,8 @@ package, so a suite cannot pass against a spelling the server does not use.
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from typing import Any, Final
 
 import httpx2
@@ -136,16 +137,61 @@ def routing_headers(
     return _credentialed(headers, token)
 
 
-def get(path: str) -> httpx2.Response:
+def get(path: str, *, headers: Mapping[str, str] | None = None) -> httpx2.Response:
     """One plain GET against the server, for the routes that are not the tool endpoint.
 
     Here rather than in each suite for the reason this module exists at all: the
     base address, the timeout and the decision not to raise on a `4xx` are one
     set of choices, and four copies of a client constructor is four places for
     them to come apart.
+
+    Args:
+        path: What to fetch, relative to the gateway.
+        headers: Anything the request has to carry — a credential, an ``Origin``,
+            a version header. Added by #44, whose rows are about what a request
+            carries rather than about which path it names.
+    """
+    return request("GET", path, headers=headers)
+
+
+@contextmanager
+def stream(
+    method: str, path: str, *, headers: Mapping[str, str] | None = None
+) -> Iterator[httpx2.Response]:
+    """One request whose response body is **not** read, for the one leg that never ends.
+
+    The handshake era's standalone `GET` stream stays open by design, so a caller
+    that read it would wait for a timeout and then assert against an exception.
+    This yields the response once its status and headers have arrived and closes
+    it on the way out — which is all `get_stream_removed`'s control needs, and it
+    is the only thing in this repository that opens a stream at all.
+
+    A context manager rather than a function, because the connection has to be
+    closed and the caller is the only one who knows when it is done looking.
+    """
+    with (
+        httpx2.Client(base_url=BASE_URL, timeout=TIMEOUT) as http,
+        http.stream(method, path, headers=dict(headers or {})) as response,
+    ):
+        yield response
+
+
+def request(method: str, path: str, *, headers: Mapping[str, str] | None = None) -> httpx2.Response:
+    """One request of any method against any path, for the rows the method *is* the attack.
+
+    :func:`get` is the older and narrower name and stays, because *fetch this
+    path* is what four suites are asking and reading it as a general request
+    would make them all say `"GET"` to say nothing. This is what they delegate
+    to, so the rule the module docstring states — one place builds a client —
+    survives a second verb arriving.
+
+    The second verb arrived with `get_stream_removed`, which asserts that the
+    modern leg answers `GET` and `DELETE` with `405`: there the method is the
+    whole of what is being refused, and a helper that could only say `GET` would
+    have had the suite build its own client to say `DELETE`.
     """
     with httpx2.Client(base_url=BASE_URL, timeout=TIMEOUT) as http:
-        return http.get(path)
+        return http.request(method, path, headers=dict(headers or {}))
 
 
 def post(
@@ -162,7 +208,7 @@ def post(
     suites that call this, and a helper that raised would make them assert
     against an exception rather than against the wire.
     """
-    return _send(
+    return send(
         routing_headers(method, params, token=token),
         envelope(method, params, request_id=request_id),
         base_url=base_url,
@@ -209,7 +255,7 @@ def legacy_post(
     sent = _credentialed(dict(TRANSPORT_HEADERS), token)
     sent.update(headers or {})
 
-    return _send(
+    return send(
         sent,
         {"jsonrpc": "2.0", "id": request_id, "method": method, "params": dict(params or {})},
     )
@@ -270,18 +316,43 @@ def challenge(response: httpx2.Response) -> dict[str, str]:
     return parameters
 
 
-def _send(
-    headers: Mapping[str, str], body: Mapping[str, Any], *, base_url: str | None = None
+def send(
+    headers: Mapping[str, str],
+    body: Mapping[str, Any],
+    *,
+    base_url: str | None = None,
+    path: str | None = None,
 ) -> httpx2.Response:
-    """One POST to the tool endpoint, and the only place either shape builds a client.
+    """One POST to the tool endpoint, and the only place any shape builds a client.
 
     The two shapes differ in what they send and in nothing else. Keeping the
     address, the timeout and the decision not to raise on a `4xx` in one function
     is what makes that true rather than merely intended — the same argument
     :func:`get` states, applied to the second shape that arrived after it.
+
+    **Public since #44, for the suite this module's own docstring anticipated:**
+    *"the suites that are about it build the disagreement explicitly."* A row
+    asserting that a header and a body must agree cannot use :func:`post`, which
+    derives one from the other precisely so that no suite sends a mismatched pair
+    by accident. What it needs is this — the headers it wrote, the body it wrote,
+    and the same client every other request is made with.
+
+    Args:
+        headers: Exactly what to send, including any credential.
+        body: The request body, sent as JSON.
+        base_url: Somewhere other than the gateway, for the one suite that
+            addresses a replica by name.
+        path: Somewhere other than the tool endpoint. There is exactly one
+            caller — `token_in_query_string`, which puts a credential in the URI
+            because that is the whole of what the row is about — and the
+            parameter exists so that row can do it without building a client of
+            its own.
+
+    Returns:
+        The response, whatever it is.
     """
     with httpx2.Client(base_url=base_url or BASE_URL, timeout=TIMEOUT) as http:
-        return http.post(ENDPOINT, headers=dict(headers), json=dict(body))
+        return http.post(path or ENDPOINT, headers=dict(headers), json=dict(body))
 
 
 def _credentialed(headers: dict[str, str], token: str | None) -> dict[str, str]:

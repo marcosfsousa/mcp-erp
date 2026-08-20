@@ -11,6 +11,7 @@
 - **Amended:** 2026-08-18 — substantive, by [#35](https://github.com/marcosfsousa/mcp-erp/issues/35). The generated users land in a **second file beside** the hand-authored realm rather than in an array inside it. See *Hand-authored, with only the users generated*. No decision here is reversed; the split is what makes this section's own rule structural.
 - **Amended:** 2026-08-18 — additive, by [#36](https://github.com/marcosfsousa/mcp-erp/issues/36), which built it. The two-file directory import is **verified against a running container**, and execution banked **three further traps** plus one consequence of register deviation 2 that this document did not anticipate. See *Hand-authored, with only the users generated* and *Consequences*. No decision here is reversed.
 - **Amended:** 2026-08-20 — substantive, by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46), which built the conformance client. Four clients is what the file *contains*; a **fifth exists at run time**, provisioned from a hosted document, and the realm had to gain a client policy and realm-level default client scopes before it would. See *Four clients, one stated job each*. No decision here is reversed, and none of the four changes.
+- **Amended:** 2026-08-20 — substantive, by [#44](https://github.com/marcosfsousa/mcp-erp/issues/44), which built the attack suite and found `scope_exact_match` unfalsifiable over the wire. A **fifth declared client**, `mcp-scope-lookalike`, and the `ERP.READ` client scope it exists to mint — so the run-time client the line above records is a sixth. The table's own rule is what admits it: one client, one refusal it makes reachable. See *Five clients, one stated job each*. No decision here is reversed, and none of the four above changes.
 
 ## Question
 
@@ -85,7 +86,7 @@ The realm file is **baked into the image and bind-mounted over it in Compose**, 
 
 *Amended 2026-08-15 by [#10](https://github.com/marcosfsousa/mcp-erp/issues/10) — cosmetic.* This passage read *"so #10 stays free to say yes to Cloud Run without reopening this."* That ticket said no ([ADR-0011](0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md)), and the clause was a bonus rather than the justification: the baked copy exists so the image is self-contained and the mount exists so editing the realm and restarting shows the change. Both reasons are untouched.
 
-### Four clients, one stated job each
+### ~~Four~~ Five clients, one stated job each
 
 | Client | Audience | Exists for |
 | --- | --- | --- |
@@ -93,10 +94,17 @@ The realm file is **baked into the image and bind-mounted over it in Compose**, 
 | `mcp-conformance-decoy` | `http://localhost:9090/hr` | `audience_confusion` — a token legitimately issued for another resource, replayed at us |
 | `mcp-conformance-bare` | none | the fail-closed check on audience-less tokens |
 | `mcp-expiry-probe` | ours, ten-second lifespan | `token_expired` |
+| `mcp-scope-lookalike` | ours | `scope_exact_match` — a token that reaches the scope gate carrying strings which resemble a capability scope and are not one |
 
-*Amended 2026-08-20 by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46), which built the conformance client and found this by running it.* **A fifth client exists at run time, and the realm has to invite it.**
+***Amended 2026-08-20 by [#44](https://github.com/marcosfsousa/mcp-erp/issues/44), which built the suite and found one row unfalsifiable.*** The rule this table states is what admits the fifth client rather than what resists it: **one client, one refusal it makes reachable.** `scope_exact_match` asserts that `ERP.READ` does not satisfy `erp.read` and that `hr.read` does not either, and `scenarios.yaml` claimed it needed no new realm state because the decoy already holds another resource's scope. Run against the stack, it does not: the decoy's token carries somebody else's audience **by construction** — that is precisely what makes it `audience_confusion`'s instrument — so it is refused at gate 4 and never reaches the comparison. Nor can `mcp-conformance` ask for a lookalike: Keycloak validates requested scopes against the client's own assignments and answers `invalid_scope`.
 
-The four above are what this file *contains*. The client the conformance run drives is not one of them and is registered nowhere: it identifies itself by a document GitHub Pages serves, and Keycloak provisions a client from that document on the authorization request. Two realm-level statements were needed before it would, and neither is plumbing — both are decisions this section is the right place for.
+So the realm gains one client and one client scope, `ERP.READ`, which is `erp.read`'s letters in the other case and is a permission over nothing. Its consent text says so. [ADR-0012](0012-the-token-names-a-capability-never-a-role.md) §*Unrecognised scopes are inert* is the rule being asserted, and it named `ERP.READ` and `hr.read` as its two examples before either was mintable.
+
+*A fifth client was considered and refused once before*, in ADR-0012's option 10 — as a way to make the consent ceiling legible — and refused because *"the walkthrough exercises a client the attack suite never does, in a realm whose ADR gives each of four clients one stated job."* This one is the other case: the attack suite is the only thing that uses it, and it has a stated job.
+
+*Amended 2026-08-20 by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46), which built the conformance client and found this by running it.* **A client exists at run time that this file does not contain, and the realm has to invite it.** *(This read "a fifth client" and was written against a four-row table; #44 landed the fifth **declared** client in the same session, so the run-time one is a sixth and the ordinal is dropped rather than incremented — the claim was never about which number it is.)*
+
+The clients above are what this file *contains*. The client the conformance run drives is not one of them and is registered nowhere: it identifies itself by a document GitHub Pages serves, and Keycloak provisions a client from that document on the authorization request. Two realm-level statements were needed before it would, and neither is plumbing — both are decisions this section is the right place for.
 
 **The feature is a client policy, not a switch.** `--features=cimd` in the Dockerfile makes the discovery document advertise `client_id_metadata_document_supported`, and the realm still answers *Client not found* until a policy says which identifiers it will dereference. So the realm carries a profile whose executor is `client-id-metadata-document` and a policy whose condition, `client-id-uri`, admits `https` identifiers from `marcosfsousa.github.io` and nothing else. That condition is the whole of the trust decision, and it reads as one.
 
@@ -104,7 +112,7 @@ Two settings inside it are findings rather than configuration. `cimd-allow-http-
 
 **A provisioned client inherits realm defaults, and this realm had never needed any.** Every client above names its own scopes, so the realm-level lists were empty — and a client the executor creates gets exactly those. It arrived with no `sub` claim, no audience and none of the three capability scopes. The realm now declares `defaultDefaultClientScopes` of `basic` and `mcp-erp-audience` and `defaultOptionalClientScopes` of the three capability scopes: the same pair `mcp-conformance` names for itself, which is the point. The client that earns its identity and the client that was handed one differ by **how they are known** and by nothing else, so the flow is the same flow.
 
-Nothing above changes for it. Each of the four states its own lists, and the decoy still carries somebody else's audience.
+Nothing above changes for it. Each declared client states its own lists, and the decoy still carries somebody else's audience.
 
 Plus a **second realm**, `mcp-erp-neighbour`, with one client. It is a genuinely different issuer with its own signing keys and its own real flow, which is what lets the suite reject a token that is **perfect in every respect except who issued it** — clauses #2 (`token_passthrough`) and #3 (`foreign_issuer_token`). Minting those in the test instead would have exercised the same branch while asserting against a token we invented.
 
@@ -124,7 +132,9 @@ This matches the shape of every real client the exhibit targets — Inspector an
 
 *Added 2026-08-16 by [#11](https://github.com/marcosfsousa/mcp-erp/issues/11); see [ADR-0012](0012-the-token-names-a-capability-never-a-role.md).* This ADR left consent undecided, and it belongs to the realm.
 
-All four clients set **Consent required**. Each capability scope carries consent screen text; the audience-bearing default client scope sets *Display on consent screen* off, because it is infrastructure rather than a permission. The screen therefore shows exactly three lines, one per capability, and no plumbing.
+~~All four clients~~ **Every client** sets **Consent required**. Each capability scope carries consent screen text; the audience-bearing default client scope sets *Display on consent screen* off, because it is infrastructure rather than a permission. The screen therefore shows exactly three lines, one per capability, and no plumbing.
+
+*The count is struck rather than incremented, 2026-08-20 by [#44](https://github.com/marcosfsousa/mcp-erp/issues/44).* The claim is *every*, `tests/authorization/test_realm.py` asserts it over whatever the file declares, and a number here would be a derived count kept where it can only go stale — the artifact [ADR-0011](0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md) caught drifting four times in one month. The three-line screen is unchanged: the fifth client's two scopes are optional and are requested by one test, so no ordinary mint's consent screen moves.
 
 The screen is the only place a human meets the delegation ceiling as a choice rather than as a claim in a write-up. The cost is one more form post in a headless client that already posts the login form, since direct access grants are off above. Fresh state on every boot means continuous integration always takes the first-consent path, which makes it deterministic rather than sometimes-remembered.
 

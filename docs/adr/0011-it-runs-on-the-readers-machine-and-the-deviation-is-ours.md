@@ -98,7 +98,7 @@ It is promoted on four instances, not one. That matters: the map's own promotion
 
 1. **The map's constraints.** Admitted on narrow grounds — nothing computes them, and notes 1–10 were authored while charting. What is true is that **ADRs write back into the map**, so when one lands the check is *does this amend a constraint?* That check has fired four times in four weeks: note #4 by ADR-0010, note #11 by ADR-0008, and notes #5 and #9 by this ADR.
 2. **[`docs/normative-register.md`](../normative-register.md)** — *"Every row is already decided in an ADR."*
-3. **[`docs/attack-suite/scenarios.yaml`](../attack-suite/scenarios.yaml)** — nine of its thirty-one rows carry `basis: adr`, and its membership and split rules come from ADR-0010.
+3. **[`docs/attack-suite/scenarios.yaml`](../attack-suite/scenarios.yaml)** — ~~nine of its thirty-one~~ **twelve of its thirty-four** rows carry `basis: adr`, and its membership and split rules come from ADR-0010. *(Updated 2026-08-20 by [#44](https://github.com/marcosfsousa/mcp-erp/issues/44). The counts in this line are now asserted against the file itself, by `tests/attack_suite/test_the_suite_holds_together.py`, which reads the `meta` block and the rows — so this sentence is the last hand-kept copy of them and says so.)*
 4. **The write-up** — *not yet written; joins when it exists.* Enrolled now with a declared state rather than left to a future ticket, which is how ADR-0005's Deviations section decayed into three shapes.
 
 `CONTEXT.md` and the research documents are deliberately excluded. Both are sources: ADR-0001 was amended to match `CONTEXT.md`, not the reverse, and research documents are dated primary-source findings that feed ADRs.
