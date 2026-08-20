@@ -602,3 +602,119 @@ jobs:
       - name: What the containers said
         if: failure()
         run: docker compose logs --no-color
+
+  # ADR-0013's attack-suite seam, and the third Compose bring-up in this file. A
+  # red check means *a defence regressed* — one row of
+  # `docs/attack-suite/scenarios.yaml` no longer holds, or the table and the
+  # tests have come apart. That is its own diagnosis: not an ordinary Python
+  # defect, not a crossed layer boundary, not a drifted rendering, not something
+  # the server says identically to everyone, and not an authorization
+  # expectation about who may do what — which is `Decision matrix (wire)`'s, and
+  # the line between the two is what each artifact is canonical for.
+  # `scenarios.yaml` and `matrix.yaml` share no rows and neither arbitrates the
+  # other.
+  #
+  # It sits **off** every live cut path. Cut order `#9` protects the attack
+  # suite's table outright and makes the asserting tests cuttable per row down
+  # to the floor of eleven — so a cut removes tests inside this job rather than
+  # removing the job, and the floor is asserted by the suite itself rather than
+  # by anything here.
+  #
+  # The drift check runs in this job and needs no Compose: it reads the table
+  # and the tests' own source. It is collected because it lives in the directory,
+  # which is the reading `Decision matrix (wire)` already takes for the file it
+  # is modelled on — a suite that skipped its own invariants when run whole would
+  # be a suite with a hole in it.
+  #
+  #
+  # THE BRING-UP IS `server-posture`'S, REPEATED A THIRD TIME
+  # ---------------------------------------------------------
+  # #66 wrote it and #43 copied it, saying that this job would be "the third
+  # that would settle the shape". The shape is settled and the common part is
+  # now observed three times rather than guessed — so factoring it into a
+  # composite action is fair game and is **deliberately not done here**, for the
+  # reason #66 gave and this ticket inherits: `Authorization code flow` (#46) is
+  # `yes + network` in ADR-0013's table and is already known to differ, and a
+  # ticket whose subject is the attack suite should not also be a refactor of
+  # two other jobs. It is a ticket of its own, and it now has three real
+  # consumers to design against.
+  #
+  # Four things in the copy are load-bearing, and they are #66's four:
+  #
+  #   1. `docker compose build` as its own step, so a Dockerfile failure reads
+  #      as one instead of as the stack failing to start.
+  #   2. `--wait` rather than a poll written here, because every readiness
+  #      condition is already stated in `compose.yaml` and a second definition
+  #      of ready is a second thing that can be wrong.
+  #   3. The hosts-file line rather than `KEYCLOAK_BASE_URL`. The rebase exists
+  #      for a reader who cannot edit a hosts file; taking it on the runner
+  #      would leave the documented path unexercised by anything.
+  #   4. Map constraint `#13`: no `paths:`, no `paths-ignore:`, no job-level
+  #      `if:`, no conditional matrix leg. The one conditional step below runs
+  #      only after the job has already failed, which cannot withhold a context.
+  attack-suite-wire:
+    name: Attack suite (wire)
+    runs-on: ubuntu-latest
+    # The same budget the two Compose jobs above take, for the same reason: two
+    # images built, two pulled, five containers up before the first attack is
+    # driven. The suite itself adds one deliberate wait — `token_expired` is a
+    # real ten-second token and a real eleven-second sleep, which ADR-0006's
+    # zero leeway on `exp` is what keeps that short.
+    timeout-minutes: 20
+    steps:
+      # Floating major, per the named exception at the top of this file.
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      # The suite runs on the runner rather than in a container, because it is a
+      # caller — and because one row reads the database directly.
+      # `double_approval_via_batch_retry` asserts that a retried batch *minted
+      # nothing*, which no tool can answer: a refused item carries no purchase
+      # order, so the wire cannot tell "no second order" from "a second order
+      # that was not shown". ADR-0003 accepted a suite holding a database
+      # credential in preference to a test-only reset route on a server whose
+      # entire subject is authorization.
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      # ONE HOSTNAME, TWO SIDES OF A CONTAINER BOUNDARY
+      #
+      # The issuer is `http://keycloak:8081/realms/mcp-erp`, from the seed, and
+      # the token helper mints against it. Inside the network Compose's own DNS
+      # answers for that name; on this runner nothing does. This job takes the
+      # `127.0.0.1 keycloak` line ADR-0005 §Consequences priced, because that is
+      # the path `compose.yaml` and both READMEs tell a reader to take; the
+      # `KEYCLOAK_BASE_URL` rebase stays available and stays a fallback.
+      #
+      # It matters more here than in either job above: three rows in this suite
+      # talk to the authorization server directly — the password grant, the
+      # challenge-method pin and refresh rotation — and one drives the neighbour
+      # realm's key set.
+      - name: Resolve the issuer's own hostname
+        run: echo "127.0.0.1 keycloak" | sudo tee -a /etc/hosts
+
+      - name: Build the images
+        run: docker compose build
+
+      - name: Bring the stack up
+        run: docker compose up --wait --wait-timeout 300
+
+      # The whole directory: every row of `scenarios.yaml` that asserts
+      # anything, plus the file that holds the table and the tests to each other.
+      # `-v` prints each test's own name, so a red check names the attack that
+      # got through rather than a parameter index — and the row it exercises is
+      # in its `@exercises(...)` declaration one line above it.
+      - name: Every named attack, over the wire
+        run: uv run pytest tests/attack_suite -v
+
+      # Step-level and conditional, which map constraint `#13` does not reach:
+      # a step that runs only once the job has already failed cannot withhold a
+      # context. On this job it is worth more than usual — a refusal that came
+      # from the wrong gate looks identical from the outside, and the container
+      # logs are where the chain says which one answered.
+      - name: What the containers said
+        if: failure()
+        run: docker compose logs --no-color

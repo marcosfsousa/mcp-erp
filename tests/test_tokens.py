@@ -24,6 +24,7 @@ import pytest
 
 import tokens
 from tokens import (
+    ISSUER,
     Minted,
     authorization_code,
     cache_key,
@@ -92,17 +93,51 @@ def test_the_authorization_code_is_read_out_of_the_redirect_location() -> None:
     validates it, but nothing has to answer at it — which is why the helper
     needs no server, no thread and no port to be free.
     """
-    location = "http://localhost:8085/callback?state=abc&code=the-code&session_state=x"
+    location = f"http://localhost:8085/callback?state=abc&code=the-code&iss={ISSUER}"
 
-    assert authorization_code(location, expected_state="abc") == "the-code"
+    assert authorization_code(location, expected_state="abc", expected_issuer=ISSUER) == "the-code"
 
 
 def test_a_redirect_carrying_an_error_names_it() -> None:
     """`invalid_scope` and friends arrive here, and arrive as the redirect's own words."""
-    location = "http://localhost:8085/callback?error=invalid_scope&error_description=nope"
+    location = (
+        f"http://localhost:8085/callback?error=invalid_scope&error_description=nope&iss={ISSUER}"
+    )
 
     with pytest.raises(ValueError, match="invalid_scope"):
-        authorization_code(location, expected_state="abc")
+        authorization_code(location, expected_state="abc", expected_issuer=ISSUER)
+
+
+def test_a_response_from_another_issuer_is_refused_before_its_error_is_read() -> None:
+    """RFC 9207 §2.4, and the order is the assertion.
+
+    The same error response, attributed to somebody else. A client that reads
+    the error first reports *invalid_scope* — an honest server's words, about a
+    request this client never made — and a mix-up attack is exactly a response
+    from an issuer the client did not redirect to. `mixup_iss_mismatch` drives
+    the same check over a real redirect; this pins the ordering where it is
+    cheap to state.
+    """
+    location = (
+        "http://localhost:8085/callback?error=invalid_scope&error_description=nope"
+        "&iss=http://keycloak:8081/realms/somebody-else"
+    )
+
+    with pytest.raises(ValueError, match="attributed to issuer"):
+        authorization_code(location, expected_state="abc", expected_issuer=ISSUER)
+
+
+def test_a_response_carrying_no_issuer_at_all_is_refused() -> None:
+    """An absent `iss` is not an attribution, and is refused as the mismatch it is.
+
+    RFC 9207 §2.4 is explicit that a client which expects the parameter must
+    reject a response without it — otherwise the defence is switched off by
+    omitting one field, which is the cheapest thing an attacker controls.
+    """
+    location = "http://localhost:8085/callback?state=abc&code=the-code"
+
+    with pytest.raises(ValueError, match="attributed to issuer"):
+        authorization_code(location, expected_state="abc", expected_issuer=ISSUER)
 
 
 def test_a_redirect_carrying_somebody_else_s_state_is_refused() -> None:
@@ -113,10 +148,10 @@ def test_a_redirect_carrying_somebody_else_s_state_is_refused() -> None:
     redirect, or a session belonging to a different mint — which would
     otherwise show up as a token for the wrong Person.
     """
-    location = "http://localhost:8085/callback?state=somebody-else&code=the-code"
+    location = f"http://localhost:8085/callback?state=somebody-else&code=the-code&iss={ISSUER}"
 
     with pytest.raises(ValueError, match="state"):
-        authorization_code(location, expected_state="ours")
+        authorization_code(location, expected_state="ours", expected_issuer=ISSUER)
 
 
 def test_claims_decode_without_their_padding() -> None:

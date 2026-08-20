@@ -47,35 +47,24 @@ meta:
   ticket: 9
   decided: 2026-08-12
   revision: "2026-07-28"
-  total: 33
+  total: 34
   floor: 11
   basis_split:
     clause: 19
-    adr: 11
+    adr: 12
     seam: 3
   strength_split:
     MUST: 11
     MUST NOT: 6
     SHOULD: 2
-  held_out:
-    - name: unsupported_protocol_version
-      reason: >-
-        ADR-0009 voided the -32022 observation because era routing precedes the
-        gate chain. Becomes a row only if the seam assertions show a modern-era
-        request declaring an unsupported version still reaches it.
-        CONDITION MET BY HAND, NOT BY ARTIFACT — 2026-08-19 (#38). Run against
-        Compose while writing the seam rows, never committed: a request carrying
-        `MCP-Protocol-Version: 1999-01-01` with a matching envelope version routes
-        to the modern entry rather than the legacy one, is refused `401`
-        unauthenticated, and answers -32022 with `supported: [2026-07-28]` once
-        past the token gate. So the condition holds and this stops being held
-        out — but nothing in the repository asserts it yet, and a reader should
-        treat the line above as a note to #44 rather than as a proven row.
-        #44 mints it, because the row moves `total`, `basis_split` and the
-        write-up's rendered table — derived counts map constraint `#12` tracks
-        across three documents — and needs a test to stay in bijection with.
-        ADR-0010 §One candidate is held outside the thirty-one states the same
-        condition and is now met too; it is amended when the row lands, not here.
+  held_out: []
+  # Empty since 2026-08-20 (#44), which minted the one candidate that was held
+  # out — `unsupported_protocol_version`, whose condition #38 met by hand and
+  # this file recorded as a note rather than as a row. It is a row below now,
+  # with a test in bijection with it, and the three counts above moved with it.
+  # The key stays rather than being deleted: holding a candidate outside the
+  # table is a move ADR-0010 provides for, and a field that vanished when it was
+  # last used is a field the next holding-out would have to reinvent.
 
 scenarios:
 
@@ -266,8 +255,21 @@ scenarios:
       so the test asserts both variants against it. `ERP.READ` must not satisfy
       `erp.read` (case), and `hr.read` must not satisfy `erp.read` (namespace).
       Splits from insufficient_scope, whose removal skips the intersection
-      entirely rather than running it wrongly. Testable without new realm state:
-      ADR-0007's `mcp-conformance-decoy` already holds another resource's scope.
+      entirely rather than running it wrongly. ~~Testable without new realm
+      state: ADR-0007's `mcp-conformance-decoy` already holds another resource's
+      scope.~~
+      NOT TESTABLE WITHOUT NEW REALM STATE — found 2026-08-20 by #44, running it.
+      The decoy's token carries somebody else's audience by construction, which
+      is exactly what makes it `audience_confusion`'s instrument, so it is
+      refused at gate 4 and never reaches the comparison this row is about. Nor
+      can the ordinary client mint a lookalike: Keycloak validates requested
+      scopes against the client's own assignments and answers `invalid_scope`,
+      so `ERP.READ` cannot be asked for where it is not registered.
+      ADR-0007 grew a fifth client for it, `mcp-scope-lookalike` — our audience,
+      and two optional scopes that are not capability scopes of ours — on the
+      same terms as the other three: one client, one refusal it makes reachable.
+      The row is unchanged; what was wrong was the sentence about how to reach
+      it, which was written before the server existed.
 
   - name: header_body_mismatch
     basis: clause
@@ -394,7 +396,9 @@ scenarios:
       quote_elided: true
       retrieved: 2026-08-12
     normative_strength: SHOULD
-    removal: Register a GET route on the MCP endpoint.
+    removal: >-
+      Route a GET carrying a modern `MCP-Protocol-Version` to the handshake-era
+      transport, which answers it with a stream.
     status: asserted
     floor: false
     note: >-
@@ -403,6 +407,32 @@ scenarios:
       narrower — "The server MUST provide a single HTTP endpoint path … that
       supports POST" — and does not forbid GET. The revision's own change note
       ("Removal of the GET stream endpoint") is descriptive, not normative.
+      TWO DEFECTS CLOSED 2026-08-20 by #44, both raised from #37 and neither a
+      consequence of that cut. (1) The row carried `status: asserted` with
+      nothing behind it — no request in any suite issued a GET at all — which is
+      a second `documented` row wearing the wrong label. It has a test now,
+      `tests/attack_suite/test_get_stream_removed.py`, and the bijection check
+      that landed with it is what would catch the next one.
+      (2) THE 405 IS REACHABLE ONLY WITH A TOKEN ON THE MODERN LEG. Executed
+      against Compose: unauthenticated GET answers `401` + challenge, because
+      ADR-0006's gate 4 precedes the transport; GET with a token and a version
+      header answers `405` + `Allow: POST`; GET with a token and no version
+      header opens a legacy `text/event-stream`; DELETE with a token answers
+      `405`. The citation describes the second line, so the test carries a real
+      token, and map constraint `#6` was amended to say the 405/401 split out
+      loud. The legacy stream is not a defect of this row: ADR-0008 records that
+      the substrate offers no way to switch it off and ADR-0009 authorises it,
+      which is why `prevents` scopes itself to the modern era.
+      REMOVAL REWORDED in the same commit. It read "Register a GET route on the
+      MCP endpoint", which named a deletion nothing could observe: `app.py`
+      mounts the transport under a Starlette `Route` with no method restriction,
+      so GET already reaches the package on both legs and a second registration
+      could never be reached. Same defect #38 found on
+      legacy_underscoped_same_denial_class, same rule — a removal nobody can
+      perform is a row nobody can falsify — and the deletion recorded now is the
+      one the assertion actually rests on: era routing sends a version-bearing
+      GET to the modern entry, where it is refused, instead of to the transport
+      that would open the stream.
 
   # ─── basis: clause — the realm we authored ────────────────────────────────
 
@@ -559,6 +589,52 @@ scenarios:
       Covers gate step 3, which is a branch rather than a refusal. ADR-0006 says
       this is worth a scenario whichever order had been chosen — the order makes
       the attack structurally impossible rather than defended against.
+
+  - name: unsupported_protocol_version
+    basis: adr
+    prevents: >-
+      A revision this server does not implement being negotiated by assertion,
+      and the supported-version list answering a caller holding no token.
+    citation:
+      source: ADR-0009 §The gate chain is not uniform across the two legs, and the shape gate is where it breaks
+      note: >-
+        NOT A CLAUSE, AND THE REASON IS THIS FILE'S OWN RULE. Research 0003 and
+        0004 both paraphrase the behaviour — "return UnsupportedProtocolVersionError
+        (-32022) with the supported list, which is exactly what the spec
+        prescribes" — and a paraphrase is not a citation: no verbatim sentence
+        has been read from the pinned revision, and a row cannot be published on
+        a citation whose sentence has not been harvested. What is decided here
+        rather than quoted is where the refusal sits: ADR-0009 establishes that
+        era routing precedes the gate chain and that an unrecognised version
+        reaches the modern entry, and ADR-0006 puts gate 4 in front of it.
+        It becomes a clause row if the sentence is harvested; nothing the row
+        asserts changes when it is.
+    normative_strength: null
+    removal: >-
+      Exempt an unrecognised `MCP-Protocol-Version` from gate 4, so the
+      classifier's supported-version list answers a caller holding no token.
+    status: asserted
+    floor: false
+    note: >-
+      HELD OUT FROM #9 UNTIL 2026-08-20, and minted here. ADR-0010 §One candidate
+      is held outside the thirty-one made it conditional on ADR-0009's seam
+      assertions showing that a modern-era request declaring an unsupported
+      version still reaches the gate chain — ADR-0009 having voided the earlier
+      -32022 observation, because era routing precedes that chain entirely.
+      #38 met the condition by hand and declined to mint the row, for three
+      reasons that all land here: it moves counts three documents track, it needs
+      a test to stay in bijection with, and its basis and removal are judgement
+      calls this ticket owns.
+      Confirmed against Compose while minting it: `MCP-Protocol-Version:
+      1999-01-01` with a matching envelope version routes to the modern entry
+      (the session manager sends the header to the legacy path only for values
+      in HANDSHAKE_PROTOCOL_VERSIONS), is refused `401` + challenge with no
+      token, and answers `-32022` with `supported: ["2026-07-28"]` and the
+      requested value echoed once past the token gate.
+      SPLITS FROM protocol_version_skew, whose removal reads the version from
+      the header and ignores `_meta`: that row is a request disagreeing with
+      itself and is answered `-32020`. Here both halves agree on a revision this
+      server does not implement, and the answer is the other code.
 
   - name: retry_after_role_denial
     basis: adr

@@ -84,7 +84,7 @@ The realm file is **baked into the image and bind-mounted over it in Compose**, 
 
 *Amended 2026-08-15 by [#10](https://github.com/marcosfsousa/mcp-erp/issues/10) — cosmetic.* This passage read *"so #10 stays free to say yes to Cloud Run without reopening this."* That ticket said no ([ADR-0011](0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md)), and the clause was a bonus rather than the justification: the baked copy exists so the image is self-contained and the mount exists so editing the realm and restarting shows the change. Both reasons are untouched.
 
-### Four clients, one stated job each
+### ~~Four~~ Five clients, one stated job each
 
 | Client | Audience | Exists for |
 | --- | --- | --- |
@@ -92,6 +92,13 @@ The realm file is **baked into the image and bind-mounted over it in Compose**, 
 | `mcp-conformance-decoy` | `http://localhost:9090/hr` | `audience_confusion` — a token legitimately issued for another resource, replayed at us |
 | `mcp-conformance-bare` | none | the fail-closed check on audience-less tokens |
 | `mcp-expiry-probe` | ours, ten-second lifespan | `token_expired` |
+| `mcp-scope-lookalike` | ours | `scope_exact_match` — a token that reaches the scope gate carrying strings which resemble a capability scope and are not one |
+
+***Amended 2026-08-20 by [#44](https://github.com/marcosfsousa/mcp-erp/issues/44), which built the suite and found one row unfalsifiable.*** The rule this table states is what admits the fifth client rather than what resists it: **one client, one refusal it makes reachable.** `scope_exact_match` asserts that `ERP.READ` does not satisfy `erp.read` and that `hr.read` does not either, and `scenarios.yaml` claimed it needed no new realm state because the decoy already holds another resource's scope. Run against the stack, it does not: the decoy's token carries somebody else's audience **by construction** — that is precisely what makes it `audience_confusion`'s instrument — so it is refused at gate 4 and never reaches the comparison. Nor can `mcp-conformance` ask for a lookalike: Keycloak validates requested scopes against the client's own assignments and answers `invalid_scope`.
+
+So the realm gains one client and one client scope, `ERP.READ`, which is `erp.read`'s letters in the other case and is a permission over nothing. Its consent text says so. [ADR-0012](0012-the-token-names-a-capability-never-a-role.md) §*Unrecognised scopes are inert* is the rule being asserted, and it named `ERP.READ` and `hr.read` as its two examples before either was mintable.
+
+*A fifth client was considered and refused once before*, in ADR-0012's option 10 — as a way to make the consent ceiling legible — and refused because *"the walkthrough exercises a client the attack suite never does, in a realm whose ADR gives each of four clients one stated job."* This one is the other case: the attack suite is the only thing that uses it, and it has a stated job.
 
 Plus a **second realm**, `mcp-erp-neighbour`, with one client. It is a genuinely different issuer with its own signing keys and its own real flow, which is what lets the suite reject a token that is **perfect in every respect except who issued it** — clauses #2 (`token_passthrough`) and #3 (`foreign_issuer_token`). Minting those in the test instead would have exercised the same branch while asserting against a token we invented.
 
@@ -109,7 +116,9 @@ This matches the shape of every real client the exhibit targets — Inspector an
 
 *Added 2026-08-16 by [#11](https://github.com/marcosfsousa/mcp-erp/issues/11); see [ADR-0012](0012-the-token-names-a-capability-never-a-role.md).* This ADR left consent undecided, and it belongs to the realm.
 
-All four clients set **Consent required**. Each capability scope carries consent screen text; the audience-bearing default client scope sets *Display on consent screen* off, because it is infrastructure rather than a permission. The screen therefore shows exactly three lines, one per capability, and no plumbing.
+~~All four clients~~ **Every client** sets **Consent required**. Each capability scope carries consent screen text; the audience-bearing default client scope sets *Display on consent screen* off, because it is infrastructure rather than a permission. The screen therefore shows exactly three lines, one per capability, and no plumbing.
+
+*The count is struck rather than incremented, 2026-08-20 by [#44](https://github.com/marcosfsousa/mcp-erp/issues/44).* The claim is *every*, `tests/authorization/test_realm.py` asserts it over whatever the file declares, and a number here would be a derived count kept where it can only go stale — the artifact [ADR-0011](0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md) caught drifting four times in one month. The three-line screen is unchanged: the fifth client's two scopes are optional and are requested by one test, so no ordinary mint's consent screen moves.
 
 The screen is the only place a human meets the delegation ceiling as a choice rather than as a claim in a write-up. The cost is one more form post in a headless client that already posts the login form, since direct access grants are off above. Fresh state on every boot means continuous integration always takes the first-consent path, which makes it deterministic rather than sometimes-remembered.
 

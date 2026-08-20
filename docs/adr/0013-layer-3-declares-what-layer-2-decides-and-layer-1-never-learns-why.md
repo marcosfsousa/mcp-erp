@@ -290,7 +290,8 @@ The composition root pairs them by hand, three times, rather than looping: the t
 tests/
   authorization/   # in-process, layer 2 only, no Docker — the ejection target
   matrix/          # wire; plus the one union mapping test
-  attack_suite/    # wire; 33 rows including ADR-0009's 3 basis:seam
+  attack_suite/    # wire; every asserting row of scenarios.yaml, plus the
+                   # drift check that holds the table and the tests equal
   conformance/     # wire + outbound; the authorization code flow
 ```
 
@@ -419,6 +420,10 @@ The unlisted-tool refusal stays too, on a narrower ground. `scenarios.yaml`'s `i
 ***Published documents are immutable* is the tenth row**, and it was in `ci.yml` before it was here. Its seam is its own — a red check means someone rewrote or removed a published client identity, which is neither a Python defect nor a crossed layer boundary — and it installs no environment, so it stands when the jobs beside it fall over. **What a green tick does not assert:** with no comparable base commit it warns and passes, having checked nothing. A pull request always carries a base and a push to `main` always carries a real predecessor, so the only reachable path is a force push to `main` — which is why #47 should block force pushes in the same ruleset that requires these contexts, closing the gap without touching the job.
 
 **The first Compose bring-up in continuous integration lands with this job**, ahead of the three tickets expected to bring it. #66 writes it plainly inside *Server posture* — bring the stack up, wait on healthchecks, and settle the `keycloak` hostname the token helper's issuer requires — and #43, #44 and #46 inherit the pattern. It is deliberately **not** factored into a shared action yet: *Authorization code flow* is `yes + network` in the table above and is already known to differ, so a shared seam designed against one real consumer and three imagined ones would be built on the wrong example.
+
+***Attack suite (wire)* is the third copy, and the shape is settled — 2026-08-20, [#44](https://github.com/marcosfsousa/mcp-erp/issues/44).** #43 named this job as *"the third that would settle the shape"*, and it does: three jobs now bring the stack up with the same four load-bearing steps, so the common part is **observed** rather than guessed and factoring is fair game. It is still not done, and the reason is narrower than #66's was — a ticket whose subject is the attack suite should not also be a refactor of two other jobs, and the fourth consumer is the one already known to differ. What is settled is the *shape*; what is left is a ticket that does nothing else.
+
+*What that job runs is not only wire tests.* `tests/attack_suite/` holds the drift check that keeps `scenarios.yaml` and the tests in bijection, and it needs no Compose — it reads the table and the tests' own source. It is collected there because it lives in that directory, which is the same reading this document already takes for `tests/matrix/test_the_matrix_holds_together.py`: a suite that skipped its own invariants when run whole would be a suite with a hole in it.
 
 **A required context must be produced unconditionally by every run of the workflow** — **map constraint `#13`**, which carries the conditional forms it covers, the reasoning, and the one escape hatch. It binds every future edit to `ci.yml`, not just this design, which is why it lands there rather than here.
 

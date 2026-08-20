@@ -78,7 +78,9 @@ Paired with [ADR-0006](0006-fail-closed-in-a-fixed-order.md)'s closed rejection 
 
 Map constraint #4 protects the suite from cuts. That protection was written for twelve scenarios and now covers thirty-one, in a solo build.
 
-**The protection moves to the table.** All thirty-one rows are protected — name, basis, citation, what it prevents, recorded removal. The **asserting test** is cuttable per row down to a floor, and a cut row keeps its place with `status: documented, not asserted`, exactly like the threshold row.
+**The protection moves to the table.** ~~All thirty-one rows~~ **Every row** is protected — name, basis, citation, what it prevents, recorded removal. The **asserting test** is cuttable per row down to a floor, and a cut row keeps its place with `status: documented, not asserted`, exactly like the threshold row.
+
+*The count is struck rather than incremented, 2026-08-20 by [#44](https://github.com/marcosfsousa/mcp-erp/issues/44), on this document's own reasoning about derived numbers.* The claim is *every row*, and the table's size is asserted against the table.
 
 The `status` column becomes the cut mechanism. A protection nobody can honour under pressure gets ignored silently; a table that shows how much is asserted versus merely named is a stronger artifact than one claiming a uniformity it does not have.
 
@@ -115,6 +117,10 @@ Generation was rejected. Matrix rows share one shape — principal × tool × re
 
 Tests being the canonical carrier was rejected for a narrower reason: the accepted-risk row has no test, and would need a skipped one to hold its metadata. A skipped test in a security suite is a bad thing to own.
 
+*Built 2026-08-20 by [#44](https://github.com/marcosfsousa/mcp-erp/issues/44), and three details of it are worth recording because they were choices.* **The declaration is a decorator** — `@exercises("row_name")`, one line above each test, which is a pytest marker as well, so `--collect-only` and `-m` see it. **The collection is static**: the check parses this directory's source with `ast` rather than importing it, because importing a test module from inside a test is a second import under a second name, and the question is what is written rather than what runs. **The exemption is derived**, not named: a row needs a test unless it carries `status: documented`, so the threshold row is exempt because of what it is rather than because it is on a list — and a row that changed status would gain or lose its exemption without anyone remembering to edit the check.
+
+The bijection runs in **three** directions rather than two. Rows without a test and declarations without a row are the two this document named; the third is a test in that directory carrying no declaration at all, which is invisible from the table — every row still has its falsifier, and the suite has grown an assertion nobody can trace to a defence.
+
 ### Citations are pinned, quoted and dated
 
 A revision-dated URL — never `/latest/` — the normative sentence quoted verbatim rather than paraphrased, and the date it was read.
@@ -145,7 +151,13 @@ A re-fetching freshness check was rejected: map constraint #11 says nothing exte
 
 **Map constraint #7 is not amended.** This ticket produces one ADR. The identifier decision lands as an in-place amendment to ADR-0003, which is where a reader of the schema will meet it.
 
-**One candidate is held outside the thirty-one.** `unsupported_protocol_version` (`-32022`) becomes a row only if ADR-0009's seam assertions show it is reachable — that ADR voided the earlier observation about it because era routing precedes the gate chain, and whether a modern-era request declaring an unsupported version still arrives there is a property of `mcp` 2.0.0 that ADR-0008 recorded as read, not executed.
+**~~One candidate is held outside the thirty-one.~~ It is a row now.** `unsupported_protocol_version` (`-32022`) becomes a row only if ADR-0009's seam assertions show it is reachable — that ADR voided the earlier observation about it because era routing precedes the gate chain, and whether a modern-era request declaring an unsupported version still arrives there is a property of `mcp` 2.0.0 that ADR-0008 recorded as read, not executed.
+
+*Amended 2026-08-20 by [#44](https://github.com/marcosfsousa/mcp-erp/issues/44), which minted it.* **The condition is met and was met in two steps.** [#38](https://github.com/marcosfsousa/mcp-erp/issues/38) ran the seam assertions and found the answer by hand — a request carrying `MCP-Protocol-Version: 1999-01-01` routes to the modern entry, is refused `401` unauthenticated, and answers `-32022` past the token gate — then declined to mint the row, because it moves counts three documents track and needs a test to stay in bijection with. #44 owns both, so it mints the row and this paragraph is where the condition stops being open.
+
+**It lands as `basis: adr`, and the choice was the open half.** A clause row needs a verbatim sentence read from the pinned revision; research 0003 and 0004 both *paraphrase* the behaviour, and this document's own rule is that a paraphrase is not a citation. What is decided rather than quoted is where the refusal sits — era routing puts an unrecognised version at the modern entry (ADR-0009) and gate 4 stands in front of it (ADR-0006) — so the row cites ADR-0009 and carries a null strength. It becomes a clause row the day the sentence is harvested, and nothing it asserts changes when it does.
+
+**The table is thirty-four rows**, `basis: adr` 11 → 12. The floor stays eleven, the retitle threshold is untouched, and the soft ceiling of 35 is not crossed — but it is one row away, which is the review the ceiling exists to prompt rather than a cap it exists to enforce.
 
 **`audience_missing` carries a project-ADR basis, not a clause.** Research 0003's ambiguity #5 establishes that nothing in the specification states what a server does with an audience-less token. Fail-closed is our decision, and claiming a clause for it would be the one kind of dishonesty this table cannot afford.
 

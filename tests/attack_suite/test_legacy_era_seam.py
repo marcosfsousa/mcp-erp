@@ -27,6 +27,7 @@ import pytest
 from mcp.shared.inbound import MCP_METHOD_HEADER
 from mcp_types.jsonrpc import METHOD_NOT_FOUND
 from mcp_types.version import HANDSHAKE_PROTOCOL_VERSIONS, LATEST_MODERN_VERSION
+from scenarios import exercises
 
 import fixtures
 import rpc
@@ -69,6 +70,7 @@ def requisitions() -> Iterator[None]:
     yield
 
 
+@exercises("legacy_unauthenticated_refused")
 def test_legacy_unauthenticated_refused() -> None:
     """A legacy-era call carrying no token is refused, exactly as a modern one is.
 
@@ -92,6 +94,7 @@ def test_legacy_unauthenticated_refused() -> None:
     assert "error" not in challenge
 
 
+@exercises("legacy_unauthenticated_refused")
 def test_the_legacy_leg_is_authorized_identically_when_it_is_permitted() -> None:
     """The other half of *identically*: the granted case, not only the refusals.
 
@@ -122,6 +125,7 @@ def test_the_legacy_leg_is_authorized_identically_when_it_is_permitted() -> None
     assert _identifiers(legacy) == fixtures.identifiers_in("CC-4100")
 
 
+@exercises("legacy_unauthenticated_refused")
 def test_token_verification_precedes_era_routing() -> None:
     """The open question, made observable: the gate runs, then the era is chosen.
 
@@ -163,6 +167,7 @@ def test_token_verification_precedes_era_routing() -> None:
     assert rpc.challenge(refused)["resource_metadata"] == rpc.METADATA_URL
 
 
+@exercises("legacy_underscoped_same_denial_class")
 def test_legacy_underscoped_same_denial_class() -> None:
     """An under-scoped legacy call and its modern twin refuse in the same shape.
 
@@ -193,6 +198,7 @@ def test_legacy_underscoped_same_denial_class() -> None:
     assert challenge["error"] == "insufficient_scope"
 
 
+@exercises("legacy_discover_exemption_unavailable")
 def test_legacy_discover_exemption_unavailable() -> None:
     """The one unauthenticated method is unreachable from the legacy leg.
 
@@ -210,6 +216,7 @@ def test_legacy_discover_exemption_unavailable() -> None:
     assert refused.status_code == httpx2.codes.UNAUTHORIZED
 
 
+@exercises("legacy_discover_exemption_unavailable")
 def test_the_exemption_follows_from_absence_rather_than_from_a_default() -> None:
     """Sending ``Mcp-Method`` alone buys nothing, which is what the row asserts *why* about.
 
@@ -233,6 +240,7 @@ def test_the_exemption_follows_from_absence_rather_than_from_a_default() -> None
     assert rpc.challenge(refused)["resource_metadata"] == rpc.METADATA_URL
 
 
+@exercises("legacy_discover_exemption_unavailable")
 def test_the_spoofed_header_buys_no_tool_call_either() -> None:
     """What removal 3 actually costs: the same spoof against a tool rather than a probe.
 

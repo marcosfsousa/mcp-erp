@@ -88,7 +88,20 @@ uv run python tests/tokens.py tomas.weber erp.read --client-id mcp-conformance-b
 The client defaults per realm, because the two realms share no clients. Pick one
 explicitly to reach a specific refusal: `mcp-conformance-decoy` for a token
 bound to somebody else's resource, `mcp-conformance-bare` for one with no
-audience at all, `mcp-expiry-probe` for a ten-second lifespan.
+audience at all, `mcp-expiry-probe` for a ten-second lifespan, and
+`mcp-scope-lookalike` for a token that names **our** resource while carrying
+scopes that only resemble ours:
+
+```
+$ uv run python tests/tokens.py tomas.weber ERP.READ hr.read --client-id mcp-scope-lookalike
+granted     ERP.READ hr.read openid
+```
+
+That token clears the audience check and is refused at the scope gate — which is
+`scope_exact_match`, and the one row that needed a client of its own to become
+falsifiable at all. `ERP.READ` is a client scope this realm declares and a
+permission over nothing; ADR-0012 §*Unrecognised scopes are inert* is the rule it
+exists to let a test falsify.
 
 The two most instructive runs are the role scope mapping doing its work:
 

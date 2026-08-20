@@ -45,6 +45,7 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
+from scenarios import exercises
 
 import fixtures
 import rpc
@@ -133,6 +134,7 @@ def _row(username: str, identifier: str) -> dict[str, Any]:
     return row
 
 
+@exercises("state_handle_hijack")
 def test_the_target_is_a_row_the_prober_could_otherwise_decide() -> None:
     """The precondition, held by a test rather than by trust.
 
@@ -155,6 +157,7 @@ def test_the_target_is_a_row_the_prober_could_otherwise_decide() -> None:
     assert row["submitted_by"]["id"] != OWNER_SUBJECT
 
 
+@exercises("state_handle_hijack")
 def test_possession_of_a_guessed_identifier_does_not_authorize_the_write() -> None:
     """The clause. The handle is an argument, never a credential.
 
@@ -170,6 +173,7 @@ def test_possession_of_a_guessed_identifier_does_not_authorize_the_write() -> No
     assert refused["structuredContent"]["reason"] == "not_found"
 
 
+@exercises("state_handle_hijack")
 def test_the_refused_write_left_the_row_exactly_as_it_was() -> None:
     """The second half, and the half a refusal that wrote anyway would fail.
 

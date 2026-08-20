@@ -218,19 +218,64 @@ def test_the_probe_client_overrides_its_lifespan_to_ten_seconds(realm: dict[str,
     assert probe["attributes"]["access.token.lifespan"] == "10"
 
 
-# ─── Four clients, one stated job each ─────────────────────────────────────
+# ─── Five clients, one stated job each ─────────────────────────────────────
 
 
-def test_the_four_clients_exist(realm: dict[str, Any]) -> None:
-    """ADR-0007's table, as membership."""
+def test_the_five_clients_exist(realm: dict[str, Any]) -> None:
+    """ADR-0007's table, as membership.
+
+    ~~Four~~ **five** since 2026-08-20, when #44 found `scope_exact_match` had no
+    falsifier over the wire and ADR-0007 grew a client to give it one. The rule
+    the table states is unchanged and is what admits the fifth: one client, one
+    refusal it makes reachable.
+    """
     expected = {
         "mcp-conformance",
         "mcp-conformance-decoy",
         "mcp-conformance-bare",
         "mcp-expiry-probe",
+        "mcp-scope-lookalike",
     }
 
     assert {client["clientId"] for client in _clients(realm)} == expected
+
+
+def test_the_lookalike_client_carries_our_audience_and_none_of_our_scopes(
+    realm: dict[str, Any],
+) -> None:
+    """`scope_exact_match`'s instrument, asserted as the two halves that make it one.
+
+    **Our audience**, or its token is refused at gate 4 and never reaches the
+    comparison the row is about — which is exactly what happens with the decoy,
+    and is why that client could not serve this row however its scopes read.
+
+    **None of our capability scopes**, or the token would satisfy the requirement
+    honestly and the refusal would prove nothing about resemblance. What it
+    carries instead is `ERP.READ` — `erp.read`'s letters in the other case — and
+    `hr.read`, which is another namespace entirely.
+    """
+    lookalike = _client(realm, "mcp-scope-lookalike")
+    optional = set(lookalike["optionalClientScopes"])
+
+    assert _audiences(realm, "mcp-scope-lookalike") == _audiences(realm, "mcp-conformance")
+    assert optional == {"ERP.READ", "hr.read"}
+    assert not optional & set(CAPABILITY_SCOPES)
+    assert not set(lookalike["defaultClientScopes"]) & set(CAPABILITY_SCOPES)
+
+
+def test_the_case_variant_scope_is_the_capability_scope_in_another_case(
+    realm: dict[str, Any],
+) -> None:
+    """The whole point of `ERP.READ` is that it differs from `erp.read` in nothing else.
+
+    A scope that differed in a letter as well would be refused by any comparison
+    at all, and the row asserts something narrower: that **case** is what
+    separates them, because RFC 6749 §3.3 makes scope strings case-sensitive and
+    ADR-0012 compares them exactly.
+    """
+    assert _client_scope(realm, "ERP.READ") is not None
+    assert "ERP.READ".lower() == "erp.read"
+    assert "erp.read" in CAPABILITY_SCOPES
 
 
 def test_the_decoy_is_audience_bound_to_another_resource(realm: dict[str, Any]) -> None:

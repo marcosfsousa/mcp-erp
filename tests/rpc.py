@@ -162,7 +162,7 @@ def post(
     suites that call this, and a helper that raised would make them assert
     against an exception rather than against the wire.
     """
-    return _send(
+    return send(
         routing_headers(method, params, token=token),
         envelope(method, params, request_id=request_id),
         base_url=base_url,
@@ -209,7 +209,7 @@ def legacy_post(
     sent = _credentialed(dict(TRANSPORT_HEADERS), token)
     sent.update(headers or {})
 
-    return _send(
+    return send(
         sent,
         {"jsonrpc": "2.0", "id": request_id, "method": method, "params": dict(params or {})},
     )
@@ -270,15 +270,31 @@ def challenge(response: httpx2.Response) -> dict[str, str]:
     return parameters
 
 
-def _send(
+def send(
     headers: Mapping[str, str], body: Mapping[str, Any], *, base_url: str | None = None
 ) -> httpx2.Response:
-    """One POST to the tool endpoint, and the only place either shape builds a client.
+    """One POST to the tool endpoint, and the only place any shape builds a client.
 
     The two shapes differ in what they send and in nothing else. Keeping the
     address, the timeout and the decision not to raise on a `4xx` in one function
     is what makes that true rather than merely intended — the same argument
     :func:`get` states, applied to the second shape that arrived after it.
+
+    **Public since #44, for the suite this module's own docstring anticipated:**
+    *"the suites that are about it build the disagreement explicitly."* A row
+    asserting that a header and a body must agree cannot use :func:`post`, which
+    derives one from the other precisely so that no suite sends a mismatched pair
+    by accident. What it needs is this — the headers it wrote, the body it wrote,
+    and the same client every other request is made with.
+
+    Args:
+        headers: Exactly what to send, including any credential.
+        body: The request body, sent as JSON.
+        base_url: Somewhere other than the gateway, for the one suite that
+            addresses a replica by name.
+
+    Returns:
+        The response, whatever it is.
     """
     with httpx2.Client(base_url=base_url or BASE_URL, timeout=TIMEOUT) as http:
         return http.post(ENDPOINT, headers=dict(headers), json=dict(body))

@@ -31,6 +31,7 @@ from collections.abc import Iterator
 
 import httpx2
 import pytest
+from scenarios import exercises
 
 import fixtures
 import rpc
@@ -93,6 +94,7 @@ def _answer(username: str, identifier: str) -> httpx2.Response:
     return rpc.call_tool(TOOL, {"id": identifier}, token=minted.access_token)
 
 
+@exercises("row_probe_indistinguishable")
 def test_the_foreign_row_is_a_row_somebody_can_see() -> None:
     """The precondition, held by a test rather than by trust.
 
@@ -106,6 +108,7 @@ def test_the_foreign_row_is_a_row_somebody_can_see() -> None:
     assert result["structuredContent"]["requisition"]["cost_centre"] == FOREIGN_CENTRE
 
 
+@exercises("row_probe_indistinguishable")
 def test_a_foreign_row_and_a_row_that_never_existed_answer_byte_identically() -> None:
     """The scenario. Same bytes, so the answer carries no bit about existence.
 
@@ -126,6 +129,7 @@ def test_a_foreign_row_and_a_row_that_never_existed_answer_byte_identically() ->
     assert foreign.content == absent.content, (foreign.text, absent.text)
 
 
+@exercises("row_probe_indistinguishable")
 def test_the_refusal_is_a_refusal_rather_than_an_omission() -> None:
     """A **named** resource is refused, never omitted — the half this row owns.
 
@@ -148,6 +152,7 @@ def test_the_refusal_is_a_refusal_rather_than_an_omission() -> None:
     }
 
 
+@exercises("row_probe_indistinguishable")
 def test_the_auditing_role_reads_the_row_the_prober_cannot() -> None:
     """Breadth by role, at single-row granularity.
 
