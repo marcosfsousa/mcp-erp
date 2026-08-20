@@ -1,0 +1,6 @@
+# The certificate directory, which is generated on the reader's machine and
+# belongs to a running container rather than to an image. Keeping it out of the
+# build context means a private key is never handed to the daemon, and a
+# reader who has run the TLS profile does not rebuild against a context that
+# changed for a reason the image has nothing to do with.
+tls/

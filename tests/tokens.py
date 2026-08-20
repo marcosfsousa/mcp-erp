@@ -33,6 +33,18 @@ The helper asserts that the metadata it discovers still names the issuer, so a
 rebased run cannot quietly become a run against a different authorization
 server.
 
+**The opt-in TLS profile is the one thing that moves the issuer itself**, and it
+moves the scheme and nothing else. Name it the way the resource server names
+it, and point the requests wherever that stack is reachable::
+
+    MCP_ISSUER=https://keycloak:8081/realms/mcp-erp \
+    KEYCLOAK_BASE_URL=https://localhost:8081 \
+    SSL_CERT_FILE=keycloak/tls/authority.crt \
+    uv run python tests/tokens.py priya.raman erp.read
+
+Only an issuer the seed lists is accepted, because one it does not list has no
+directory rows behind it.
+
 Standalone, which is #36's own acceptance criterion — mint a token, decode it,
 confirm subject and granted scopes::
 
@@ -58,12 +70,36 @@ from urllib.parse import parse_qs, urljoin, urlparse
 import httpx
 
 from mcp_erp.authorization.identity import SEED, read_identity_seed
+from mcp_erp.transport.configuration import ISSUER_VARIABLE
 
 REPO = Path(__file__).parents[1]
 
 _SEED = read_identity_seed((REPO / SEED).read_text(encoding="utf-8"))
 
-ISSUER = _SEED.issuer
+
+def _issuer() -> str:
+    """Which of the seed's identifiers this run asserts, and it is one of them.
+
+    The seed lists two: the one `docker compose up` serves and the one the
+    opt-in TLS profile serves. The variable is the same name the resource server
+    is configured with, so pointing the helper at a stack means repeating the
+    string that stack already runs on rather than learning a second spelling.
+
+    **Chosen from the seed rather than accepted from the environment.** An
+    issuer the seed does not list has no directory rows, so a typo would mint a
+    token that every gate accepts and the principal lookup refuses — a
+    `role_missing` several steps from the shell that caused it.
+    """
+    chosen = os.environ.get(ISSUER_VARIABLE)
+    if chosen is None:
+        return _SEED.issuer
+    if chosen not in _SEED.issuers:
+        listed = ", ".join(_SEED.issuers)
+        raise SystemExit(f"{ISSUER_VARIABLE}={chosen!r} is not an issuer the seed lists: {listed}")
+    return chosen
+
+
+ISSUER = _issuer()
 """What every token minted here says, and what the principal directory joins on."""
 
 REALM = _SEED.realm

@@ -121,7 +121,12 @@ class IdentitySeed:
     beside it, in the layer whose words the rest of that half is written in.
 
     Attributes:
-        issuer: The authorization server the subjects below are scoped by.
+        issuer: The authorization server the subjects below are scoped by, in
+            the configuration ``docker compose up`` brings up.
+        tls_issuer: The same realm's identifier under the opt-in TLS profile,
+            or ``None``. Optional because the default configuration has one
+            identifier and the profile is something a reader takes
+            deliberately.
         realm: The realm the user import belongs to, taken from the issuer's
             last path segment rather than authored twice.
         password: One conspicuously fake password, shared by everybody. Seven
@@ -131,24 +136,59 @@ class IdentitySeed:
     """
 
     issuer: str
+    tls_issuer: str | None
     realm: str
     password: str
     identities: tuple[Identity, ...]
+
+    @property
+    def issuers(self) -> tuple[str, ...]:
+        """Every identifier one realm answers to, default first.
+
+        The directory is keyed by issuer **and** subject, so an identifier the
+        directory has never heard of resolves nobody and every call under it
+        refuses with ``role_missing``. Listing them here is what lets the
+        renderer hold the cast at each without a second authored copy of the
+        cast.
+        """
+        if self.tls_issuer is None:
+            return (self.issuer,)
+        return (self.issuer, self.tls_issuer)
+
+
+def realm_of(issuer: str) -> str:
+    """The realm an issuer names, which is its last path segment.
+
+    One derivation, because the seed now authors two issuers and the realm has to
+    be the same one under both — a second spelling of this rule is how the user
+    import ends up rendered for a realm the directory does not hold rows at.
+    """
+    return issuer.rsplit("/", 1)[-1]
 
 
 def read_identity_seed(text: str) -> IdentitySeed:
     """Parse the identity half of the seed, refusing what the realm would reject later.
 
-    Two refusals, both of which would otherwise surface as an authorization
+    Three refusals, two of which would otherwise surface as an authorization
     server rejecting a file: a subject sharing another's — which is also a
     directory key collision — and a subject too long to be a realm identifier.
+    The third is the second issuer naming a different realm, which nothing
+    downstream would reject at all: the user import would be rendered for
+    whichever realm the issuer names, and the directory would carry rows for one
+    that was never imported.
 
     Raises:
-        ValueError: Two people share a subject, or a subject is empty or longer
-            than :data:`SUBJECT_LIMIT`.
+        ValueError: Two people share a subject, a subject is empty or longer
+            than :data:`SUBJECT_LIMIT`, or the second issuer's realm is not the
+            first's.
     """
     document = yaml.safe_load(text)
     issuer = str(document["issuer"])
+    realm = realm_of(issuer)
+    authored = document.get("tls_issuer")
+    tls_issuer = None if authored is None else str(authored)
+    if tls_issuer is not None and realm_of(tls_issuer) != realm:
+        raise ValueError(f"second issuer {tls_issuer!r} names a realm other than {realm!r}")
     identities: list[Identity] = []
     seen: set[str] = set()
 
@@ -173,7 +213,8 @@ def read_identity_seed(text: str) -> IdentitySeed:
 
     return IdentitySeed(
         issuer=issuer,
-        realm=issuer.rsplit("/", 1)[-1],
+        tls_issuer=tls_issuer,
+        realm=realm,
         password=str(document["password"]),
         identities=tuple(identities),
     )
@@ -186,14 +227,25 @@ def directory_entries(seed: IdentitySeed) -> tuple[DirectoryEntry, ...]:
     rather than straight to JSON is what keeps the rendered file and the loaded
     row one shape: the round trip is asserted, so the writer and the reader
     cannot drift into two formats that only nearly agree.
+
+    **The whole cast at every issuer**, which is the seed's list and today is
+    two: the address ``docker compose up`` serves and the one the opt-in TLS
+    profile serves. The roles and the partition come from the one authored
+    person either way — a second identifier for one realm is not a second
+    policy, and rendering them per issuer is what would let two rows for one
+    person disagree.
+
+    Issuer-major order, so the default configuration's rows read as a block and
+    a reader can see where the second identifier starts.
     """
     return tuple(
         DirectoryEntry(
-            issuer=seed.issuer,
+            issuer=issuer,
             subject=identity.subject,
             roles=frozenset(identity.roles),
             partition=identity.partition,
         )
+        for issuer in seed.issuers
         for identity in sorted(seed.identities, key=lambda identity: identity.subject)
     )
 

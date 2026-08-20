@@ -340,10 +340,24 @@ jobs:
       # question about files. `Decision matrix (wire)` collects the second one
       # too, because it lives in that directory and a suite that skipped its own
       # invariants when run whole would be a suite with a hole in it.
+      # `tests/test_tls_profile.py` joins them since #91, and it is the same
+      # question one step further out: the seed authors two issuers, and
+      # `compose.yaml` is where the containers are told which one they run on. A
+      # rendering that matched its source while Compose ran on a third string
+      # would pass everything above and fail as `role_missing` on a token that
+      # had cleared every gate. It needs no Compose to ask — it reads the file
+      # and interpolates it the way Compose would — so it belongs to this job
+      # rather than to one that has to bring a stack up.
+      #
+      # A step rather than a job, deliberately: ADR-0013 holds job `name:` values
+      # and the ruleset's required contexts equal in both directions, so a step
+      # inside a job that already runs changes no context and needs no ruleset
+      # edit.
       - name: The invariants between the renderings
         run: |
           uv run pytest tests/authorization/test_identity.py \
-                        tests/matrix/test_the_matrix_holds_together.py
+                        tests/matrix/test_the_matrix_holds_together.py \
+                        tests/test_tls_profile.py
 
   # ADR-0013's fifth row, and the one job in this file whose subject is this
   # file. A red check means **the workflow and the ruleset disagree** — a job was
