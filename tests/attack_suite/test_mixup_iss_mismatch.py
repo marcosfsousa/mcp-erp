@@ -32,22 +32,20 @@ authorization code flow — challenge, login, consent, redemption — and the `i
 comparison this row falsifies lives in its `authorization_code`, ahead of
 everything else the redirect carries.
 
-**There is a second client we author, and this row asserts nothing about it.**
+**There is a second client we author, and it keeps the same clause elsewhere.**
 #46's conformance client earns its identity through a hosted document and hands
 the redirect's parameters to the protocol package, which validates RFC 9207 `iss`
-against the issuer it discovered. But its `_callback` reads `redirect_error`
-first and raises with the authorization server's own words **before** those
-parameters are handed over — so on an error response, the party that would
-attribute it never sees it. That is this row's clause, on the half it names as
-the one implementations miss. It is raised as #78 rather than fixed here: the
-ordering belongs to the ticket that owns that client, and this suite cannot
-drive its network-dependent job to check a change to it.
+against the issuer it discovered — but a refusal carries no code, so it can never
+be handed over, and the ordering in its `_callback` is its own to get right. #78
+put the attribution ahead of `redirect_error` there and falsified it in
+`tests/conformance/test_a_refusal_is_attributed_before_it_is_repeated.py`, which
+is where it has to live: the client under test is that directory's, and the
+declarations this directory collects are read out of this directory's source.
+Both clients, one clause, two falsifiers.
 """
 
-import secrets
 from urllib.parse import parse_qs, urlparse
 
-import httpx
 import pytest
 from scenarios import exercises
 
@@ -55,45 +53,10 @@ import tokens
 from tokens import (
     NEIGHBOUR_CLIENT,
     NEIGHBOUR_REALM,
-    REDIRECT_URI,
     authorization_code,
-    challenge_for,
     metadata,
-    rebase,
+    refused_authorization_response,
 )
-
-TIMEOUT = 30.0
-
-
-def _error_response_from(realm: str, client_id: str) -> tuple[str, str]:
-    """One real authorization error response, and the issuer that produced it.
-
-    Produced by asking for the weak challenge method, which ADR-0007 pins per
-    client — so the authorization server answers with a redirect carrying
-    `error`, `error_description` and, per RFC 9207, `iss`. That is exactly the
-    document a mix-up puts in front of the wrong client, and it is obtained here
-    by asking an honest server an honest question it refuses.
-
-    Returns:
-        The redirect's `Location`, and the issuer the realm declares.
-    """
-    document = metadata(realm)
-    with httpx.Client(follow_redirects=False, timeout=TIMEOUT) as http:
-        answer = http.get(
-            rebase(str(document["authorization_endpoint"])),
-            params={
-                "client_id": client_id,
-                "response_type": "code",
-                "redirect_uri": REDIRECT_URI,
-                "scope": "openid erp.read",
-                "state": secrets.token_urlsafe(16),
-                "code_challenge": challenge_for(secrets.token_urlsafe(64)),
-                "code_challenge_method": "plain",
-            },
-        )
-
-    assert answer.status_code == httpx.codes.FOUND, answer.text
-    return str(answer.headers["location"]), str(document["issuer"])
 
 
 @exercises("mixup_iss_mismatch")
@@ -111,7 +74,9 @@ def test_mixup_iss_mismatch() -> None:
     only one of them says the right thing, and a client that reported the wrong
     one would send a developer to debug a challenge method rather than a mix-up.
     """
-    location, issuer_that_answered = _error_response_from(tokens.REALM, tokens.CONFORMANCE_CLIENT)
+    location, issuer_that_answered = refused_authorization_response(
+        tokens.REALM, tokens.CONFORMANCE_CLIENT
+    )
     neighbour = str(metadata(NEIGHBOUR_REALM)["issuer"])
 
     # A real response, attributable to a real authorization server — and not the
@@ -137,7 +102,9 @@ def test_the_same_response_is_read_once_it_is_attributable() -> None:
     defence that refused both would pass the test above while making the client
     unable to complete any flow, which is the shape a nervous fix takes.
     """
-    location, issuer_that_answered = _error_response_from(tokens.REALM, tokens.CONFORMANCE_CLIENT)
+    location, issuer_that_answered = refused_authorization_response(
+        tokens.REALM, tokens.CONFORMANCE_CLIENT
+    )
 
     with pytest.raises(ValueError, match="invalid_request"):
         authorization_code(

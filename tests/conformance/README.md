@@ -39,6 +39,23 @@ minted. Mint versus earn is a constructor argument, not an architecture, and
 `test_minting_and_earning_differ_by_exactly_one_object` is that claim as an
 assertion rather than a diagram.
 
+## The second module, and why a client-side clause is asserted here
+
+`test_a_refusal_is_attributed_before_it_is_repeated.py` keeps the other half of
+the attack suite's `mixup_iss_mismatch` row. The protocol package validates
+RFC 9207 `iss` on the success path — but `AuthorizationCodeResult` requires a
+`code`, a refused response carries an `error` and none, so a refusal can never be
+handed over and the party that would attribute it never sees it. That leaves
+`Flow._callback` as the only place the *"MUST NOT act on or display error,
+error_description, or error_uri"* can be kept, and
+[#78](https://github.com/marcosfsousa/mcp-erp/issues/78) is where it started
+being kept.
+
+It is here rather than in `tests/attack_suite/` because the client under test is
+this directory's and that directory collects its declarations out of its own
+source. It needs Keycloak and not GitHub Pages: the redirect it reads is a real
+refusal from a real realm, handed to a flow that discovered the other one.
+
 ## Running it
 
 ```
