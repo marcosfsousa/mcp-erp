@@ -523,6 +523,19 @@ scenarios:
       client. Rides the `mcp-erp-neighbour` realm. Covers the error-response case,
       which is the half implementations usually miss. `as_metadata_issuer_spoof`
       was refused on cost — a hostile metadata host for one row.
+      THE REMOVAL IS A DELETION IN `tests/`, AND THAT IS WHAT A CLIENT-SIDE ROW
+      MEANS HERE. Recorded 2026-08-20 by #44, which built the check: the party
+      under this obligation is a client, the client this project authors today is
+      the token helper `tests/tokens.py`, and the deletion is the `iss`
+      comparison in its `authorization_code`. Every other row in this file names
+      a deletion in `src/` or in a committed realm file, so a reader who assumed
+      that uniformly would look for this one in the wrong tree. #46's conformance
+      client is the second client and inherits the same obligation; the check
+      lives where the flow lives rather than being written twice.
+      THE ORDER IS THE ASSERTION: `iss` is compared before `error` is read, which
+      is what the quoted MUST NOT amounts to — a client that reads the error
+      first reports another server's words as though they answered its own
+      request.
 
   # ─── basis: adr — rules this project invented ─────────────────────────────
 
@@ -592,9 +605,7 @@ scenarios:
 
   - name: unsupported_protocol_version
     basis: adr
-    prevents: >-
-      A revision this server does not implement being negotiated by assertion,
-      and the supported-version list answering a caller holding no token.
+    prevents: The supported-version list answering a caller who has presented no credential.
     citation:
       source: ADR-0009 §The gate chain is not uniform across the two legs, and the shape gate is where it breaks
       note: >-
@@ -635,6 +646,15 @@ scenarios:
       the header and ignores `_meta`: that row is a request disagreeing with
       itself and is answered `-32020`. Here both halves agree on a revision this
       server does not implement, and the answer is the other code.
+      WHAT THIS ROW DEFENDS IS THE ORDERING, NOT THE CLASSIFIER. `prevents` was
+      drafted as two clauses and narrowed to one in the same commit, on this
+      file's rule that a row records the exact removal that makes it pass: the
+      second clause — a revision we do not implement being negotiated by
+      assertion — is refused by the substrate's own classifier, and the deletion
+      that would undo it is a change to era routing inside `mcp` 2.0.0, which
+      nobody here can perform. So that half is the row's *precondition* and is
+      asserted as one, and what the row is about is that the answer sits behind
+      gate 4 — which is ours to lose.
 
   - name: retry_after_role_denial
     basis: adr

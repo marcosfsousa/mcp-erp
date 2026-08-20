@@ -70,6 +70,16 @@ def _credential() -> dict[str, str]:
     return {"authorization": f"Bearer {mint('tomas.weber', ['erp.read']).access_token}"}
 
 
+def _modern(headers: dict[str, str]) -> dict[str, str]:
+    """The same headers, declaring the modern era.
+
+    The version header is what era routing keys on, so it is what makes every
+    request below a modern-era one — which is the half of this row that is not
+    about the method at all.
+    """
+    return {**headers, MCP_PROTOCOL_VERSION_HEADER: LATEST_PROTOCOL_VERSION}
+
+
 @exercises("get_stream_removed")
 def test_a_modern_get_is_refused_with_method_not_allowed() -> None:
     """The scenario. `405`, and the `Allow` header that says what the endpoint is for.
@@ -82,14 +92,7 @@ def test_a_modern_get_is_refused_with_method_not_allowed() -> None:
     half a client can act on: the specification's own remedy for an older client
     is to learn that this endpoint takes one method.
     """
-    with httpx2.Client(base_url=rpc.BASE_URL, timeout=rpc.TIMEOUT) as http:
-        response = http.get(
-            rpc.ENDPOINT,
-            headers={
-                **_credential(),
-                MCP_PROTOCOL_VERSION_HEADER: LATEST_PROTOCOL_VERSION,
-            },
-        )
+    response = rpc.get(rpc.ENDPOINT, headers=_modern(_credential()))
 
     assert response.status_code == httpx2.codes.METHOD_NOT_ALLOWED
     assert response.headers[ALLOW] == "POST"
@@ -103,14 +106,40 @@ def test_a_delete_is_refused_the_same_way() -> None:
     there is nothing here for a `DELETE` to mean, and the refusal says so in the
     protocol's own words rather than by ignoring the request.
     """
-    with httpx2.Client(base_url=rpc.BASE_URL, timeout=rpc.TIMEOUT) as http:
-        response = http.request(
-            "DELETE",
-            rpc.ENDPOINT,
-            headers={**_credential(), MCP_PROTOCOL_VERSION_HEADER: LATEST_PROTOCOL_VERSION},
-        )
+    response = rpc.request("DELETE", rpc.ENDPOINT, headers=_modern(_credential()))
 
     assert response.status_code == httpx2.codes.METHOD_NOT_ALLOWED
+
+
+@exercises("get_stream_removed")
+def test_the_stream_the_removal_names_is_a_stream_the_legacy_leg_really_opens() -> None:
+    """The removal's consequence, asserted rather than hand-confirmed.
+
+    The recorded deletion is *route a modern `GET` to the handshake-era
+    transport, which answers it with a stream* — and a removal whose consequence
+    nobody has written down is the defect this row was already carrying once.
+    So the stream is opened here, on the leg that is entitled to it: same method,
+    same credential, **no version header**, which is the whole of what makes a
+    request legacy.
+
+    **This is not a defect and is not what the row prevents.** ADR-0008 records
+    that the substrate offers no way to switch this leg off and ADR-0009
+    authorises its traffic identically to any other legacy traffic; the row's
+    `prevents` line scopes itself to the modern era for exactly that reason. What
+    the pair establishes is that the two legs answer the same request
+    differently, so the `405` above is a decision rather than the only thing this
+    server knows how to say.
+
+    The body is deliberately never read: a standalone stream stays open by
+    design, so `rpc.stream` closes it once the status and headers have arrived.
+    """
+    with rpc.stream(
+        "GET",
+        rpc.ENDPOINT,
+        headers={**_credential(), "accept": "text/event-stream"},
+    ) as response:
+        assert response.status_code == httpx2.codes.OK
+        assert response.headers["content-type"].startswith("text/event-stream")
 
 
 @exercises("get_stream_removed")
@@ -127,10 +156,7 @@ def test_an_unauthenticated_get_meets_the_token_gate_first() -> None:
     learns where to get a credential, and learns nothing about which methods the
     endpoint serves.
     """
-    with httpx2.Client(base_url=rpc.BASE_URL, timeout=rpc.TIMEOUT) as http:
-        response = http.get(
-            rpc.ENDPOINT, headers={MCP_PROTOCOL_VERSION_HEADER: LATEST_PROTOCOL_VERSION}
-        )
+    response = rpc.get(rpc.ENDPOINT, headers=_modern({}))
 
     assert response.status_code == httpx2.codes.UNAUTHORIZED
     assert rpc.challenge(response)["resource_metadata"] == rpc.METADATA_URL

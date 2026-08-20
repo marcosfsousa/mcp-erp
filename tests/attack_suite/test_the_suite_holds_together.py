@@ -82,7 +82,6 @@ def test_the_declared_total_and_the_ceiling_hold() -> None:
     """The index's headline number, against the rows it indexes."""
     assert META["total"] == len(SUITE.rows)
     assert len(SUITE.rows) <= CEILING
-    assert META["floor"] == len(FLOOR)
 
 
 def test_every_row_name_is_unique() -> None:
@@ -158,9 +157,12 @@ def test_the_floor_is_exactly_the_eleven_rows_that_hold_the_chain_up() -> None:
     """The floor, marked: which rows, and what each one holds.
 
     Set equality rather than a count, because a floor of eleven made of a
-    different eleven would satisfy a count and lose a gate step.
+    different eleven would satisfy a count and lose a gate step. The declared
+    number is checked here too, against the same set, rather than beside the
+    total — it is a fact about which rows the floor is made of.
     """
     assert {row.name for row in SUITE.rows if row.floor} == set(FLOOR)
+    assert META["floor"] == len(FLOOR)
 
 
 def test_no_floor_row_is_merely_documented() -> None:
@@ -273,6 +275,29 @@ def test_a_test_declaring_a_row_that_does_not_exist_fails_the_drift_check(
     assert [entry.scenario for entry in stray] == ["a_row_that_was_renamed"]
     assert scenarios.declarations_naming_no_row(SUITE, stray) == {
         "test_something_renamed.py::test_it declares 'a_row_that_was_renamed'"
+    }
+
+
+def test_the_collector_sees_the_two_shapes_that_could_have_escaped_it(tmp_path: Path) -> None:
+    """A test in a subdirectory, and a test that is `async def`. Both are collected.
+
+    Neither exists in this directory today, and that is the reason to assert
+    them: the bijection is a claim about *every* test here, and a collector that
+    silently skipped a shape would keep making the claim while it stopped being
+    true. pytest would collect both.
+    """
+    nested = tmp_path / "deeper"
+    nested.mkdir()
+    (nested / "test_in_a_subdirectory.py").write_text(
+        '@exercises("a_row")\ndef test_it() -> None:\n    pass\n', encoding="utf-8"
+    )
+    (tmp_path / "test_asynchronous.py").write_text(
+        '@exercises("another_row")\nasync def test_it() -> None:\n    pass\n', encoding="utf-8"
+    )
+
+    assert {entry.scenario for entry in scenarios.declarations(tmp_path)} == {
+        "a_row",
+        "another_row",
     }
 
 

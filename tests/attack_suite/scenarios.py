@@ -34,6 +34,9 @@ from typing import Any, Final
 import pytest
 import yaml
 
+TestFunction = ast.FunctionDef | ast.AsyncFunctionDef
+"""What pytest collects as a test, in the syntax tree's terms — both spellings."""
+
 HERE: Final = Path(__file__).resolve().parent
 """This directory, which is where the declarations live."""
 
@@ -222,15 +225,11 @@ def declarations(directory: Path = HERE) -> tuple[Declaration, ...]:
     Returns:
         One entry per declaration, in file and then source order.
     """
-    found: list[Declaration] = []
-    for path in sorted(directory.glob("test_*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for function in _test_functions(tree):
-            found.extend(
-                Declaration(scenario=name, module=path.name, test=function.name)
-                for name in _declared_by(function)
-            )
-    return tuple(found)
+    return tuple(
+        Declaration(scenario=name, module=path.name, test=function.name)
+        for path, function in _tests_in(directory)
+        for name in _declared_by(function)
+    )
 
 
 def tests_without_a_declaration(directory: Path = HERE) -> tuple[str, ...]:
@@ -248,17 +247,11 @@ def tests_without_a_declaration(directory: Path = HERE) -> tuple[str, ...]:
     Returns:
         ``module::test`` for each, in file and then source order.
     """
-    stray: list[str] = []
-    for path in sorted(directory.glob("test_*.py")):
-        if path.name == INVARIANTS:
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        stray.extend(
-            f"{path.name}::{function.name}"
-            for function in _test_functions(tree)
-            if not _declared_by(function)
-        )
-    return tuple(stray)
+    return tuple(
+        f"{path.name}::{function.name}"
+        for path, function in _tests_in(directory)
+        if path.name != INVARIANTS and not _declared_by(function)
+    )
 
 
 def rows_without_a_test(rows: Suite, declared: tuple[Declaration, ...]) -> set[str]:
@@ -302,19 +295,35 @@ def declarations_naming_no_row(rows: Suite, declared: tuple[Declaration, ...]) -
     }
 
 
-def _test_functions(tree: ast.Module) -> Iterator[ast.FunctionDef]:
-    """Every module-level test function in a parsed module.
+def _tests_in(directory: Path) -> Iterator[tuple[Path, TestFunction]]:
+    """Every test function in every test module of a directory, in file and source order.
 
-    Module-level only. A nested helper named `test_…` is not collected by pytest
-    either, so walking the whole tree would hold a declaration against something
-    that never runs.
+    One walk, because both halves of the bijection ask the same question of the
+    same files and a second `glob` would be a second answer to *what counts as a
+    test here*.
+
+    **`rglob`, not `glob`**, so a subdirectory cannot hold a test the check never
+    sees — pytest would collect it and this would not, which is the one asymmetry
+    that makes a bijection claim untrue while every assertion in it passes.
+
+    Module-level definitions only. A nested helper named `test_…` is not
+    collected by pytest either, so walking the whole tree would hold a
+    declaration against something that never runs.
     """
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
-            yield node
+    for path in sorted(directory.rglob("test_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            # `async def` too: nothing here is asynchronous today, and a test
+            # that were would be invisible to the collector while pytest ran it
+            # — a hole in the load-bearing claim, closed for the cost of naming
+            # the second node type.
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith(
+                "test_"
+            ):
+                yield path, node
 
 
-def _declared_by(function: ast.FunctionDef) -> tuple[str, ...]:
+def _declared_by(function: TestFunction) -> tuple[str, ...]:
     """The scenario names one test's decorators declare.
 
     Reads `@exercises("…")` and nothing else — not an alias, not a name computed

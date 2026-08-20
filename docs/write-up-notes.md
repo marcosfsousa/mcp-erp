@@ -360,6 +360,45 @@ rediscover.
   else's suite. The enumeration is what made the boundary cheap; the rule alone
   would have made it an argument. — #43, #66
 
+- **A test that declares which row it falsifies turns a security suite into a
+  report.** The declaration is one line above each test and the check reads it
+  out of the source, so *every defence has a falsifier* and *every falsifier is
+  named by a defence* are both mechanical. The third direction is the one nobody
+  writes down: a test in the directory that declares **nothing** is invisible
+  from the table — every row still has its test while the suite grows an
+  assertion nobody can trace to a defence. — #44, ADR-0010
+
+- **Two rows claimed `status: asserted` with nothing behind them, and the table
+  could not tell.** `get_stream_removed` and `state_handle_hijack` both sat green
+  in a column that says *asserted* while no request in any suite exercised them.
+  The status column is only as good as the join, which is the argument for
+  building the bijection with the suite rather than after it. — #44, #37
+
+- **A removal is a claim, and claims written before the code go stale
+  silently.** Three of them named deletions that could not be performed or could
+  not be seen: `legacy_underscoped_same_denial_class` described a gate that had
+  moved (#38), `get_stream_removed` named registering a route that is already
+  registered, and `scope_exact_match` said the decoy client made it testable when
+  the decoy's token dies a gate earlier. All three read as fine until somebody
+  tried to run them. — #44, #38, ADR-0010
+
+- **Provisioning a client to make one refusal reachable is the realm's own
+  rule, and it is what let a fifth client in without an argument.** ADR-0007's
+  table gives each client one stated job; ADR-0012 had refused a fifth client for
+  a *different* job — making the consent ceiling legible — and the refusal turned
+  on that client being one the attack suite never uses. `mcp-scope-lookalike` is
+  used by exactly one row, so the same rule admits it. Worth telling because the
+  earlier refusal reads like a precedent against it and is not. — #44, ADR-0007,
+  ADR-0012
+
+- **The `-32022` row cites an ADR because nobody had read the sentence.** Two
+  research documents paraphrase the rule and the table forbids publishing a row
+  on a citation whose sentence has not been harvested, so the row lands
+  `basis: adr` with a null strength and becomes a clause row the day somebody
+  quotes the specification. The discipline is worth more than the label: a row
+  that claimed `MUST` on a paraphrase would be the exact overclaim the register
+  exists to prevent. — #44, ADR-0010
+
 ---
 
 ## Findings

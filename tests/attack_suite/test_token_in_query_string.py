@@ -51,12 +51,11 @@ def test_token_in_query_string() -> None:
     permitted = rpc.call_tool(TOOL, token=minted.access_token)
     assert permitted.status_code == httpx2.codes.OK, permitted.text
 
-    with httpx2.Client(base_url=rpc.BASE_URL, timeout=rpc.TIMEOUT) as http:
-        refused = http.post(
-            f"{rpc.ENDPOINT}?access_token={minted.access_token}",
-            headers=rpc.routing_headers("tools/call", CALL),
-            json=rpc.envelope("tools/call", CALL),
-        )
+    refused = rpc.send(
+        rpc.routing_headers("tools/call", CALL),
+        rpc.envelope("tools/call", CALL),
+        path=f"{rpc.ENDPOINT}?access_token={minted.access_token}",
+    )
 
     assert refused.status_code == httpx2.codes.UNAUTHORIZED
     parameters = rpc.challenge(refused)

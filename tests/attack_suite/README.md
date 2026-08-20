@@ -54,7 +54,7 @@ invariants when run whole would be a suite with a hole in it.
 | `test_the_scope_gate.py` | `insufficient_scope` and `scope_exact_match` |
 | `test_dns_rebinding_origin.py` | gate 1 |
 | `test_get_stream_removed.py` | the modern leg's `405` |
-| `test_retry_after_denial.py` | the three rows about what a client does with a refusal |
+| `test_retry_after_refusal.py` | the three rows about what a client does with a refusal |
 | `test_the_realm_refuses.py` | the three rows the authorization server keeps |
 | `test_mixup_iss_mismatch.py` | the suite's only client-side row |
 | `test_row_probe_indistinguishable.py`, `test_state_handle_hijack.py`, `test_list_partition_scoped.py`, `test_double_approval_via_batch_retry.py` | the four rows that landed with the tools that made them reachable |

@@ -263,7 +263,7 @@ def test_the_lookalike_client_carries_our_audience_and_none_of_our_scopes(
     assert not set(lookalike["defaultClientScopes"]) & set(CAPABILITY_SCOPES)
 
 
-def test_the_case_variant_scope_is_the_capability_scope_in_another_case(
+def test_the_realm_declares_one_pair_of_scopes_that_differ_only_in_case(
     realm: dict[str, Any],
 ) -> None:
     """The whole point of `ERP.READ` is that it differs from `erp.read` in nothing else.
@@ -271,11 +271,36 @@ def test_the_case_variant_scope_is_the_capability_scope_in_another_case(
     A scope that differed in a letter as well would be refused by any comparison
     at all, and the row asserts something narrower: that **case** is what
     separates them, because RFC 6749 §3.3 makes scope strings case-sensitive and
-    ADR-0012 compares them exactly.
+    ADR-0012 compares them exactly. So the claim is about the file — two declared
+    scopes, equal when case is ignored and unequal when it is not — rather than
+    about `str.lower`.
+
+    **And exactly one such pair**, because a second one would mean a capability
+    scope had grown a lookalike nobody wrote a row for.
     """
-    assert _client_scope(realm, "ERP.READ") is not None
-    assert "ERP.READ".lower() == "erp.read"
-    assert "erp.read" in CAPABILITY_SCOPES
+    declared = {str(scope["name"]) for scope in realm["clientScopes"]}
+    lookalikes = {
+        (name, other)
+        for name in declared
+        for other in declared
+        if name != other and name.casefold() == other.casefold()
+    }
+
+    assert lookalikes == {("ERP.READ", "erp.read"), ("erp.read", "ERP.READ")}
+
+
+def test_only_the_lookalike_client_can_ask_for_the_case_variant(realm: dict[str, Any]) -> None:
+    """`ERP.READ` is mintable through one client, and that client mints nothing else.
+
+    The confinement is what keeps the scope from being a hazard rather than an
+    instrument: no ordinary client can ask for it, so no token outside the one
+    row's own mint can carry a string that resembles a capability scope.
+    """
+    for client in _clients(realm):
+        assigned = set(client["defaultClientScopes"]) | set(client["optionalClientScopes"])
+        holds_it = "ERP.READ" in assigned
+
+        assert holds_it == (client["clientId"] == "mcp-scope-lookalike"), client["clientId"]
 
 
 def test_the_decoy_is_audience_bound_to_another_resource(realm: dict[str, Any]) -> None:

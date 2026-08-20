@@ -81,9 +81,8 @@ def test_the_gate_covers_the_unauthenticated_document_too() -> None:
     rather than by a path allow-list, so nothing about its exemption from the
     token gate carries over to this one.
     """
-    with httpx2.Client(base_url=rpc.BASE_URL, timeout=rpc.TIMEOUT) as http:
-        refused = http.get(rpc.METADATA_PATH, headers={"origin": BROWSER_ORIGIN})
-        permitted = http.get(rpc.METADATA_PATH)
+    refused = rpc.get(rpc.METADATA_PATH, headers={"origin": BROWSER_ORIGIN})
+    permitted = rpc.get(rpc.METADATA_PATH)
 
     assert refused.status_code == httpx2.codes.FORBIDDEN
     assert permitted.status_code == httpx2.codes.OK

@@ -258,13 +258,14 @@ def test_unsupported_protocol_version() -> None:
     earlier observation, because era routing precedes the chain entirely. It
     does, and this is where that stops being a note and becomes a falsifier.
 
-    Both halves are asserted, because the row is about **where** the refusal
-    happens as much as what it says. Unauthenticated, the token gate answers
-    first and the supported-version list is not disclosed to a stranger. With a
-    token, the classifier answers `-32022` carrying the revisions this server
-    does implement and echoing the one that was asked for — which is also what
-    proves the request reached the modern entry rather than the legacy leg, since
-    the handshake era has no such code and would have negotiated instead.
+    **What the row defends is the ordering; the `-32022` is its precondition.**
+    Unauthenticated, the token gate answers first and the supported-version list
+    is not disclosed to a stranger — that is the recorded removal's falsifier and
+    the assertion this row owns. The second call is what makes the first one mean
+    something: it shows the list exists and is reachable, and that the request
+    arrived at the modern entry rather than the legacy leg, since the handshake
+    era has no such code and would have negotiated instead. Refusing the ordering
+    claim on a path that answered nothing would prove nothing.
     """
     headers = {
         **rpc.TRANSPORT_HEADERS,

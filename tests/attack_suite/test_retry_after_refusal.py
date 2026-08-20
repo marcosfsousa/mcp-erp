@@ -24,6 +24,14 @@ this decision at all.
 nothing here reads a seeded row: the separation edge needs a requisition whose
 submitter is the person about to be refused, and that is a row a test has to
 create rather than find.
+
+*The file is named for a refusal and the rows are named for a denial, and the
+difference is deliberate.* `CONTEXT.md`'s **Refusal** entry bars *denial* as
+another word for it, and that rule binds every identifier this ticket chooses.
+It does not reach the three row names: `scenarios.yaml` calls `name` a stable
+identifier that is *"never reworded"*, they were assigned before the vocabulary
+entry existed, and rewording one would break the join every test in this
+directory declares through.
 """
 
 from typing import Any
