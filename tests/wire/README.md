@@ -235,5 +235,6 @@ one exercised on every run.
 ~~ADR-0013 fixes the job set at eight~~ — it never did, and #66 struck the
 count. The heading named a number and the paragraph under it requires set
 equality between job names and the ruleset's required contexts; *one job per
-seam* is the only rule. What holds the table and the workflow together is the
-test #47 brings, never a number either document has to keep current.
+seam* is the only rule. What holds the table and the workflow together is
+`tests/test_required_checks.py`, which #47 brought — never a number either
+document has to keep current.

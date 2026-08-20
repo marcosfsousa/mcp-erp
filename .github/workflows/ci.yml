@@ -32,9 +32,12 @@
 #
 # A job with no `name:` reports its job id instead. Both are contracts.
 #
-# #47 adds the test that holds these names and the ruleset's required contexts
+# #47 added the test that holds these names and the ruleset's required contexts
 # equal in both directions, so a rename fails a suite instead of quietly
-# unprotecting the branch. Until it lands, the pairing is held by hand.
+# unprotecting the branch. It is `tests/test_required_checks.py`, and the job
+# that runs it is `Required checks match the ruleset` below. Until it landed the
+# pairing was held by hand, which is what let ADR-0013's table and this file
+# disagree in both directions at once for a day.
 #
 #
 # A REQUIRED CONTEXT MUST BE PRODUCED UNCONDITIONALLY
@@ -62,7 +65,9 @@
 # standing assertion that the suites are offline* — and #46 broke the
 # implication rather than the premise. `Authorization code flow` fetches a
 # public GitHub Pages URL, which needs no credential: it is keyless and it is
-# not offline. ADR-0008 replaced the repository-wide claim with a **per-job**
+# not offline. #47 added the second instance, `Required checks match the
+# ruleset`, which reads this repository's own branch rules from an endpoint that
+# answers unauthenticated — so the pattern is a pair rather than an exception. ADR-0008 replaced the repository-wide claim with a **per-job**
 # one, which is more honest than the version it replaces.
 #
 # So every job below states what it reaches, including the ones that reach
@@ -329,6 +334,57 @@ jobs:
         run: |
           uv run pytest tests/authorization/test_identity.py \
                         tests/matrix/test_the_matrix_holds_together.py
+
+  # ADR-0013's fifth row, and the one job in this file whose subject is this
+  # file. A red check means **the workflow and the ruleset disagree** — a job was
+  # renamed, added or deleted without the `main` ruleset moving with it, or the
+  # table in ADR-0013 stopped matching either. It is the mechanism behind *job
+  # `name:` values are a contract*, above, which until this job landed was held
+  # by hand.
+  #
+  # **It is its own job because it must not sit on a cut path.** Cutting the
+  # decision matrix, third on cut order `#9`, removes `Decision matrix (wire)`
+  # and `Seed renders clean` together — so a name-contract test folded into
+  # either would be cut in silence, taking the argument for required checks with
+  # it. `Lint and types` would hold it uncuttably and would then mean two
+  # unrelated things, against ADR-0013's own *one job per seam*.
+  #
+  # **It reads the ruleset from the API rather than from a committed copy**, and
+  # that is the whole reason it is worth running. An export checked into the
+  # repository would go green on the pull request that renamed a job and edited
+  # the export to match, while the ruleset kept waiting on a context that no
+  # longer arrives — the pull request pending rather than failing, which is the
+  # failure this job is named after. The endpoint answers unauthenticated on a
+  # public repository; `GITHUB_TOKEN` is passed for rate-limit headroom, not for
+  # access, and `contents: read` is enough to send it.
+  required-checks-match-the-ruleset:
+    name: Required checks match the ruleset
+    # Keyless, and **not offline**: one GET to api.github.com for the rules that
+    # apply to `main`. The second job in this file that reaches the network and
+    # the second that needs no credential to do it — `Authorization code flow`
+    # states the same pair for the same reason.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Floating major, per the named exception above.
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      # One file, and deliberately not a directory: everything this job asserts
+      # is about `ci.yml`, ADR-0013's table and the ruleset, so a second suite
+      # collected here would give this context a second meaning.
+      - name: The workflow, the table and the ruleset name one set
+        env:
+          # Read-only, and the default for this workflow. The endpoint is public;
+          # this only moves the request off the runner's shared rate limit.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run pytest tests/test_required_checks.py
 
   # The mechanism standing behind "a change is a new path" — ADR-0008's third,
   # the one it credits with removing the only genuine false green. The argument
@@ -791,24 +847,24 @@ jobs:
   # window, which the `main` ruleset's Admin bypass absorbs at the cost of one
   # recorded override.
   #
-  # **It is meant to block and it does not yet**, on the same terms
-  # `public/README.md` already states for the job above: no ruleset requires any
-  # context in this repository, so a red result here is visible and ignorable.
-  # Making it required is a repository-settings change, and ADR-0013 owns the
-  # order — the ruleset cannot precede the jobs it requires, because a required
+  # **It is meant to block and it does, since #47.** Every context in this file
+  # is required on `main`, this one included, and the order ADR-0013 owns was
+  # kept: the ruleset could not precede the jobs it requires, because a required
   # context whose job does not exist leaves every pull request pending
-  # indefinitely, including the one that would add them. #47 lands the ruleset
-  # and the test that holds these names and the required contexts equal in both
-  # directions. Saying so here is cheaper than discovering later that the gate
-  # was assumed.
+  # indefinitely, including the one that would add them. So this job shipped with
+  # #46, reported on its own pull request first, and the ruleset followed. What
+  # holds the two sets equal from here is `Required checks match the ruleset`,
+  # not the sentence above.
   authorization-code-flow:
     name: Authorization code flow
-    # **Keyless and not offline — the one job of which both halves are true.**
-    # It fetches the published Client Identity Metadata Document, which is
-    # public, so no credential exists to add; and the containers fetch the same
-    # URL, because dereferencing it is what the authorization server is being
-    # asked to do. Every other outbound address is a container talking to a
-    # container.
+    # **Keyless and not offline**, the first job of which both halves were true
+    # and now one of two — `Required checks match the ruleset` is the other, and
+    # it reaches an endpoint of GitHub's own rather than a document this
+    # repository publishes. This one fetches the published Client Identity
+    # Metadata Document, which is public, so no credential exists to add; and the
+    # containers fetch the same URL, because dereferencing it is what the
+    # authorization server is being asked to do. Every other outbound address is
+    # a container talking to a container.
     runs-on: ubuntu-latest
     # Longer than the Docker-free jobs, because this one builds two images and
     # waits on four healthchecks before it asserts anything.

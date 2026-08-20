@@ -44,12 +44,18 @@ A job checks it rather than a reviewer. `Published documents are immutable` in
 that modifies, removes or retypes a `*.json` file under `clients/`, at any depth
 — adding one is the only operation it permits.
 
-**It reports; it does not yet block.** No ruleset requires its context, so a red
-result is visible and ignorable. That is true of every job in `ci.yml` today —
-the repository still has no required status check, and the test that holds job
-names and required contexts equal in both directions arrives with #47. This job
-belongs in that set when it lands. Saying so here is cheaper than discovering
-later that the mechanism was assumed to be a gate.
+**It blocks, since [#47](https://github.com/marcosfsousa/mcp-erp/issues/47).**
+Its context is required on `main`, as is every other job in `ci.yml` — set
+equality in both directions, no exemption list — and
+`tests/test_required_checks.py` holds the job names and the ruleset's required
+contexts equal on every run, so a rename fails a check instead of quietly
+detaching the rule that pointed at the old name.
+
+**Force pushes to `main` are blocked in the same ruleset, and this job is why.**
+With no comparable base commit it warns and passes, having checked nothing. A
+pull request always carries a base and an ordinary push always carries a real
+predecessor, so the only reachable path to that green tick was a force push to
+`main`. Blocking it closes the gap without touching the job.
 
 It also decides the publishing sequence, because GitHub Pages serves from `main`
 and a pull request therefore cannot publish the document it tests against. One
