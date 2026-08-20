@@ -26,6 +26,20 @@ The cost is stated rather than discovered: a replica replaced while nginx is
 running keeps its old address until nginx reloads. `docker compose up` creates
 both before the gateway starts, and nothing in the exhibit replaces one mid-run.
 
+## `Host`, and the pool behind it
+
+The upstream sees the `Host` a caller wrote, port and all — `$http_host` rather
+than `$host`, which drops the port. It decides nothing: the audience is compared
+against the configured resource identifier, and a request carrying
+`Host: evil.example` is answered identically (execution, 2026-08-20). The
+directive is there so the gateway is not the thing that rewrites who a caller
+said it was calling.
+
+Connections to the replicas are pooled and reused. That takes three things
+together — HTTP/1.1, a cleared `Connection` header, and `keepalive` on the
+`upstream` block — and without the third, one run of 41 requests opened 41
+upstream connections where the same run now opens two. #83 has the measurement.
+
 ## `X-Served-By`
 
 Every response carries the upstream that served it. It is the **gateway's**
