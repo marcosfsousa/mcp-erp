@@ -51,3 +51,19 @@ resource at all. Its falsifier arrives with the first write that takes one."*
 asserting it, so again no count moved; what did move is its `removal`, which was
 written at #9 and named what ADR-0013 later made the design. The correction is
 recorded in the row's own `note`.
+
+**And a fourth landed early with #41**, `double_approval_via_batch_retry`, in
+`test_double_approval_via_batch_retry.py`. It could not have landed sooner: the
+failure it forbids is *a batch* answering for the items it managed and
+re-deciding the ones it had already done, and until that ticket
+`approve_requisition` took one identifier. #40 shipped the terminal state the row
+rests on and the batch is what makes retrying a whole call a thing a client can
+do. `status: asserted` with nothing asserting it again, so no count moved and
+neither the row nor its `removal` needed a word changed.
+
+Its assertion reaches past the wire, alone in this directory. A refused item
+answers with a reason and no purchase order, so a response cannot distinguish
+*no second order* from *a second order that was not shown*, and there is no tool
+that lists one — ADR-0002 cut every read tool that demonstrated no authorization
+behaviour. So *minted nothing* is counted in the database, through
+`seeded_requisitions.py`, which is where a test-side credential already lives.

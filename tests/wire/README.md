@@ -3,10 +3,11 @@
 The assertions that belong to no proof artifact: the endpoints that answer and
 the ones that do not, the tool listing's filter and its freshness hint, two
 replicas behind no sticky routing, what `submit_requisition` charges, how the
-named-versus-discovered contract behaves across the live tools, and — since #40 —
-everything `approve_requisition` decides.
+named-versus-discovered contract behaves across the live tools, everything
+`approve_requisition` decides since #40, and — since #41 — the fold.
 
-Needs Compose. Landed with #37; #39 added two, #40 a third.
+Needs Compose, with one exception named below. Landed with #37; #39 added two,
+#40 a third, #41 a fourth.
 
 ## Why there is a fifth directory
 
@@ -37,6 +38,14 @@ places these three.
   human fills. The first is a property of the `Action` rather than of a row; the
   second is a property of the organisation's shape, which is what makes it worth
   a named test rather than a matrix row that happens to expect `over_threshold`.
+- **The fold** (#41) is layer 1's, and layer 1 has no directory. What one call
+  answers with when it yields more than one outcome is not a
+  `(principal × tool × resource)` row — the same call, the same caller and the
+  same rows produce it — and it defends nothing named in `scenarios.yaml`. Two
+  of its assertions would not become matrix rows under any file: that a list
+  tool returning several rows is still *one* outcome, which is a claim about
+  what an outcome is rather than about who may see what; and the one below,
+  which has no altitude at all.
 - **The named-versus-discovered contract across all three tools** (#39) is the
   seam between two attack-suite rows rather than a third one. Each of
   `row_probe_indistinguishable` and `list_partition_scoped` asserts its own half
@@ -54,9 +63,21 @@ record something that is not an attack.
 
 **This directory is named for the altitude every assertion in it shares, not for
 a layer.** ADR-0013's prohibition is on a directory named `transport/` or
-`purchase_to_pay/` collecting in-process unit tests of a layer; everything here
-drives real HTTP against Compose like the three suites beside it. Recorded as an
-amendment to ADR-0013 by #37.
+`purchase_to_pay/` collecting in-process unit tests of a layer; ~~everything
+here drives real HTTP against Compose like the three suites beside it~~.
+Recorded as an amendment to ADR-0013 by #37.
+
+**One assertion here is not over HTTP, since #41.** *Layer 1 contains no
+reference to the tool name, nor to which argument is the batch* is the negative
+guarantee the fold had to be built without breaking, and it is not reachable at
+this altitude: a name absent from a module is absent, and no request can show
+it. So `test_the_fold.py` reads layer 1's own source, with docstrings stripped
+first — the guarantee is *stated* in two of those modules, and a check that read
+prose would fail on the sentence describing what it asserts. The precedent is
+`tests/authorization/test_purity.py`, which reads layer 2's source for the same
+class of reason: a property true by **absence** has no behaviour to drive. The
+alternative was a sixth directory holding one file. Recorded as an amendment to
+ADR-0013 by #41, which narrows the struck sentence above rather than keeping it.
 
 ## Running it
 

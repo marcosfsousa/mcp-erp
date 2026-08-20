@@ -55,6 +55,14 @@ _Avoid_: CIMD, client metadata
 A client written for this project to exercise the protocol end to end and assert on the wire. A demonstrator, not a dependency.
 _Avoid_: test client, harness
 
+**Batch**:
+A call that yields N independent outcomes. The definition is deliberately about **cardinality and independence**, never about a list-shaped argument: a tool taking a list and answering one question about all of it is not one, and a batch's items are answered one at a time because each is decided on its own. One tool is a batch. *(Recorded 2026-08-20 by [#41](https://github.com/marcosfsousa/mcp-erp/issues/41), which built it; [ADR-0002](docs/adr/0002-refusal-shape-follows-the-remedy.md) had used the word since 2026-08-06 and [ADR-0013](docs/adr/0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md) restated it in layer-2 terms so it survives ejection of the domain.)*
+_Avoid_: bulk operation, multi-call, list call
+
+**Fold**:
+What the protocol layer does with a call that yields more than one outcome: N answers rendered into one result body, one per item the request named. Keyed on **cardinality and nothing else** — the layer that folds never learns which tool it folded for, nor which of that tool's arguments carried the batch — so one outcome is not folded at all and renders directly. *(Recorded 2026-08-20 by [#41](https://github.com/marcosfsousa/mcp-erp/issues/41), which built it; [ADR-0013](docs/adr/0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md) had used the word since 2026-08-19.)*
+_Avoid_: batching, aggregating, merging, collecting
+
 ### Authorization
 
 **Principal**:

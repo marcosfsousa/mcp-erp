@@ -67,6 +67,56 @@ requisition, so the tool that *changes* a row's status cannot describe that row
 differently from the tools that read it.
 """
 
+OUTCOMES_KEY: Final = "outcomes"
+"""Layer 1's key for the N answers a folded result carries.
+
+Spelled here as well as in :data:`mcp_erp.transport.dispatch.FOLD_KEY`, on the
+same terms as ``Handler``: the two packages import nothing from each other, and a
+constant they shared would have to live in layer 2 — which would then hold a
+value describing how layer 1 renders. Nothing on either side can catch the two
+drifting apart — this half would publish a schema describing a body no call
+produces — so the equality is asserted at the one altitude that sees both:
+``tests/wire/test_the_fold.py::test_the_declared_key_and_the_rendered_one_are_one_key``.
+"""
+
+DECISIONS_SCHEMA: Final[dict[str, Any]] = {
+    "type": "object",
+    "properties": {
+        # The one-item body's own properties, spread rather than restated: the
+        # two cardinalities describe the same decision and must not grow two
+        # descriptions of it.
+        **DECISION_SCHEMA["properties"],
+        OUTCOMES_KEY: {"type": "array", "items": DECISION_SCHEMA},
+    },
+    "additionalProperties": False,
+    "oneOf": [{"required": DECISION_SCHEMA["required"]}, {"required": [OUTCOMES_KEY]}],
+}
+"""What one **call** answers with, which is one decision or a list of them.
+
+**Two bodies in one declaration, and that is the price of a guarantee rather
+than an accident.** Layer 1 folds on outcome cardinality because cardinality is
+the only thing it is permitted to know — it never learns the tool's name nor
+which argument carried the batch — so a one-item call is indistinguishable there
+from ``get_requisition``, and it renders the same way: the decision itself. Two
+items fold. The tool that can be called either way therefore publishes both, and
+the `oneOf` is what keeps that a choice of two bodies rather than one body with
+optional halves.
+
+**It describes the body of a result that is not marked in error**, which is what
+an ``outputSchema`` has described here since the first refusal shipped. Declaring
+the refusal's shape would put layer 1's rendering in a layer-3 document — the
+coupling ADR-0004's first entry exists to refuse — and a reason's wire shape is
+already stated once, at the point each reason is declared.
+
+**A folded body with a refusal in it therefore matches the shape and not the
+items**, which is new and is worth saying rather than leaving to be discovered. A
+single-item refusal matched nothing here at all; a mixed batch matches the
+``outcomes`` branch and then fails on the entry that is a refusal. Both are out
+of this document's remit for the same reason — they are marked in error — and the
+rule is stated as *not marked in error* above rather than as *permitted* so that
+the mixed case is inside the sentence rather than beside it.
+"""
+
 
 @dataclass(frozen=True, slots=True)
 class PurchaseOrder:
