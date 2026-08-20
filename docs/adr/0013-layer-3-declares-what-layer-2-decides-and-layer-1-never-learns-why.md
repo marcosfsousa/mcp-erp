@@ -7,12 +7,13 @@
 - **Amended:** 2026-08-18 — substantive, by [#32](https://github.com/marcosfsousa/mcp-erp/issues/32). `Mount` becomes `Route`, and the accepted cost on exception handling is withdrawn. See *The gate chain sits in middleware, in two tiers*. No decision here is reversed. *(Header added 2026-08-18 by [#34](https://github.com/marcosfsousa/mcp-erp/issues/34); the in-body marker has stood since the amendment landed.)*
 - **Amended:** 2026-08-18 — additive, by [#34](https://github.com/marcosfsousa/mcp-erp/issues/34). `Rule` and `Action` are **parameterised on the resource type** as built. See *The `Action` is the seam*. No decision here is reversed.
 - **Amended:** 2026-08-18 — additive, by [#35](https://github.com/marcosfsousa/mcp-erp/issues/35). The seed's third rendering needs a generator of its own, so there are **three generators, not two**, and layer 3 holds two of them: the organisation renderer beside the fixture generator. See *Both generators, split by the vocabulary each speaks*. The rule that decides where each lives is unchanged, and no decision here is reversed.
-- **Amended:** 2026-08-19 — additive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which built the chain. **Gate 5 runs in middleware, not at dispatch**, because its wire shape is an HTTP status and header that a JSON-RPC envelope cannot carry; gate 6 stays at dispatch. And there is a **fifth test directory**, `tests/wire/`, for the wire assertions that belong to no proof artifact. See *The gate chain sits in middleware, in two tiers* and *Four test directories, named for artifacts*. No decision here is reversed.
+- **Amended:** 2026-08-19 — additive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which built the chain. **Gate 5 runs in middleware, not at dispatch**, because its wire shape is an HTTP status and header that a JSON-RPC envelope cannot carry; gate 6 stays at dispatch. And there is a **fifth test directory**, `tests/wire/`, for the wire assertions that belong to no proof artifact. See *The gate chain sits in middleware, in two tiers* and *Test directories, named for artifacts*. No decision here is reversed.
 - **Amended:** 2026-08-19 — substantive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37). [ADR-0002](0002-refusal-shape-follows-the-remedy.md) cut the SSE response mode, so **response mode is no longer keyed on cardinality — there is one wire shape.** N outcomes **fold** into one result body; the fold is specified here and **not implemented**, and [#41](https://github.com/marcosfsousa/mcp-erp/issues/41) lands it. See *Streaming, restated portably*. This reverses the cardinality keying and nothing else.
 - **Amended:** 2026-08-19 — additive, by [#39](https://github.com/marcosfsousa/mcp-erp/issues/39), which built the second and third tools. A handler's third answer — **an argument its own declaration forbids** — is signalled with `ValueError` and rendered as `-32602`, and is deliberately **not** a fourth denial class. And a tool's declaration is **one module per tool** inside layer 3. See *Handlers in layer 3, adapters in layer 1* and *Three sibling packages, one composition root*. No decision here is reversed.
 - **Amended:** 2026-08-19 — additive, by [#40](https://github.com/marcosfsousa/mcp-erp/issues/40), which built the first hydrated resource. `load` is built as a **factory binding the store**, so the step's own signature is this document's two parameters and nothing is injected into the chain. And a handler has a **domain precondition** to answer as well as a decision — it constructs a refused `Decision` layer 2 never produced, *after* the chain permits and *at* the write. See *Resource hydration is a named layer-3 step* and *Handlers in layer 3, adapters in layer 1*. No decision here is reversed.
-- **Amended:** 2026-08-20 — additive, by [#41](https://github.com/marcosfsousa/mcp-erp/issues/41), which built the first batch. **The fold is implemented**, which settles the two things this document deliberately left open — what holds the N answers, and what `isError` means when some items refused — and surfaces one obligation nothing had stated: a handler deciding more than one item **must settle the call before its first item**, because a caller-level refusal has no rendering inside a result body. `tests/wire/` additionally holds **one assertion that is not over HTTP**. See *Streaming, restated portably* and *Four test directories, named for artifacts*. No decision here is reversed.
+- **Amended:** 2026-08-20 — additive, by [#41](https://github.com/marcosfsousa/mcp-erp/issues/41), which built the first batch. **The fold is implemented**, which settles the two things this document deliberately left open — what holds the N answers, and what `isError` means when some items refused — and surfaces one obligation nothing had stated: a handler deciding more than one item **must settle the call before its first item**, because a caller-level refusal has no rendering inside a result body. `tests/wire/` additionally holds **one assertion that is not over HTTP**. See *Streaming, restated portably* and *Test directories, named for artifacts*. No decision here is reversed.
 - **Amended:** 2026-08-20 — additive, by [#42](https://github.com/marcosfsousa/mcp-erp/issues/42), which built the last of the five tools. `load` is **parameterised on the entity it hydrates**, so the `action` parameter this document kept for #42 selects a resource *through the type* and is still never read; layer 3 holds **one store per entity a tool is decided against**, over one pool. See *Resource hydration is a named layer-3 step*. No decision here is reversed.
+- **Amended:** 2026-08-20 — additive, by [#66](https://github.com/marcosfsousa/mcp-erp/issues/66), which found the job table and `ci.yml` disagreeing in both directions. A **ninth job, *Server posture***, for `tests/wire/`, and a tenth row for *Published documents are immutable*, which was in the workflow and in no row. The job count is **struck rather than incremented** — it is derived from the seam enumeration, and *one per seam* is the rule. See *Continuous-integration jobs, one per seam* and *Test directories, named for artifacts*. No decision here is reversed.
 
 ## Question
 
@@ -282,7 +283,7 @@ A tool declares five module-level names — `NAME`, `TITLE`, `DESCRIPTION`, `INP
 
 The composition root pairs them by hand, three times, rather than looping: the three declaration modules have no common type, and giving them one means a protocol describing what a tool declaration holds — a fourth spelling of `ToolRegistration`, living in the layer that must not learn what a tool is.
 
-### Four test directories, named for artifacts
+### ~~Four~~ Test directories, named for artifacts
 
 ```
 tests/
@@ -294,6 +295,8 @@ tests/
 
 **The ejection test is a command, not a file** — `rm -rf src/mcp_erp/purchase_to_pay && pytest tests/authorization` — so that directory imports nothing from layer 3, and this ticket's *"unit tests of the policy function"* are those same files. Layers 1 and 3 get no directory of their own; ADR-0008 routes every assertion about them over the wire.
 
+*The count in this heading is struck 2026-08-20 by [#66](https://github.com/marcosfsousa/mcp-erp/issues/66), on the same reasoning it struck the one in* Continuous-integration jobs, one per seam: *there have been five directories since the amendment immediately below, and a derived number kept in a heading is what [ADR-0011](0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md) caught drifting. **Named for artifacts** was always the claim.*
+
 *Amended 2026-08-19 by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which built the first slice through all three layers.* **A fifth directory, `tests/wire/`.**
 
 ```
@@ -301,7 +304,9 @@ tests/
   wire/            # wire; the server's own posture — endpoints, listing, replicas
 ```
 
-Three assertions in that slice belong to none of the four. The **metadata route answering without a token, and every other path being gated** is ADR-0006's discovery decision, defending nothing named in `scenarios.yaml` and expecting no `(principal × tool × resource)` row. **Two replicas, round-robin, nothing remembered** is map constraint `#5`, a property of the deployment rather than of a caller. The **tool listing's filter and its freshness hint** become four rows of `matrix.yaml` when #43 writes it, and until that file exists there is nothing to generate them from — `tests/matrix/` is generated in its entirety.
+Three assertions in that slice belong to none of the four. The **metadata route answering without a token, and every other path being gated** is ADR-0006's discovery decision, defending nothing named in `scenarios.yaml` and expecting no `(principal × tool × resource)` row. **Two replicas, round-robin, nothing remembered** is map constraint `#5`, a property of the deployment rather than of a caller. The **tool listing's filter** ~~and its freshness hint~~ becomes ~~four~~ **five** rows of `matrix.yaml` when #43 writes it — one per scope set, enumerated in *Continuous-integration jobs, one per seam* — and until that file exists there is nothing to generate them from; `tests/matrix/` is generated in its entirety.
+
+*Amended 2026-08-20 by [#66](https://github.com/marcosfsousa/mcp-erp/issues/66).* **The freshness hint stays, and so do the declarations beside it.** `cacheScope`, the `ttlMs` cap, the declared schemas and `listChanged: false` are things the server states identically to every caller, so they are not expressible as a `(principal × tool × resource)` row and never had a destination in `matrix.yaml`. The dividing line is the one the ninth job is named for: what varies with the caller is the matrix's, what the server declares regardless is this directory's. See *Continuous-integration jobs, one per seam*.
 
 The alternative was to mint scenario rows for the first two, and it was declined: membership is ADR-0010's rule — one row per distinct clause this project *enforces*, each recording the exact removal that makes it pass — and the row count is a derived artifact under map constraint `#12`. Inventing two rows to house three tests would move a number three documents track, to record something that is not an attack.
 
@@ -365,7 +370,7 @@ modules = mcp_erp.transport
 
 Because `app.py` sits at the package root rather than inside any sub-package, these contracts **need no exception clause for the composition root** — it is out of scope by construction rather than by a carve-out someone has to justify. The contract file is also a readable statement of the architecture, which for an exhibit whose product is legibility is a deliverable rather than overhead.
 
-### Eight continuous-integration jobs, one per seam
+### ~~Eight~~ Continuous-integration jobs, one per seam
 
 | Job `name:` | A red check means | Compose |
 | --- | --- | --- |
@@ -374,21 +379,41 @@ Because `app.py` sits at the package root rather than inside any sub-package, th
 | Layer 2 ejects clean | layer 2 no longer stands alone | no |
 | Seed renders clean | a rendering diverged from the seed or the matrix | no |
 | Required checks match the ruleset | the workflow and the ruleset disagree | no |
+| Published documents are immutable | someone rewrote or removed a published client identity | no |
+| Server posture | the server exposes, declares or deploys something other than what it should, with no caller's authorization involved | yes |
 | Decision matrix (wire) | an authorization expectation is wrong | yes |
 | Attack suite (wire) | a defence regressed | yes |
 | Authorization code flow | the flow broke (preflight names external causes first) | yes + network |
 
-**All eight contexts gate `main`.** Set equality holds in both directions, there is no exemption list to justify, and ADR-0008's *"a check that can never block becomes noise"* applies uniformly. ADR-0008 already committed the conformance job as the repository's first required status check.
+**~~All eight~~ Every context gates `main`.** Set equality holds in both directions, there is no exemption list to justify, and ADR-0008's *"a check that can never block becomes noise"* applies uniformly. ADR-0008 already committed the conformance job as the repository's first required status check.
 
 *Seed renders clean* is the widened form of what was scoped as matrix-fixture drift: it now covers seed-to-directory and seed-to-realm as well, including the realm-versus-directory subject-set equality above. All three break for one reason — a rendering changed without the seed — so it is one seam and one diagnosis.
 
 *Required checks match the ruleset* holds job names and required contexts equal in both directions. It is its own job because it must not sit on a cut path: cutting the decision matrix, third on cut order `#9`, removes *Decision matrix (wire)* and *Seed renders clean* together, and a name-contract test inside either would be cut in silence, taking the argument for required checks with it. *Lint and types* would hold it uncuttably but would then mean two unrelated things, against this table's own rule.
 
+*Amended 2026-08-20 by [#66](https://github.com/marcosfsousa/mcp-erp/issues/66), which found the table and `ci.yml` disagreeing in both directions.*
+
+**The count was never a cap, and this document never said it was.** `tests/wire/README.md` claims *"ADR-0013 fixes the job set at eight"* and #66's body inherited the claim, but nothing here fixes anything at eight — the heading named a count, the paragraph above requires set equality, and *one per seam* is the only rule. The number is derived from the seam enumeration, so it is struck rather than incremented. A derived number kept in a heading is the artifact ADR-0011 caught drifting from individually-correct sources four times in one month; this is the fifth.
+
+***Server posture* is the ninth seam.** `tests/wire/` arrived with the fifth-directory amendment above and no row was added beside it, so from 2026-08-19 until this commit four discharged acceptance criteria were guarded by review and a single recorded run. Its diagnosis is one thing: **what the server exposes, declares and deploys, identically to every caller.** The endpoints that answer without a token and the ones that do not; the listing's freshness hint, its declared schemas and `listChanged: false`; two replicas behind no sticky routing. None of them reads a `Principal`, and that clause is what keeps this row out of *Decision matrix (wire)*'s territory rather than beside it.
+
+**It carries no `(wire)` suffix.** That suffix distinguishes a job from the `CONTEXT.md` proof artifact it shares a name with — *Decision matrix* and *Attack suite* are both defined there as artifacts, so *(wire)* reads *the wire test of the decision matrix*. *Server posture* names no artifact, which is why *Authorization code flow* carries none either.
+
+**It sits off every live cut path.** Cut order `#9`'s live entries are *conformance traceability*, still undefined, and *decision matrix* at rank 3. Cutting the matrix removes *Decision matrix (wire)* and *Seed renders clean* together and leaves this job whole, because nothing in it reads `matrix.yaml`. Stated rather than derived: the argument for *Required checks match the ruleset* being its own job turns on cut-path exposure, and the next reader will ask the same question here.
+
+**What `tests/wire/` hands to #43, and what it keeps,** is the same line the seam is named for. An assertion whose expected value changes with the caller is decision-matrix business; an assertion the server makes identically to every caller stays. ~~Four~~ **Five** of `test_tool_listing.py`'s assertions move — one per scope set the listing filters on: `erp.read`, `erp.write`, both, `erp.decide`, and the token carrying no capability scope at all. *(Corrected in the same commit, before the count could be handed on: the number was written against the file as #37 left it, and #39 and #42 added a scope set to it. It is replaced by the enumeration rather than re-derived, on this document's own reasoning about counts.)* What does **not** move is `cacheScope`, the `ttlMs` cap, the declared schemas, `listChanged: false`, and *the listing is a function of the token and not of the person* — that last one asserts an invariance **across** callers rather than a value that varies with one, which is the same rule reading in the other direction. **The handoff is priced in the map rather than left implicit:** cutting the decision matrix now also takes the tool listing's scope filter with it, which was not true before this commit and is a cost the taker of that cut must be able to see.
+
+The unlisted-tool refusal stays too, on a narrower ground. `scenarios.yaml`'s `insufficient_scope` row already defends the challenge's shape and is marked `asserted`. What the wire assertion adds is the **agreement between the listing and the call** — a tool the listing omits, called anyway, is refused naming the scope that would have reached it. Nothing in the attack suite consults the listing, so handing this assertion away would drop the linkage rather than relocate it.
+
+***Published documents are immutable* is the tenth row**, and it was in `ci.yml` before it was here. Its seam is its own — a red check means someone rewrote or removed a published client identity, which is neither a Python defect nor a crossed layer boundary — and it installs no environment, so it stands when the jobs beside it fall over. **What a green tick does not assert:** with no comparable base commit it warns and passes, having checked nothing. A pull request always carries a base and a push to `main` always carries a real predecessor, so the only reachable path is a force push to `main` — which is why #47 should block force pushes in the same ruleset that requires these contexts, closing the gap without touching the job.
+
+**The first Compose bring-up in continuous integration lands with this job**, ahead of the three tickets expected to bring it. #66 writes it plainly inside *Server posture* — bring the stack up, wait on healthchecks, and settle the `keycloak` hostname the token helper's issuer requires — and #43, #44 and #46 inherit the pattern. It is deliberately **not** factored into a shared action yet: *Authorization code flow* is `yes + network` in the table above and is already known to differ, so a shared seam designed against one real consumer and three imagined ones would be built on the wrong example.
+
 **A required context must be produced unconditionally by every run of the workflow** — **map constraint `#13`**, which carries the conditional forms it covers, the reasoning, and the one escape hatch. It binds every future edit to `ci.yml`, not just this design, which is why it lands there rather than here.
 
-The consequence this ADR owns: **the ruleset change cannot precede the jobs it requires.** Adding eight required contexts before eight jobs exist leaves every pull request pending indefinitely, including the one that would add them — which is why the enforcement scaffolding is deferred rather than merely sequenced.
+The consequence this ADR owns: **the ruleset change cannot precede the jobs it requires.** Adding ~~eight~~ required contexts before ~~eight~~ jobs exist leaves every pull request pending indefinitely, including the one that would add them — which is why the enforcement scaffolding is deferred rather than merely sequenced.
 
-Three Compose bring-ups per pull request is the accepted cost; the five Docker-free jobs run in parallel in under a minute, so wall time is set by the Compose jobs regardless.
+~~Three~~ **Four** Compose bring-ups per pull request is the accepted cost; the ~~five~~ **six** Docker-free jobs run in parallel in under a minute, so wall time is set by the Compose jobs regardless.
 
 ## Options considered
 
@@ -418,10 +443,10 @@ Three Compose bring-ups per pull request is the accepted cost; the five Docker-f
 
 **Map constraint `#10` is answered**, and constraint `#12`'s walk date moves.
 
-**Deferred to the build ticket, per this commit's documentation-only scope:** `src/mcp_erp/`, `.importlinter`, the eight jobs, `test_required_checks.py`, the `main` ruleset change, and `docs/decision-matrix/matrix.yaml` itself. The ruleset **cannot** land first: a required context whose job does not exist leaves every pull request pending indefinitely, including the one that would add the jobs.
+**Deferred to the build ticket, per this commit's documentation-only scope:** `src/mcp_erp/`, `.importlinter`, the ~~eight~~ jobs, `test_required_checks.py`, the `main` ruleset change, and `docs/decision-matrix/matrix.yaml` itself. The ruleset **cannot** land first: a required context whose job does not exist leaves every pull request pending indefinitely, including the one that would add the jobs.
 
 **Input to other tickets.**
 
-- **The build ticket** inherits the module layout, the two contracts, the eight jobs and the ruleset change, in that order.
+- **The build ticket** inherits the module layout, the two contracts, the ~~eight~~ jobs and the ruleset change, in that order.
 - **The audit-trail work** inherits that grounds exist only inside layer 2, and that no entity carries a timestamp.
 - **The write-up** inherits four lines recorded in [`docs/write-up-notes.md`](../write-up-notes.md).

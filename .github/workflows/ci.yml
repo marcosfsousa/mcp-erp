@@ -6,10 +6,17 @@
 # ONE JOB PER SEAM
 # ----------------
 # Split by the layer that can break, not by convenience. A red check should name
-# the layer without anyone opening logs. ADR-0013 fixes the eight jobs and what
-# a red one means; two of them are here, and the rest arrive with the seams they
-# assert. `Lint and types` means an ordinary Python defect; `Layer boundaries`
-# means someone crossed a layer boundary. Neither may come to mean the other.
+# the layer without anyone opening logs. ADR-0013 enumerates the jobs and what a
+# red one means, one per seam; the jobs here are the seams that exist, and the
+# rest arrive with the seams they assert. `Lint and types` means an ordinary
+# Python defect; `Layer boundaries` means someone crossed a layer boundary.
+# Neither may come to mean the other.
+#
+# **The count is not the rule and is not written down.** ADR-0013's heading
+# named one and #66 struck it, because a derived number kept where it can be
+# read as a cap is what ADR-0011 caught drifting four times in one month. What
+# holds the table and this file equal is set equality, asserted by the test #47
+# brings — never a number either document has to keep current.
 #
 #
 # JOB `name:` VALUES ARE A CONTRACT
@@ -146,17 +153,19 @@ jobs:
         run: uv run python -c "import mcp_erp.app"
 
       # The token helper's pure half — base64 padding, the challenge digest,
-      # form actions, scope sets. It lands here rather than in a ninth job
-      # because ADR-0013 fixes the job set at eight and holds their names equal
-      # to the ruleset's required contexts in both directions; a step inside a
-      # job that already runs changes no context and needs no ruleset edit.
+      # form actions, scope sets. It lands here rather than in a job of its own
+      # because ADR-0013 holds job names and the ruleset's required contexts
+      # equal in both directions; a step inside a job that already runs changes
+      # no context and needs no ruleset edit.
       #
       # The seam is right, not merely convenient. This job means *an ordinary
       # Python defect*, and a helper that pads base64 wrongly is exactly one.
-      # The three Compose jobs that will drive this helper cannot hold it —
-      # they need a running authorization server to say anything at all — and
-      # `Layer 2 ejects clean` would report a broken digest as layer 2 failing
-      # to stand alone, which is the wrong diagnosis on the wrong job.
+      # The Compose jobs that drive this helper cannot hold it — they need a
+      # running authorization server to say anything at all, so a padding bug
+      # would arrive there as `Server posture` red, which is a diagnosis about
+      # what the server exposes — and `Layer 2 ejects clean` would report a
+      # broken digest as layer 2 failing to stand alone, which is the wrong
+      # diagnosis on the wrong job.
       - name: The token helper's Docker-free half
         run: uv run pytest tests/test_tokens.py
 
@@ -363,3 +372,119 @@ jobs:
           fi
 
           echo "No published document was modified or removed."
+
+  # ADR-0013's ninth seam, added by #66, and the first job in this file that
+  # needs Compose. A red check means *the server exposes, declares or deploys
+  # something other than what it should, with no caller's authorization
+  # involved* — the endpoints that answer without a token and the ones that do
+  # not, the listing's declared schemas and freshness hint, two replicas behind
+  # no sticky routing.
+  #
+  # The clause that keeps it out of the two Compose jobs beside it is that
+  # **nothing in `tests/wire/` reads a `Principal`.** An assertion whose
+  # expected value changes with the caller is `Decision matrix (wire)`'s and
+  # arrives with #43; an assertion that a defence held is `Attack suite
+  # (wire)`'s and arrives with #44. What is left is what the server says
+  # identically to everyone, which is one seam and one diagnosis.
+  #
+  # `tests/wire/` arrived with #37's fifth-directory amendment to ADR-0013 and
+  # no row was added beside it in the same document's job table, so from
+  # 2026-08-19 until this commit its assertions — including four acceptance
+  # criteria #64 discharged — were guarded by review and a single recorded run
+  # rather than by branch protection.
+  #
+  #
+  # DELIBERATELY NOT FACTORED INTO A SHARED ACTION
+  # ----------------------------------------------
+  # Three more Compose jobs are coming — #43, #44 and #46 — and they inherit
+  # this pattern by reading it, not by calling it. `Authorization code flow` is
+  # `yes + network` in ADR-0013's table and is already known to differ, so a
+  # shared seam designed against one real consumer and three imagined ones
+  # would be built on the wrong example. Factor it when a second job has
+  # actually been written and the common part is observed rather than guessed.
+  server-posture:
+    name: Server posture
+    runs-on: ubuntu-latest
+    # Larger than the ten the Docker-free jobs get, for one reason: this builds
+    # two images, pulls two more, and stands up five containers — four of them
+    # behind a healthcheck — before the first assertion runs. Still a budget
+    # the job clears comfortably, so anything past it reads as stuck rather
+    # than slow: a Keycloak that boots and never imports the realm is this
+    # job's version of the dev server that starts and never serves.
+    timeout-minutes: 20
+    steps:
+      # Floating major, per the named exception above.
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      # The suite runs on the runner rather than in a container, because it is
+      # a caller: from inside the network it could reach a replica directly and
+      # report a round-robin result the gateway never produced.
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      # ONE HOSTNAME, TWO SIDES OF A CONTAINER BOUNDARY
+      #
+      # The issuer is `http://keycloak:8081/realms/mcp-erp`, from the seed, and
+      # the token helper mints against it. Inside the network Compose's own DNS
+      # answers for that name; on this runner nothing does, and the helper
+      # would fail to resolve its own authorization server.
+      #
+      # Two ways to settle it, and they are not equivalent. `KEYCLOAK_BASE_URL`
+      # rebases the requests onto `localhost:8081` — the escape hatch the
+      # exhibit offers a reader who cannot edit a hosts file, and it moves the
+      # address the requests go to, never the issuer they assert. This job
+      # takes the other one, the `127.0.0.1 keycloak` line ADR-0005
+      # §Consequences priced and accepted, because that is the path
+      # `compose.yaml` and both READMEs tell a reader to take: run it here and
+      # the documented instructions are exercised on every pull request instead
+      # of being asserted in prose. The rebase stays available and stays a
+      # fallback.
+      - name: Resolve the issuer's own hostname
+        run: echo "127.0.0.1 keycloak" | sudo tee -a /etc/hosts
+
+      # Built as its own step so that a Dockerfile failure reads as one. `up`
+      # builds a missing image implicitly and would report that failure as the
+      # stack failing to start — the wrong diagnosis, printed on the right job.
+      - name: Build the images
+        run: docker compose build
+
+      # `--wait` rather than a sleep or a poll written here, because every
+      # readiness condition is already stated in `compose.yaml` and a second
+      # definition of ready is a second thing that can be wrong. Those probes
+      # are assertions rather than liveness pings: Keycloak's matches the exact
+      # issuer the seed declares, so it is red if the realm imported under the
+      # wrong hostname, and each replica's is the one route that answers
+      # without a token, so it is red if the gate chain closed over discovery.
+      # The gateway declares none, and `--wait` treats it as ready once
+      # running — which is what its `depends_on: service_healthy` already says.
+      #
+      # The timeout is `--wait`'s own and is not the job's: it fails the step at
+      # a stack that never converges, while `timeout-minutes` above bounds
+      # everything including the builds.
+      - name: Bring the stack up
+        run: docker compose up --wait --wait-timeout 300
+
+      # The whole directory. One assertion in it is not over HTTP — the fold's
+      # negative guarantee, recorded as an amendment by #41 because a property
+      # true by *absence* has no behaviour to drive — and it reads layer 1's
+      # own source out of the checkout, which is here for the same reason the
+      # locked environment is.
+      - name: The server's own posture, over the wire
+        run: uv run pytest tests/wire
+
+      # Step-level and conditional, which map constraint `#13` does not reach:
+      # the constraint is about a required *context* arriving on every run, and
+      # a step that runs only once the job has already failed cannot withhold
+      # one. It does not need the constraint's escape hatch either — that
+      # covers a step-level early exit standing in for a skipped job, and this
+      # skips nothing. What it buys is the difference between a red check whose
+      # evidence ends at pytest's traceback and one that shows which container
+      # said what, which for a job whose subject is what the server exposes is
+      # usually where the answer is.
+      - name: What the containers said
+        if: failure()
+        run: docker compose logs --no-color
