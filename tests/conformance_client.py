@@ -191,6 +191,26 @@ inferring it from the token that came back.
 """
 
 
+UNATTRIBUTED: Final = (
+    "the authorization server's response is not attributed to the issuer this client "
+    "redirected to, so what it says is not repeated here"
+)
+"""What an unattributable refusal is reported as — and the whole of what is reported.
+
+The specification's authorization-response rules and RFC 9207 §2.4 put a client
+under a `MUST NOT` to *"act on or display error, error_description, or
+error_uri"* from a response it has not attributed to the authorization server it
+redirected to, and repeating those words to a caller is displaying them. So this
+sentence is a fixed string with nothing of the response in it, and
+:meth:`Flow._callback` decides between it and the server's own words rather than
+deciding whether to say anything.
+
+It names the reason that is actually true. A client that reported the other
+server's `error` would send a reader to debug a request this client never made,
+which is the failure `mixup_iss_mismatch` exists to describe.
+"""
+
+
 class PreflightFailure(RuntimeError):
     """The published document did not answer as committed.
 
@@ -404,6 +424,23 @@ class Flow(httpx2.Auth):
         return scope_set(self._provider.context.client_metadata.scope)
 
     @property
+    def discovered_issuer(self) -> str | None:
+        """The issuer the package discovered before redirecting, or `None` before it has.
+
+        Read off the provider's own discovery result rather than from a constant
+        beside it, for the reason :attr:`requested` gives: what this client
+        asserts against has to be what the flow actually found, and a value
+        written twice would agree with itself.
+
+        `None` until the authorization server metadata has been fetched — which
+        :meth:`_callback` treats as *not attributable*, because that is what it
+        is.
+        """
+        discovered = self._provider.context.oauth_metadata
+
+        return str(discovered.issuer) if discovered is not None else None
+
+    @property
     def granted(self) -> frozenset[str]:
         """What the access token actually carries.
 
@@ -559,26 +596,49 @@ class Flow(httpx2.Auth):
         )
 
     async def _callback(self) -> AuthorizationCodeResult:
-        """Hand the redirect's parameters back, without checking the `state`.
+        """Hand the redirect's parameters back, repeating a refusal only once it is ours.
 
-        Deliberately unchecked here: the package generated that value and
-        compares it itself with a constant-time comparison, and it validates the
-        RFC 9207 `iss` against the issuer it discovered. Re-checking either would
-        be this client marking its own homework. A refusal *is* read, because a
-        redirect carrying `error` and no code has to be reported in the
-        authorization server's own words rather than as a missing code later.
+        **`state` is still deliberately unchecked, and so is `iss` on the way
+        through.** The package generated the `state` and compares it itself with
+        a constant-time comparison, and it validates the RFC 9207 `iss` against
+        the issuer it discovered. Re-checking either on the success path would be
+        this client marking its own homework.
+
+        **The error path is not covered by that argument, because the package
+        never reaches it.** `AuthorizationCodeResult` requires a `code`, and a
+        refused response carries an `error` and none — so it cannot be expressed
+        in the type at all and cannot be handed over, and the party that would
+        attribute it never sees it. The `MUST NOT` in :data:`UNATTRIBUTED` is
+        therefore this client's own to keep, on the only line where it can be
+        kept: the attribution is made here, before :func:`redirect_error` is
+        consulted, and it chooses **which** of two things is reported rather than
+        whether anything is. `tests/tokens.py`'s `authorization_code` keeps the
+        same clause in the same order for the client that module drives, and
+        `mixup_iss_mismatch` is the row both answer to.
+
+        **A refusal that names no issuer is not attributed either.** The package
+        tolerates an absent `iss` unless the authorization server advertised
+        support for it, which is right for a response it can still check other
+        ways; here there is nothing else to go on, so absence is not agreement.
 
         Raises:
-            RuntimeError: No redirect arrived, or it carried a refusal.
+            RuntimeError: No redirect arrived; or it carried a refusal — in the
+                authorization server's own words when the response is attributed
+                to the issuer this flow discovered, and as :data:`UNATTRIBUTED`
+                when it is not.
         """
         if self._callback_location is None:
             raise RuntimeError("the authorization server never redirected back to the client")
 
+        query = parse_qs(urlparse(self._callback_location).query)
+        attributed = (
+            self.discovered_issuer is not None
+            and query.get("iss", [None])[0] == self.discovered_issuer
+        )
+
         refusal = redirect_error(self._callback_location)
         if refusal is not None:
-            raise RuntimeError(refusal)
-
-        query = parse_qs(urlparse(self._callback_location).query)
+            raise RuntimeError(refusal if attributed else UNATTRIBUTED)
 
         return AuthorizationCodeResult(
             code=query.get("code", [""])[0],

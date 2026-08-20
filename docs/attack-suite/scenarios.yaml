@@ -541,20 +541,16 @@ scenarios:
       comparison in its `authorization_code`. Every other row in this file names
       a deletion in `src/` or in a committed realm file, so a reader who assumed
       that uniformly would look for this one in the wrong tree.
-      THE SECOND CLIENT DOES NOT MAKE THIS CHECK, AND THE ROW ASSERTS NOTHING
-      ABOUT IT. Read from the source on merging #46, not executed: its
-      conformance client hands the redirect's parameters to the protocol package,
-      which validates RFC 9207 `iss` against the issuer it discovered — but
-      `_callback` calls `redirect_error` and raises with the authorization
-      server's own words BEFORE those parameters are handed over, so an error
-      response never reaches the party that would attribute it. That is this
-      row's own clause, on the error half it names as the one implementations
-      miss. Raised as #78 rather than fixed here: the ordering is a judgement for
-      the ticket that owns that client, this ticket cannot run its
-      network-dependent job, and a row that quietly claimed the check was
-      inherited would be the second `asserted`-with-nothing-behind-it defect
-      #44 exists to have removed. This paragraph is deleted when #78 closes —
-      which is that issue's own last acceptance criterion.
+      THE SECOND CLIENT KEEPS THE SAME CLAUSE, AND ITS FALSIFIER IS NOT IN THIS
+      DIRECTORY. #78 put the attribution ahead of `redirect_error` in the
+      conformance client's `_callback` — the package validates RFC 9207 `iss` on
+      the success path, but a refusal carries no code and so never reaches it —
+      and asserted it in
+      `tests/conformance/test_a_refusal_is_attributed_before_it_is_repeated.py`.
+      It lives there because the client under test is that directory's and the
+      declarations collected here are read out of this directory's source, so the
+      cross-reference is this sentence rather than a `@exercises` this row could
+      count. Both clients, one clause, two falsifiers.
       THE ORDER IS THE ASSERTION: `iss` is compared before `error` is read, which
       is what the quoted MUST NOT amounts to — a client that reads the error
       first reports another server's words as though they answered its own

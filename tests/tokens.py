@@ -271,6 +271,64 @@ def challenge_for(verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
 
+def refused_authorization_response(realm: str, client_id: str) -> tuple[str, str]:
+    """One real authorization error response, and the issuer that produced it.
+
+    Obtained by asking for the weak challenge method, which ADR-0007 pins per
+    client — so the authorization server answers with a redirect carrying
+    `error`, `error_description` and, per RFC 9207, `iss`. An honest server
+    refusing an honest question, which is exactly the document a mix-up attack
+    puts in front of the wrong client: nothing about it is forged, and the only
+    thing that makes it unreadable to a client is who it came from.
+
+    **Shared rather than copied, because two rows need the same document.**
+    `mixup_iss_mismatch` hands it to this module's own client and
+    `tests/conformance/` hands it to the conformance client — the two clients
+    this project authors, under the same `MUST NOT` — and a second definition
+    would let the two assert about responses that had quietly stopped being
+    alike.
+
+    Args:
+        realm: Which issuer refuses. Named rather than defaulted, because the
+            point of the row asking for this is usually that it is **not** the
+            realm the client under test redirected to.
+        client_id: A client registered in that realm. The two realms share none,
+            so a caller who changes one and not the other gets `invalid_client`
+            instead of the refusal this exists to produce.
+
+    Returns:
+        The redirect's `Location`, and the issuer the realm declares.
+
+    Raises:
+        RuntimeError: The authorization server answered something other than a
+            redirect, which means it refused the request itself rather than
+            refusing through one — a different document from the one asked for.
+    """
+    document = metadata(realm)
+
+    with httpx.Client(follow_redirects=False, timeout=30.0) as http:
+        answer = http.get(
+            rebase(str(document["authorization_endpoint"])),
+            params={
+                "client_id": client_id,
+                "response_type": "code",
+                "redirect_uri": REDIRECT_URI,
+                "scope": "openid erp.read",
+                "state": secrets.token_urlsafe(16),
+                "code_challenge": challenge_for(secrets.token_urlsafe(64)),
+                "code_challenge_method": "plain",
+            },
+        )
+
+    if answer.status_code != httpx.codes.FOUND:
+        raise RuntimeError(
+            f"the authorization server answered {answer.status_code} rather than "
+            f"redirecting with a refusal: {answer.text}"
+        )
+
+    return str(answer.headers["location"]), str(document["issuer"])
+
+
 def form_action(html: str) -> str:
     """The `action` of the first form on a page, with its HTML entities resolved.
 
