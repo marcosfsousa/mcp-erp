@@ -19,13 +19,17 @@ padded to four and truncated, which is the defect. So the boundary is driven:
 a table one row short of five figures, then a real write through the tool that
 writes it, and the handle that came back is the assertion.
 
-**The wipe is per test here, not per module.** ADR-0003 chose a wipe per run and
-every other write suite takes it, because rows a previous test left behind change
-nothing those suites assert. This module is the exception by construction: what
-it manipulates *is* the high-water mark the mint reads, so a test that ran after
-the ceiling test would mint from a table one of its neighbours moved. It also
-means `fixtures.ABSENT_IDENTIFIER` and `fixtures.ABSENT_ORDER` — absent for a
-whole run everywhere else — are restored to absence before this module ends.
+**The wipe is per test here, not per module.** ADR-0003 chose to wipe and reload
+once rather than between rows, and every other write suite takes that as a
+module-scoped reload — the reason it gives is that *each write row owns a fixture
+outright, so no row can disturb another*. That premise is exactly what fails
+here: what this module manipulates is the high-water mark all three tables mint
+from, which no row owns and every row moves, so a test running after the
+boundary test would mint from a table its neighbour left in another state. The
+trailing reload also puts `fixtures.ABSENT_IDENTIFIER` and
+`fixtures.ABSENT_ORDER` — absent for a whole run everywhere else — back out of
+the tables before another module reads either as *never existed*. Recorded as an
+amendment to ADR-0003 by #84.
 """
 
 import re
@@ -34,20 +38,15 @@ from collections.abc import Iterator
 import pytest
 
 import fixtures
+import requisitions as raise_one
 import rpc
 from tokens import mint
 
-SUBMIT = "submit_requisition"
 APPROVE = "approve_requisition"
 RECORD = "record_invoice"
 
-VENDOR = "Meridian Cloud Services"
-"""One of the four names `submit_requisition` enumerates. Nothing here turns on which."""
-
 AMOUNT = "480.00"
-"""Below the threshold, so the chain below costs one role and no argument."""
-
-DESCRIPTION = "Managed Kubernetes, annual"
+"""Below the approval threshold, so the chain below costs one role and no argument."""
 
 SUBMITTER = "priya.raman"
 """CC-4100, `erp.write` and no ERP role at all. Raises the row the chain runs on."""
@@ -59,11 +58,15 @@ RECORDER = "rafael.costa"
 """CC-4100, `invoice_clerk`, and not the approver — so the second edge stays clear."""
 
 FOUR_DIGITS = re.compile(r"req_[0-9]{4}")
-"""What a requisition's handle looks like below the ceiling, anchored end to end.
+"""What a requisition's handle looks like below ten thousand.
 
 The pad width written as an expectation rather than as a fragment of SQL. Four is
-what the *Legible identifiers* deviation buys — a handle a reader can guess —
-and the fix for #84 widens the field past 9999 without moving this.
+what the *Legible identifiers* deviation buys — a handle a reader can guess — and
+#84 widened the field past 9999 without moving this.
+
+Unanchored, and matched with `fullmatch` at its one use, which is what makes
+`req_10000` fail it. A `match` would accept that string's first ten characters,
+so a second caller wanting a *contains* test must not reach for this one.
 """
 
 
@@ -81,37 +84,33 @@ def requisitions() -> Iterator[None]:
     fixtures.load()
 
 
-def _submit(username: str = SUBMITTER) -> str:
-    """Raise one requisition and name the handle it was minted."""
-    raised = rpc.result(
-        rpc.call_tool(
-            SUBMIT,
-            {
-                "vendor": VENDOR,
-                "amount": AMOUNT,
-                "currency": "EUR",
-                "description": DESCRIPTION,
-            },
-            token=mint(username, ["erp.write"]).access_token,
-        )
-    )
-    assert raised["isError"] is False, raised
-    identifier: str = raised["structuredContent"]["requisition"]["id"]
-    return identifier
+def _submit() -> str:
+    """Raise one requisition and name the handle it was minted.
+
+    `requisitions.raised_by` rather than a call built here, on that module's own
+    rule: raising a row as setup is what it was lifted above the test directories
+    to serve, and this is the fourth caller of the three that moved it.
+    """
+    return raise_one.raised_by(SUBMITTER, AMOUNT)
 
 
-def _approve(identifier: str, username: str = APPROVER) -> str:
+def _approve(identifier: str) -> str:
     """Approve one requisition and name the order that came out.
 
     A one-item list, because `approve_requisition` is the batch and one outcome
     renders as the decision itself rather than under `outcomes` — which is what
     lets this read the order straight out of the result.
+
+    Written here rather than beside `raised_by`, although
+    `test_record_invoice.py::_approved` is the same two calls: that is two
+    callers, and the rule the shared module states is that a helper moves up at
+    three. A third will be the one to move it.
     """
     decided = rpc.result(
         rpc.call_tool(
             APPROVE,
             {"ids": [identifier], "decision": "approve"},
-            token=mint(username, ["erp.decide"]).access_token,
+            token=mint(APPROVER, ["erp.decide"]).access_token,
         )
     )
     assert decided["isError"] is False, decided
@@ -119,10 +118,10 @@ def _approve(identifier: str, username: str = APPROVER) -> str:
     return order
 
 
-def _record(order: str, username: str = RECORDER) -> str:
+def _record(order: str) -> str:
     """Bill one order and name the invoice that came out."""
     recorded = rpc.result(
-        rpc.call_tool(RECORD, {"id": order}, token=mint(username, ["erp.write"]).access_token)
+        rpc.call_tool(RECORD, {"id": order}, token=mint(RECORDER, ["erp.write"]).access_token)
     )
     assert recorded["isError"] is False, recorded
     invoice: str = recorded["structuredContent"]["invoice"]["id"]

@@ -18,10 +18,12 @@ and follows from #70 factoring the identifier mint into one expression the three
 writes share. What a table mints next is identical for every caller, so it keys
 on no `(principal x tool x resource)` and has no home in `tests/matrix/`; it is
 this directory's rule applied to a write rather than to a declaration — *what
-varies with the caller is the matrix's, what the server does regardless is ours*.
-It is also the one module here that reloads the fixtures **between** its tests
-rather than once, because the thing it manipulates is the mint's own high-water
-mark; `test_the_identifier_mint.py` carries the argument.
+varies with the caller is the matrix's, what the server declares regardless is
+ours*. It is also the one module here that reloads the fixtures **between** its
+tests rather than once, because the thing it manipulates is the mint's own
+high-water mark, which no fixture row owns and every one of them moves.
+`test_the_identifier_mint.py` carries the argument. Recorded as an amendment to
+ADR-0003 by #84.
 
 **One seam, one diagnosis.** ADR-0013 names it *Server posture* and #66 gave it
 a job: *the server exposes, declares or deploys something other than what it

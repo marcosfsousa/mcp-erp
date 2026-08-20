@@ -24,6 +24,13 @@ a module-scoped reload, which is what makes the modules independent of each othe
 without isolating rows inside one — the shape ADR-0003 chose and the alternative
 it named.
 
+*Amended 2026-08-20 by #84.* **One suite reloads between its own tests**, and it
+is the one whose subject is what the tables mint next. ADR-0003's reason for
+wiping once is that each write row owns its fixture outright, so no row can
+disturb another; the mint's high-water mark is the state that rule does not
+cover, because no row owns it and every row moves it. That module — and
+:func:`at_the_ceiling`, which only it calls — is the whole of the exception.
+
 **Nothing is looked up by identifier.** The identifiers are ordinal and the
 generator renumbers them when a row is inserted, so every suite here asks for a
 fixture by the **matrix row that owns it** or by the partition it sits in. That
@@ -253,11 +260,18 @@ def at_the_ceiling() -> None:
     The identities on it are the requisition's own submitter, because no rule is
     ever applied to these rows — they exist to be the maximum and nothing else.
 
-    **It leaves :data:`ABSENT_IDENTIFIER` and :data:`ABSENT_ORDER` present**,
-    which is exactly the two values it writes. Both are documented as absent for
-    a whole run, so a caller must restore the tables with :func:`load` before any
-    other module runs — see `tests/wire/test_the_identifier_mint.py`, which is
-    the only caller and reloads between its own tests as well as after them.
+    **It leaves all three of :data:`ABSENT_IDENTIFIER`, :data:`ABSENT_ORDER` and
+    :data:`ABSENT_INVOICE` present**, which is exactly the three values it writes.
+    The first two are documented as absent for a whole run, so a caller must
+    restore the tables with :func:`load` before any other module runs — see
+    `tests/wire/test_the_identifier_mint.py`, which is the only caller and
+    reloads between its own tests as well as after them.
+
+    These are not Fixtures in `CONTEXT.md`'s sense and no matrix row owns one.
+    They are hand-written into generated tables, which is what #43 removed from
+    this module — the difference is that a Fixture exists to be *asserted
+    against* and these exist to be the maximum, so nothing looks one up, nothing
+    expects one, and they are gone before the next module reads the tables.
     """
     base = ROWS[0]
     with psycopg.connect(DATABASE_URL) as connection, connection.cursor() as cursor:
