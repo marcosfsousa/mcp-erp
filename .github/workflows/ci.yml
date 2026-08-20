@@ -432,13 +432,26 @@ jobs:
   #
   # DELIBERATELY NOT FACTORED INTO A SHARED ACTION
   # ----------------------------------------------
-  # Two more Compose jobs are coming — #43 and #44 — and they inherit this
-  # pattern by reading it, not by calling it. The third, `Authorization code
-  # flow`, is below: it is `yes + network` in ADR-0013's table and differs
-  # exactly where that predicted it would, so the pair now standing here is
-  # one real consumer and one deliberate exception rather than one consumer
-  # and three imagined ones. Factor it when the common part is observed
-  # across more than a preflight step and a bring-up, not before.
+  # This is the argument's one home. The two Compose jobs below inherit the
+  # pattern by reading it, not by calling it, and neither restates the reasoning
+  # — a second copy of it would drift from this one exactly as the counts inside
+  # it already have, twice.
+  #
+  # #66 wrote the pattern against one real consumer and three imagined ones —
+  # #43, #44 and #46 — and declined to factor it on exactly that ground. Two of
+  # the three have since landed, so the count that argument turned on is spent:
+  # `Decision matrix (wire)` repeats this job step for step, and `Authorization
+  # code flow` is the `yes + network` row of ADR-0013's table that #66 named as
+  # the reason not to guess a seam early. It differs where that predicted it
+  # would — a preflight *before* Compose, and a bring-up that builds in the same
+  # command rather than in a step of its own.
+  #
+  # So the common part is now observed rather than imagined: two jobs share it,
+  # and a third stands beside them showing where a shared seam must not reach.
+  # That is what makes factoring fair game, and it is still not done here,
+  # because neither #43 nor #46 was going to ship a refactor of somebody else's
+  # job in place of its own subject. #44 is the last one expected and is what
+  # would settle the shape.
   server-posture:
     name: Server posture
     # Keyless, and not offline in the way the Docker-free jobs are: it
@@ -547,14 +560,9 @@ jobs:
   #
   # THE BRING-UP IS `server-posture`'S, REPEATED RATHER THAN SHARED
   # ---------------------------------------------------------------
-  # #66 wrote the first one and said why it is not factored into a shared
-  # action: `Authorization code flow` (#46) is `yes + network` in ADR-0013's
-  # table and is already known to differ, so a seam designed against one real
-  # consumer and three imagined ones would be built on the wrong example. This
-  # is the **second** real consumer, which is what makes factoring fair game —
-  # and the common part is now observed rather than guessed. It is left as two
-  # copies here so that this ticket ships the matrix rather than a refactor of
-  # somebody else's job, and #44 is the third that would settle the shape.
+  # This job is the second real consumer of the pattern, which is what made
+  # factoring fair game. Why it is nonetheless still a copy is argued once,
+  # above `server-posture`, and deliberately not repeated here.
   #
   # Four things in the copy are load-bearing, and they are #66's four:
   #

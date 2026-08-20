@@ -213,8 +213,8 @@ gateway's published `http://localhost:8080`.
 
 **`Server posture`** runs this directory on every pull request and every push to
 `main`, and #66 built it. It is the **first Compose bring-up in continuous
-integration** — of the three jobs expected to bring one, #46 has since landed
-beside it and #43 and #44 are still to come — so `.github/workflows/ci.yml`
+integration** — of the three jobs expected to bring one, #43 and #46 have since
+landed beside it and only #44 is still to come — so `.github/workflows/ci.yml`
 carries the bring-up written plainly inside the job rather than factored into a
 shared action, and the rest inherit the pattern by reading it. Why it is not
 factored is argued where an editor of that file meets it, in the
