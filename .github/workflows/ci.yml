@@ -661,9 +661,16 @@ jobs:
     # asked to do. Every other outbound address is a container talking to a
     # container.
     runs-on: ubuntu-latest
-    # Longer than the Docker-free jobs, and the budget is dominated by building
-    # the Keycloak image — `kc.sh build` with `--features=cimd` runs once per
-    # runner, since nothing here has a layer cache to inherit.
+    # Longer than the Docker-free jobs, because this one builds two images and
+    # waits on four healthchecks before it asserts anything.
+    #
+    # **Measured rather than anticipated**, which is this file's own rule for
+    # budgets: the first green run took **1m23s** end to end, on a runner with
+    # no layer cache to inherit. The bound stays well above it deliberately. It
+    # is a *stuck* detector, not a target — and ADR-0013 is explicit that a
+    # flaky required job is the one thing that would earn an exemption the
+    # ruleset does not offer, so a bound tightened onto a single sample is the
+    # wrong trade on the job that gates.
     timeout-minutes: 20
     steps:
       # Floating major, per the named exception above.
