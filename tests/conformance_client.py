@@ -176,11 +176,21 @@ TIMEOUT: Final = 30.0
 """How long a wait may take. Four things, one number, and one wait deliberately exempt.
 
 **The three requests.** A form post, the preflight fetch, a tool call. For each
-of those it is the whole request — every wait `httpx2` resolves, connect through
-read — and it is one number rather than three because none of the three is slow
-for a reason of its own: everything here talks to a container on the same
-machine or to a static file, so anything approaching this is stuck rather than
-busy.
+of those it is the whole request — all four waits, connect through read — and it
+is one number rather than three because none of the three is slow for a reason
+of its own: everything here talks to a container on the same machine or to a
+static file, so anything approaching this is stuck rather than busy.
+
+**One of the three is not a request `httpx2` resolves a timeout for**, which is
+why :class:`Unhurried` applies this number rather than only lifting a wait off
+it. `AsyncClient.send` stamps the client's waits onto the request it is handed
+and onto nothing else, and the form post is not that request: the package's auth
+flow *yields* it, freshly constructed, and `_send_handling_auth` passes it
+straight to the transport. Same for the discovery `GET`s that precede it. A
+request that arrives carrying no waits is unbounded on every one of them — so
+until this became a rule the transport enforces, the token exchange named above
+was the one request here with no timeout of any kind, and the discovery chain in
+front of it had none either.
 
 **And the fourth thing, which is not a request.** The same number reaches the
 long-lived `GET` stream `streamable_http` opens for server-initiated messages,
@@ -351,13 +361,13 @@ class Rebased(httpx2.AsyncBaseTransport):
 class Unhurried(httpx2.AsyncBaseTransport):
     """The transport that lets a stream be quiet without letting a request be slow.
 
-    `httpx2` resolves one timeout per request and hands it down as four separate
-    waits — connect, read, write and pool — in `request.extensions`, which is the
-    last place any of them can still be told apart. :data:`TIMEOUT` is the right
-    number for all four of them on every request this client makes, with one
-    exception this exists for: the read wait on the long-lived `GET` stream the
-    protocol package opens, where *nothing has arrived for thirty seconds*
-    describes a healthy idle stream exactly as well as it describes a stuck one.
+    A timeout reaches `httpx2`'s transports as four separate waits — connect,
+    read, write and pool — in `request.extensions`, which is the last place any
+    of them can still be told apart. :data:`TIMEOUT` is the right number for all
+    four of them on every request this client makes, with one exception this
+    exists for: the read wait on the long-lived `GET` stream the protocol package
+    opens, where *nothing has arrived for thirty seconds* describes a healthy
+    idle stream exactly as well as it describes a stuck one.
 
     So the read wait is lifted off that request and nothing else changes. **Not
     raised to a larger number**, because a larger number would be the same claim
@@ -368,12 +378,22 @@ class Unhurried(httpx2.AsyncBaseTransport):
     blocked on one, and :func:`connect` cancels the task on the way out — so an
     unbounded read cannot become a run that hangs.
 
-    **It is a rule with nothing to apply to today**, and deliberately kept
-    anyway. :data:`TIMEOUT` records which era this server negotiates and why no
-    such stream is opened under it, so every request that currently passes
-    through here is left exactly as it was. What the rule buys is that the
-    constant beside it is true, rather than a number whose docstring stops
-    describing it on the day something opens one.
+    **This also has to supply the waits, not only adjust them.** `AsyncClient`
+    resolves its timeout onto the request it is *handed* and onto no other:
+    `send` stamps the extension once, and the requests an `httpx2.Auth` yields
+    are constructed by the auth flow and passed to the transport without ever
+    going through it. Those arrive here with no `timeout` extension at all, which
+    `httpcore` reads as *no wait on anything* — so the discovery chain and the
+    token form post were unbounded on all four waits while the constant beside
+    them said otherwise. Applying the number here is what makes it one rule about
+    requests rather than a claim that holds for whichever of them the client
+    happened to build.
+
+    **The stream exemption is a rule with nothing to apply to today**, and
+    deliberately kept anyway. :data:`TIMEOUT` records which era this server
+    negotiates and why no such stream is opened under it. What the rule buys is
+    that the constant beside it is true, rather than a number whose docstring
+    stops describing it on the day something opens one.
 
     **The stream is recognised by what the request declares it will read.** A
     `GET` whose `accept` names `text/event-stream` is opening one; discovery
@@ -388,20 +408,30 @@ class Unhurried(httpx2.AsyncBaseTransport):
     about an address instead.
     """
 
-    def __init__(self, inner: httpx2.AsyncBaseTransport) -> None:
+    def __init__(self, inner: httpx2.AsyncBaseTransport, *, timeout: float = TIMEOUT) -> None:
         """Wrap the transport that actually sends.
 
         Args:
             inner: What sends the request once the waits have been decided —
                 :class:`Rebased` here, since the address still has to be right.
+            timeout: What to bound a request with when it arrives carrying no
+                waits of its own. The same number :func:`protocol_client` gives
+                the client, passed a second time because the client cannot give
+                it to a request it never built.
         """
         self._inner = inner
+        self._waits = httpx2.Timeout(timeout).as_dict()
 
     async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
-        """Send one request, with the read wait lifted when it is opening a stream."""
+        """Send one request, bounded by the waits it carries, with a stream's read lifted."""
         waits = request.extensions.get("timeout")
-        if _opens_a_stream(request) and isinstance(waits, dict):
-            request.extensions = {**request.extensions, "timeout": {**waits, "read": None}}
+        if not isinstance(waits, dict):
+            waits = self._waits
+
+        if _opens_a_stream(request):
+            waits = {**waits, "read": None}
+
+        request.extensions = {**request.extensions, "timeout": waits}
 
         return await self._inner.handle_async_request(request)
 
@@ -812,12 +842,15 @@ def protocol_client(auth: httpx2.Auth, *, timeout: float = TIMEOUT) -> httpx2.As
     Args:
         auth: What authenticates every request the package makes.
         timeout: What bounds each of them — every wait on every request, except
-            the read wait on the long-lived `GET` stream.
+            the read wait on the long-lived `GET` stream. Given twice on
+            purpose: the client resolves it for the requests it builds, and
+            :class:`Unhurried` applies it to the ones `auth` yields, which the
+            client never sees.
     """
     return httpx2.AsyncClient(
         auth=auth,
         timeout=timeout,
-        transport=Unhurried(_reaching_the_issuer()),
+        transport=Unhurried(_reaching_the_issuer(), timeout=timeout),
     )
 
 

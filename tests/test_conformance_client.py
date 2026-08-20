@@ -28,7 +28,7 @@ report it as the authorization server being slow.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from typing import Final
 
@@ -180,6 +180,75 @@ def test_a_discovery_get_keeps_the_read_wait_it_had() -> None:
     then the authorization server's — and it fetches a document rather than
     opening a stream. It is told apart by what it declares it will read, so a
     rule that had keyed on `GET` alone would have left the whole discovery chain
-    unbounded and this is what says so.
+    unbounded and this is what says so. It is driven through the client here;
+    :func:`test_a_request_the_auth_flow_yields_is_bounded_too` is what says the
+    same of the copy the package actually sends.
     """
     assert asyncio.run(_sending("GET", AS_DISCOVERY_ASKS)) == "bounded"
+
+
+class _Yielding(httpx2.Auth):
+    """An `httpx2.Auth` that yields a request it built itself, as the package's does.
+
+    `mcp.client.auth.utils` constructs each discovery `GET` and the registration
+    `POST` with a bare `httpx2.Request`, and `oauth2.py` builds the token form
+    post the same way. Reproduced here rather than driven through the real
+    provider, because what the rule turns on is only that the request was
+    *yielded* — it never passes `AsyncClient.send`, so it never receives the
+    client's waits, and the shape of its body has nothing to do with it.
+    """
+
+    def __init__(self, method: str, headers: Mapping[str, str]) -> None:
+        """Keep what the yielded request will declare.
+
+        Args:
+            method: The request line the auth flow will produce.
+            headers: What that request declares it will read.
+        """
+        self._method = method
+        self._headers = headers
+
+    async def async_auth_flow(
+        self, request: httpx2.Request
+    ) -> AsyncGenerator[httpx2.Request, httpx2.Response]:
+        """Yield one request of this flow's own making, to the address under test."""
+        yield httpx2.Request(self._method, request.url, headers=self._headers)
+
+
+async def _yielding(method: str, headers: Mapping[str, str]) -> str:
+    """Whether a request the auth flow yields is bounded, rather than one the client built.
+
+    Watched under :data:`BUDGET` rather than left to run out, because a request
+    with no waits does not fail — it waits for the fake, and the failure that
+    eventually arrives is the fake closing at :data:`QUIET`, thirty seconds later
+    and under a name that says nothing about a timeout. The guard is what turns
+    *this never came back* into an answer this function can return.
+    """
+    async with (
+        _serving() as url,
+        protocol_client(_Yielding(method, headers), timeout=WAIT) as http,
+    ):
+        try:
+            async with asyncio.timeout(BUDGET):
+                await http.post(url, json={"jsonrpc": "2.0"})
+        except httpx2.ReadTimeout:
+            return "bounded"
+        except TimeoutError:
+            return "unbounded"
+
+    return "the server answered"
+
+
+def test_a_request_the_auth_flow_yields_is_bounded_too() -> None:
+    """The waits reach every request, not only the ones the client resolved them for.
+
+    `AsyncClient.send` stamps the client's timeout onto the request it is handed
+    and onto no other, and `_send_handling_auth` passes what the auth flow yields
+    straight to the transport. So the token form post and the discovery chain
+    ahead of it arrive carrying no waits, which `httpcore` reads as no wait on
+    anything — the one shape `conformance_client.TIMEOUT` named and did not
+    reach. Run against this module before `Unhurried` supplied the waits itself,
+    both assertions below read `unbounded`.
+    """
+    assert asyncio.run(_yielding("POST", {})) == "bounded"
+    assert asyncio.run(_yielding("GET", AS_DISCOVERY_ASKS)) == "bounded"
