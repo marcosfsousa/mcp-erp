@@ -18,6 +18,15 @@ principal directory beside the issuer and subject that identify the person to
 the authorization layer. A `roles` column here would be a second place to hold
 them and a second place for them to be wrong.
 
+**What this module's loader refuses, and where that stops.** The same rule
+layer 2's generator is bounded by: a loader refuses exactly what would otherwise
+fail further away — a key the rows point at that is not unique, a foreign key
+with no target — and nothing else. Type-checking every field is not on the list;
+that is the seed's own shape and mypy's job, and a check per field would be a
+schema written a second time. Stated in both modules rather than shared, for the
+reason :data:`SEED` is: the layer that survives ejection may not hold a rule on
+behalf of the layer that does not.
+
 This is **row data, not schema**: the database and its loader arrive with the
 ticket that stands Compose up, and rendering DDL here would invent a schema
 this ticket does not own. What it fixes is which rows exist and what they hold.
@@ -103,23 +112,30 @@ class Organisation:
 def read_organisation(text: str) -> Organisation:
     """Parse the domain half of the seed, refusing what the ERP's own rows cannot hold.
 
-    Both refusals are layer 3's, and it makes them for itself rather than
-    inheriting them: a person charged to a centre nobody declared, and two
-    people sharing the key their rows are keyed by. Layer 2's generator refuses
-    a duplicated subject too, for its own reason — a directory key collision —
-    and neither layer may rely on the other having looked.
+    Four refusals, each an instance of the rule this module's docstring states,
+    and all four are layer 3's — it makes them for itself rather than inheriting
+    them. A person charged to a centre nobody declared; two people sharing the
+    key their rows are keyed by; and the two keys the rows *point at* being
+    non-unique, a duplicated cost-centre code and a duplicated vendor
+    identifier. Layer 2's generator refuses a duplicated subject too, for its own
+    reason — a directory key collision — and neither layer may rely on the other
+    having looked.
 
     Raises:
-        ValueError: A person holds a cost centre the seed does not list, or two
-            people share a subject.
+        ValueError: A person holds a cost centre the seed does not list; two
+            people share a subject; two cost centres share a code; or two
+            vendors share an identifier.
     """
     document = yaml.safe_load(text)
 
-    centres = tuple(
-        CostCentre(code=str(entry["code"]), name=str(entry["name"]))
-        for entry in document["cost_centres"]
-    )
-    codes = {centre.code for centre in centres}
+    centres: list[CostCentre] = []
+    codes: set[str] = set()
+    for entry in document["cost_centres"]:
+        code = str(entry["code"])
+        if code in codes:
+            raise ValueError(f"duplicate cost centre {code!r}")
+        codes.add(code)
+        centres.append(CostCentre(code=code, name=str(entry["name"])))
 
     people: list[Person] = []
     seen: set[str] = set()
@@ -142,12 +158,19 @@ def read_organisation(text: str) -> Organisation:
             )
         )
 
+    vendors: list[Vendor] = []
+    identifiers: set[str] = set()
+    for entry in document["vendors"]:
+        identifier = str(entry["id"])
+        if identifier in identifiers:
+            raise ValueError(f"duplicate vendor {identifier!r}")
+        identifiers.add(identifier)
+        vendors.append(Vendor(id=identifier, name=str(entry["name"])))
+
     return Organisation(
-        cost_centres=centres,
+        cost_centres=tuple(centres),
         people=tuple(people),
-        vendors=tuple(
-            Vendor(id=str(entry["id"]), name=str(entry["name"])) for entry in document["vendors"]
-        ),
+        vendors=tuple(vendors),
     )
 
 

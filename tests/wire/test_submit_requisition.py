@@ -93,7 +93,16 @@ def test_the_declaration_takes_no_cost_centre() -> None:
     probing surface ADR-0002 designed out — and an enumerated one would publish
     the organisation's shape in a document `tools/list` hands to anyone holding
     the scope. So there is no property to send, and `additionalProperties: false`
-    is what makes sending one anyway not a way in.
+    says so to a model reading the declaration.
+
+    **What the flag is not is an enforcement point**, and the test below this one
+    is what actually closes the hole. Nothing on this stack validates arguments
+    against a published `inputSchema` — `submit_requisition`'s own module says
+    so, and it is why the handler matches `AMOUNT_PATTERN` itself — so a caller
+    sending a forbidden property is not refused by anything. What makes it not a
+    way in is that the handler never reads the key and the write takes
+    `principal.partition`. This test asserts the declaration; that one asserts
+    the behaviour, and the pair is the whole claim.
     """
     tools = rpc.result(
         rpc.post("tools/list", token=mint("priya.raman", ["erp.write"]).access_token)
@@ -110,6 +119,33 @@ def test_the_declaration_takes_no_cost_centre() -> None:
     # Enumerated by name, generated from the vendor rows, so the tool definition
     # cannot drift from the data it is a lookup for.
     assert VENDOR in tool["inputSchema"]["properties"]["vendor"]["enum"]
+
+
+def test_sending_the_forbidden_property_anyway_does_not_move_the_row() -> None:
+    """The absence, exercised by sending one — which is what reading the flag cannot do.
+
+    Priya Raman holds CC-4100 and sends CC-4300, which is Mei Tanaka's and a real
+    centre, so nothing about the value is what stops it. The row comes back
+    charged to CC-4100.
+
+    **It is ignored rather than refused, and the difference is worth stating.**
+    `additionalProperties: false` is a declaration nothing on this stack
+    enforces, so the call goes through; the key reaches
+    `mcp_erp.purchase_to_pay.handlers`, which reads four named arguments and
+    supplies the centre from the resolved principal. A future decision to
+    validate arguments against the declaration would turn this into a `-32602`,
+    and this test would be the one that has to change — which is the right place
+    for that change to show up.
+    """
+    result = rpc.result(
+        _submit(
+            mint("priya.raman", ["erp.write"]),
+            {**ARGUMENTS, "cost_centre": "CC-4300"},
+        )
+    )
+
+    assert result["isError"] is False, result
+    assert result["structuredContent"]["requisition"]["cost_centre"] == "CC-4100"
 
 
 def test_a_submission_is_charged_to_the_submitter_s_own_cost_centre() -> None:
@@ -187,10 +223,18 @@ def test_an_argument_the_schema_forbids_is_a_protocol_error_and_not_a_refusal() 
     about them, so it answers `-32602` and carries no `reason` — giving it one
     would amend a closed vocabulary for a spelling mistake, and would tell a
     model to route around a wall that is not there.
+
+    **The absence of the reason is asserted, not just the code.** The code alone
+    could not have caught the mistake this test exists to prevent: a refusal
+    rides in an error's `data` as `refusal_payload` builds it, so the way this
+    goes wrong is a `-32602` that grew one, not a refusal borrowing the code —
+    refusals carry `ROLE_DENIED_CODE` and always have.
     """
     response = _submit(mint("priya.raman", ["erp.write"]), {**ARGUMENTS, "vendor": "Acme"})
 
-    assert rpc.error(response)["code"] == -32602
+    error = rpc.error(response)
+    assert error["code"] == -32602
+    assert "reason" not in error.get("data", {}), error
 
 
 @pytest.mark.parametrize(

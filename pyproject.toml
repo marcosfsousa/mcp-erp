@@ -113,6 +113,22 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# What counts as a test here, declared once. `tests/attack_suite/scenarios.py`
+# collects the declarations out of the syntax tree — module-level `def test_…`
+# in a `test_*.py` — and asserts a bijection against
+# `docs/attack-suite/scenarios.yaml`. Under pytest's defaults that claim was not
+# true: `*_test.py`, methods of `Test*` classes and a function named `testfoo`
+# are all collected and run, and none of them is visible to the collector, so a
+# test in one of those shapes would declare nothing invisibly.
+#
+# Narrowed here rather than widened there, because the alternative is two
+# declarations of the same rule that have to be kept equal — and this is the one
+# pytest actually obeys. Nothing in `tests/` is written in the dropped shapes,
+# so this changes no collection today; it stops one from arriving unnoticed.
+# `tests/attack_suite/test_the_suite_holds_together.py` holds the two equal.
+python_files = ["test_*.py"]
+python_classes = []
+python_functions = ["test_*"]
 # Declared so an unregistered mark is not a warning, and so `--strict-markers`
 # remains available to anyone who wants it. `scenario` is the attack suite's
 # declaration: every test in `tests/attack_suite/` carries one, and the drift

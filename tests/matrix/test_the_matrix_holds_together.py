@@ -31,6 +31,7 @@ import driver
 
 import fixtures
 from mcp_erp.authorization import REASONS as AUTHORIZATION_REASONS
+from mcp_erp.authorization.identity import USER_IMPORT_RENDERING
 from mcp_erp.purchase_to_pay.fixtures import FIXTURE_RENDERING, render_fixtures
 from mcp_erp.purchase_to_pay.organisation import (
     ORGANISATION_RENDERING,
@@ -193,6 +194,27 @@ def test_every_identity_a_fixture_names_is_someone_the_seed_declares() -> None:
             continue
         for subject in (given.submitted_by, given.approved_by, given.recorded_by):
             assert subject is None or subject in centres, (row.id, subject)
+
+
+def test_every_principal_a_row_names_is_someone_the_realm_can_mint_for() -> None:
+    """The row's own caller, which is the one identity the check beside this misses.
+
+    **A different key space, and that is why it needs its own check.** A `given`
+    names *subjects* and is checked against the organisation rendering; a
+    `principal` names a *username* — what the person types at the login form —
+    and the organisation rendering has no username column at all, because layer 3
+    never learns one. So this reads the user import, which is the rendering the
+    realm is actually loaded from.
+
+    Unchecked, a typo here failed as `mint` driving a login form that rejects the
+    credentials, three jobs away and diagnosed as an authorization server
+    problem.
+    """
+    document = json.loads((fixtures.REPO / USER_IMPORT_RENDERING).read_text(encoding="utf-8"))
+    usernames = {user["username"] for user in document["users"]}
+
+    for row in TABLE.rows:
+        assert row.principal.person in usernames, (row.id, row.principal.person)
 
 
 def test_every_amount_is_a_positive_decimal_the_column_can_hold() -> None:

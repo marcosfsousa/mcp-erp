@@ -335,8 +335,15 @@ jobs:
       # with its rows and that every fixture is charged to its submitter's own
       # centre.
       #
-      # Neither file needs Compose, which is what lets this job run them: they
-      # ask whether the committed artifacts are well formed, and that is a
+      # `tests/purchase_to_pay/` joins them at #81: a falsifier per refusal each
+      # loader promises, which is the control the re-render above cannot be. A
+      # loader that stopped refusing a duplicate still renders byte-identical
+      # output, so the diff stays clean while the guard is gone — the same
+      # argument that put the identity invariants here rather than trusting the
+      # diff alone.
+      #
+      # None of the four needs Compose, which is what lets this job run them:
+      # they ask whether the committed artifacts are well formed, and that is a
       # question about files. `Decision matrix (wire)` collects the second one
       # too, because it lives in that directory and a suite that skipped its own
       # invariants when run whole would be a suite with a hole in it.
@@ -357,7 +364,8 @@ jobs:
         run: |
           uv run pytest tests/authorization/test_identity.py \
                         tests/matrix/test_the_matrix_holds_together.py \
-                        tests/test_tls_profile.py
+                        tests/test_tls_profile.py \
+                        tests/purchase_to_pay
 
   # ADR-0013's fifth row, and the one job in this file whose subject is this
   # file. A red check means **the workflow and the ruleset disagree** — a job was
