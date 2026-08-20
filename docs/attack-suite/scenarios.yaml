@@ -549,11 +549,12 @@ scenarios:
       server's own words BEFORE those parameters are handed over, so an error
       response never reaches the party that would attribute it. That is this
       row's own clause, on the error half it names as the one implementations
-      miss. Raised as a finding rather than fixed here: the ordering is a
-      judgement for the ticket that owns that client, this ticket cannot run its
+      miss. Raised as #78 rather than fixed here: the ordering is a judgement for
+      the ticket that owns that client, this ticket cannot run its
       network-dependent job, and a row that quietly claimed the check was
       inherited would be the second `asserted`-with-nothing-behind-it defect
-      #44 exists to have removed.
+      #44 exists to have removed. This paragraph is deleted when #78 closes —
+      which is that issue's own last acceptance criterion.
       THE ORDER IS THE ASSERTION: `iss` is compared before `error` is read, which
       is what the quoted MUST NOT amounts to — a client that reads the error
       first reports another server's words as though they answered its own

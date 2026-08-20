@@ -39,9 +39,9 @@ against the issuer it discovered. But its `_callback` reads `redirect_error`
 first and raises with the authorization server's own words **before** those
 parameters are handed over — so on an error response, the party that would
 attribute it never sees it. That is this row's clause, on the half it names as
-the one implementations miss. It is recorded as a finding on the row rather than
-fixed here: the ordering belongs to the ticket that owns that client, and this
-suite cannot drive its network-dependent job to check a change to it.
+the one implementations miss. It is raised as #78 rather than fixed here: the
+ordering belongs to the ticket that owns that client, and this suite cannot
+drive its network-dependent job to check a change to it.
 """
 
 import secrets
