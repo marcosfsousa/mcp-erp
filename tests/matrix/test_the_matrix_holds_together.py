@@ -31,16 +31,16 @@ import driver
 
 import fixtures
 from mcp_erp.authorization import REASONS as AUTHORIZATION_REASONS
-from mcp_erp.purchase_to_pay.fixtures import (
-    FIXTURE_RENDERING,
-    LISTING,
-    render_fixtures,
+from mcp_erp.purchase_to_pay.fixtures import FIXTURE_RENDERING, render_fixtures
+from mcp_erp.purchase_to_pay.organisation import (
+    ORGANISATION_RENDERING,
+    SEED,
+    read_organisation,
 )
-from mcp_erp.purchase_to_pay.organisation import ORGANISATION_RENDERING, read_organisation
 from mcp_erp.purchase_to_pay.reasons import REASONS as DOMAIN_REASONS
 
-MATRIX = driver.MATRIX_DEFINITION
-META: dict[str, Any] = dict(MATRIX.meta)
+TABLE = driver.MATRIX_DEFINITION
+META: dict[str, Any] = dict(TABLE.meta)
 
 LADDER: tuple[frozenset[str], ...] = (
     frozenset(),
@@ -91,8 +91,8 @@ def test_the_declared_total_and_the_ceiling_hold() -> None:
     than adding a row — it is not a cap on coverage, it is a prompt to look at the
     split rule the way `scenarios.yaml`'s soft ceiling of 35 is.
     """
-    assert META["total"] == len(MATRIX.rows)
-    assert len(MATRIX.rows) <= META["ceiling"]
+    assert META["total"] == len(TABLE.rows)
+    assert len(TABLE.rows) <= META["ceiling"]
 
 
 def test_the_declared_index_agrees_with_the_rows_it_indexes() -> None:
@@ -102,12 +102,12 @@ def test_the_declared_index_agrees_with_the_rows_it_indexes() -> None:
     fixture — because each is a different question a reader arrives with, and a
     single total answers none of them.
     """
-    assert META["by_tool"] == dict(Counter(row.tool for row in MATRIX.rows))
+    assert META["by_tool"] == dict(Counter(row.tool for row in TABLE.rows))
     assert META["by_reason"] == dict(
-        Counter(row.expect.reason for row in MATRIX.rows if row.expect.reason is not None)
+        Counter(row.expect.reason for row in TABLE.rows if row.expect.reason is not None)
     )
-    assert META["allowed"] == sum(1 for row in MATRIX.rows if row.expect.allowed)
-    assert META["fixtures"] == sum(1 for row in MATRIX.rows if row.given is not None)
+    assert META["permitted"] == sum(1 for row in TABLE.rows if row.expect.permitted)
+    assert META["fixtures"] == sum(1 for row in TABLE.rows if row.given is not None)
 
 
 def test_every_declared_reason_is_expected_by_at_least_one_row() -> None:
@@ -119,7 +119,7 @@ def test_every_declared_reason_is_expected_by_at_least_one_row() -> None:
     mapping test one file along asserts what each reason *means*; this asserts
     that each is *reached*.
     """
-    expected = {row.expect.reason for row in MATRIX.rows if row.expect.reason is not None}
+    expected = {row.expect.reason for row in TABLE.rows if row.expect.reason is not None}
 
     assert expected == {reason.value for reason in AUTHORIZATION_REASONS | DOMAIN_REASONS}
 
@@ -132,9 +132,9 @@ def test_every_tool_the_server_declares_is_named_by_a_row() -> None:
     it comes off the `Action` declarations, so a sixth tool fails here rather than
     shipping unexamined.
     """
-    named = {row.tool for row in MATRIX.rows}
+    named = {row.tool for row in TABLE.rows}
 
-    assert named == set(driver.ACTIONS) | {LISTING}
+    assert named == set(driver.ACTIONS) | {driver.LISTING}
 
 
 def test_every_row_identifier_is_unique() -> None:
@@ -144,7 +144,7 @@ def test_every_row_identifier_is_unique() -> None:
     refusal rather than restating it — a second identifier of the same name would
     have two fixtures and one lookup.
     """
-    assert len({row.id for row in MATRIX.rows}) == len(MATRIX.rows)
+    assert len({row.id for row in TABLE.rows}) == len(TABLE.rows)
 
 
 def test_every_scope_set_is_on_the_ladder_or_is_one_of_the_two_cited() -> None:
@@ -154,7 +154,7 @@ def test_every_scope_set_is_on_the_ladder_or_is_one_of_the_two_cited() -> None:
     row uses fails too, because a standing exemption nothing needs is an
     exemption the next reader will treat as a licence.
     """
-    used = {frozenset(row.principal.scopes) for row in MATRIX.rows}
+    used = {frozenset(row.principal.scopes) for row in TABLE.rows}
 
     assert used <= set(LADDER) | CITED
     assert CITED <= used
@@ -170,7 +170,7 @@ def test_every_fixture_is_charged_to_its_submitters_own_centre() -> None:
     """
     centres = _organisation()
 
-    for row in MATRIX.rows:
+    for row in TABLE.rows:
         if row.given is None:
             continue
         assert row.given.submitted_by in centres, row.id
@@ -187,7 +187,7 @@ def test_every_identity_a_fixture_names_is_someone_the_seed_declares() -> None:
     """
     centres = _organisation()
 
-    for row in MATRIX.rows:
+    for row in TABLE.rows:
         given = row.given
         if given is None:
             continue
@@ -203,7 +203,7 @@ def test_every_amount_is_a_positive_decimal_the_column_can_hold() -> None:
     is far more permissive than the tool's own declared pattern, so the shape is
     checked rather than merely parsed — the same argument the handler makes.
     """
-    for row in MATRIX.rows:
+    for row in TABLE.rows:
         if row.given is None:
             continue
         amount = Decimal(row.given.amount)
@@ -226,7 +226,7 @@ def test_the_committed_rendering_is_what_the_matrix_renders() -> None:
     """
     committed = (fixtures.REPO / FIXTURE_RENDERING).read_text(encoding="utf-8")
 
-    assert render_fixtures(MATRIX) == committed
+    assert render_fixtures(TABLE) == committed
 
 
 def test_the_renderer_is_byte_stable() -> None:
@@ -237,7 +237,7 @@ def test_the_renderer_is_byte_stable() -> None:
     all four renderings and a check that flakes on any of them is a required
     check somebody will want turned off.
     """
-    assert render_fixtures(MATRIX) == render_fixtures(MATRIX)
+    assert render_fixtures(TABLE) == render_fixtures(TABLE)
 
 
 def test_the_organisation_seed_still_parses_the_people_this_table_names() -> None:
@@ -248,7 +248,7 @@ def test_the_organisation_seed_still_parses_the_people_this_table_names() -> Non
     That drift is `Seed renders clean`'s subject, and asserting the two agree here
     is what lets this file trust the map it reads.
     """
-    seed = (fixtures.REPO / "docs/organisation/seed.yaml").read_text(encoding="utf-8")
+    seed = (fixtures.REPO / SEED).read_text(encoding="utf-8")
     organisation = read_organisation(seed)
 
     assert {person.subject: person.cost_centre for person in organisation.people} == _organisation()

@@ -29,15 +29,15 @@ from collections.abc import Iterator
 
 import driver
 import pytest
-from driver import Row
 
 import fixtures
+from mcp_erp.purchase_to_pay.fixtures import Row
 
 TOOL = "approve_requisition"
 
 
 @pytest.fixture(scope="module", autouse=True)
-def rows() -> Iterator[None]:
+def loaded_fixtures() -> Iterator[None]:
     """Start from the fixtures, with the purchase orders reset to what they render.
 
     This module writes: two rows approve, and one names a requisition the

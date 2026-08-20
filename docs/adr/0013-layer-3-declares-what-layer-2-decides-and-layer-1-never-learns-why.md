@@ -337,6 +337,8 @@ Because the fixture generator ships in `src/`, the matrix definition cannot live
 
 *Amended 2026-08-20 by [#43](https://github.com/marcosfsousa/mcp-erp/issues/43), which built the third generator and the file it reads.* **Three generators, four renderings**, and the arithmetic above holds because the fixture generator was never counted as rendering one of the seed's three: it emits its own, `src/mcp_erp/purchase_to_pay/data/fixtures.json`, from `matrix.yaml`.
 
+**`tests/matrix/` is ~~generated~~ *driven* in its entirety**, which is one word and not a reversal. What that phrase was for — no expectation in that directory is hand-authored, so adding a matrix row adds a test with nothing edited — holds exactly, through parametrisation rather than through emission. Nothing writes those files. Saying *generated* would enrol them in `Seed renders clean`, which compares a rendering against what its source produces and would have nothing to compare against here.
+
 **Two consequences that were not visible until it was built.**
 
 *The drift job's diagnosis widens by one word.* `Seed renders clean` re-renders four artifacts now, and one of them has no seed behind it — so what it refuses is *a rendering its source does not produce*, and its two sources are the seed and the matrix. The job name is untouched: renaming a job detaches every ruleset rule pointing at the old string, and the seam is the same one either way.

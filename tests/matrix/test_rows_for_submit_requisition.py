@@ -15,15 +15,15 @@ from collections.abc import Iterator
 
 import driver
 import pytest
-from driver import Row
 
 import fixtures
+from mcp_erp.purchase_to_pay.fixtures import Row
 
 TOOL = "submit_requisition"
 
 
 @pytest.fixture(scope="module", autouse=True)
-def rows() -> Iterator[None]:
+def loaded_fixtures() -> Iterator[None]:
     """Start from the fixtures, so a submission is observably new.
 
     This module writes, so the reload is what keeps it from depending on whatever

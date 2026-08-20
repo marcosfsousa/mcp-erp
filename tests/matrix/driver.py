@@ -1,9 +1,10 @@
 """What drives one matrix row over the wire, and what it asserts about the answer.
 
-`tests/matrix/` is generated in its entirety: every file beside this one is a
-loop over the rows `docs/decision-matrix/matrix.yaml` declares for one tool, and
-this module is what a row means. Nothing here decides *what* is expected — the
-table does — and nothing in the table decides *how* an expectation is checked.
+`tests/matrix/` is driven from the table in its entirety: every file beside this
+one is a parametrised loop over the rows `docs/decision-matrix/matrix.yaml`
+declares for one tool, and this module is what a row means. Nothing here decides
+*what* is expected — the table does — and nothing in the table decides *how* an
+expectation is checked.
 
 **The shape of a refusal is derived, never restated.** A row states a `reason`
 and nothing else, and :func:`_refusal` reads the `Reason` record the two layers
@@ -45,9 +46,19 @@ from mcp_erp.purchase_to_pay import (
     record_invoice,
     submit_requisition,
 )
-from mcp_erp.purchase_to_pay.fixtures import LISTING, MATRIX, Matrix, Row, read_matrix
+from mcp_erp.purchase_to_pay.fixtures import MATRIX, Row, read_matrix
 from mcp_erp.purchase_to_pay.reasons import REASONS as DOMAIN_REASONS
 from tokens import mint
+
+LISTING: Final = "tools/list"
+"""The one call a row may name that is not a tool, spelled here and not in `src/`.
+
+`tools/list` is layer 1's word. Layer 3's parser used to hold it so that it could
+refuse a fixture on a call that names no resource, and it now states the three
+tools that **do** hydrate one instead — every member a name layer 3 owns. Which
+leaves the protocol method to be spelled where protocol methods are already
+spelled: in a suite, beside `rpc.post("tools/list", ...)`.
+"""
 
 MATRIX_DEFINITION: Final = read_matrix((fixtures.REPO / MATRIX).read_text(encoding="utf-8"))
 """The table, parsed once at import by the layer whose vocabulary it speaks.
@@ -133,7 +144,7 @@ def drive(row: Row) -> None:
         return
 
     response = _call(row)
-    if row.expect.allowed:
+    if row.expect.permitted:
         _permitted(row, response)
         return
 
@@ -304,15 +315,3 @@ def _payload(reason: Reason) -> dict[str, Any]:
         "retry_identical_helps": reason.retry_identical_helps,
         "retry_as_other_person_helps": reason.retry_as_other_person_helps,
     }
-
-
-__all__ = [
-    "ACTIONS",
-    "MATRIX_DEFINITION",
-    "REASON_RECORDS",
-    "Matrix",
-    "Row",
-    "drive",
-    "name",
-    "rows_for",
-]

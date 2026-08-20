@@ -42,9 +42,20 @@
 #               guardrail, and the line this file may not cross. The moment a
 #               `given` block wants a conditional it is becoming the DSL map
 #               constraint `#4` refused, and review should catch it.
-#   expect      `allowed` or a `reason`, plus at most one further key. Wire
-#               shape, remedy and both retry booleans are **derived** from the
-#               reason record the two layers declare, never restated here.
+#   expect      the **Decision** this row expects, plus at most one further key:
+#                 decision   permitted | refused. Never `outcome` — CONTEXT.md
+#                            spends that word twice already, on the whole-call
+#                            gate answer and on what a handler yields per item,
+#                            and a Decision is neither of them.
+#                 reason     the refusal's value, or null. Wire shape, remedy
+#                            and both retry booleans are **derived** from the
+#                            reason record the two layers declare, never
+#                            restated here.
+#               The further key is the tool's: `tools` for the listing,
+#               `visible_partitions` for the unscoped read, `charged_to` for a
+#               submission. The parser refuses a key it does not know and refuses
+#               two of them at once, so a misspelling fails at parse rather than
+#               as a wire assertion three jobs later.
 #
 #
 # WHICH RESOURCE A ROW ACTS ON, WITHOUT A COLUMN FOR IT
@@ -167,7 +178,7 @@ meta:
     over_threshold: 2
     already_decided: 1
     already_invoiced: 1
-  allowed: 15
+  permitted: 15
 
 rows:
 
@@ -187,7 +198,7 @@ rows:
     tool: tools/list
     given: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
       tools: []
 
@@ -198,7 +209,7 @@ rows:
     tool: tools/list
     given: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
       tools: [get_requisition, list_requisitions]
 
@@ -209,7 +220,7 @@ rows:
     tool: tools/list
     given: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
       tools: [record_invoice, submit_requisition]
 
@@ -220,7 +231,7 @@ rows:
     tool: tools/list
     given: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
       tools: [get_requisition, list_requisitions, record_invoice, submit_requisition]
 
@@ -231,7 +242,7 @@ rows:
     tool: tools/list
     given: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
       tools: [approve_requisition]
 
@@ -244,7 +255,7 @@ rows:
     tool: list_requisitions
     given: null
     expect:
-      outcome: refused
+      decision: refused
       reason: insufficient_scope
 
   - id: list_returns_the_callers_own_partition
@@ -254,7 +265,7 @@ rows:
     tool: list_requisitions
     given: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
       visible_partitions: [CC-4100]
 
@@ -265,7 +276,7 @@ rows:
     tool: list_requisitions
     given: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
       visible_partitions: [CC-4200]
 
@@ -276,7 +287,7 @@ rows:
     tool: list_requisitions
     given: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
       visible_partitions: [CC-4100, CC-4200, CC-4300]
 
@@ -289,7 +300,7 @@ rows:
     tool: get_requisition
     given: null
     expect:
-      outcome: refused
+      decision: refused
       reason: insufficient_scope
 
   - id: get_returns_a_row_in_the_callers_partition
@@ -308,7 +319,7 @@ rows:
       order_status: null
       recorded_by: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
 
   - id: get_refuses_a_row_in_another_partition
@@ -327,7 +338,7 @@ rows:
       order_status: null
       recorded_by: null
     expect:
-      outcome: refused
+      decision: refused
       reason: not_found
 
   - id: get_refuses_an_identifier_no_row_carries
@@ -337,7 +348,7 @@ rows:
     tool: get_requisition
     given: null
     expect:
-      outcome: refused
+      decision: refused
       reason: not_found
 
   - id: get_reads_across_partitions_for_the_auditing_role
@@ -356,7 +367,7 @@ rows:
       order_status: null
       recorded_by: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
 
   # ─── submit_requisition — the partition is supplied, never decided ─────────
@@ -368,7 +379,7 @@ rows:
     tool: submit_requisition
     given: null
     expect:
-      outcome: refused
+      decision: refused
       reason: insufficient_scope
 
   - id: submit_is_charged_to_the_submitters_own_partition
@@ -378,7 +389,7 @@ rows:
     tool: submit_requisition
     given: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
       charged_to: CC-4100
 
@@ -389,7 +400,7 @@ rows:
     tool: submit_requisition
     given: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
       charged_to: CC-4300
 
@@ -411,7 +422,7 @@ rows:
       order_status: null
       recorded_by: null
     expect:
-      outcome: refused
+      decision: refused
       reason: insufficient_scope
 
   - id: approve_refused_when_the_scope_carries_no_role
@@ -430,7 +441,7 @@ rows:
       order_status: null
       recorded_by: null
     expect:
-      outcome: refused
+      decision: refused
       reason: role_missing
 
   - id: approve_refuses_a_row_in_another_partition
@@ -449,7 +460,7 @@ rows:
       order_status: null
       recorded_by: null
     expect:
-      outcome: refused
+      decision: refused
       reason: not_found
 
   - id: approve_refuses_an_identifier_no_row_carries
@@ -459,7 +470,7 @@ rows:
     tool: approve_requisition
     given: null
     expect:
-      outcome: refused
+      decision: refused
       reason: not_found
 
   - id: approve_refuses_the_approvers_own_requisition
@@ -478,7 +489,7 @@ rows:
       order_status: null
       recorded_by: null
     expect:
-      outcome: refused
+      decision: refused
       reason: segregation_of_duties
 
   - id: approve_refuses_above_the_threshold
@@ -497,7 +508,7 @@ rows:
       order_status: null
       recorded_by: null
     expect:
-      outcome: refused
+      decision: refused
       reason: over_threshold
 
   - id: approve_permits_at_the_threshold
@@ -516,7 +527,7 @@ rows:
       order_status: null
       recorded_by: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
 
   - id: approve_permits_above_the_threshold_for_the_unlimited_role
@@ -535,7 +546,7 @@ rows:
       order_status: null
       recorded_by: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
 
   - id: approve_refuses_a_row_already_decided
@@ -554,7 +565,7 @@ rows:
       order_status: open
       recorded_by: null
     expect:
-      outcome: refused
+      decision: refused
       reason: already_decided
 
   - id: approve_refuses_above_the_threshold_where_no_unlimited_approver_exists
@@ -573,7 +584,7 @@ rows:
       order_status: null
       recorded_by: null
     expect:
-      outcome: refused
+      decision: refused
       reason: over_threshold
 
   # ─── record_invoice — the second separation edge, on the other entity ──────
@@ -594,7 +605,7 @@ rows:
       order_status: open
       recorded_by: null
     expect:
-      outcome: refused
+      decision: refused
       reason: insufficient_scope
 
   - id: record_refused_when_the_scope_carries_no_role
@@ -613,7 +624,7 @@ rows:
       order_status: open
       recorded_by: null
     expect:
-      outcome: refused
+      decision: refused
       reason: role_missing
 
   - id: record_refuses_an_identifier_no_order_carries
@@ -623,7 +634,7 @@ rows:
     tool: record_invoice
     given: null
     expect:
-      outcome: refused
+      decision: refused
       reason: not_found
 
   - id: record_refuses_the_order_the_recorder_approved
@@ -642,7 +653,7 @@ rows:
       order_status: open
       recorded_by: null
     expect:
-      outcome: refused
+      decision: refused
       reason: segregation_of_duties
 
   - id: record_permits_the_order_someone_else_approved
@@ -661,7 +672,7 @@ rows:
       order_status: open
       recorded_by: null
     expect:
-      outcome: allowed
+      decision: permitted
       reason: null
 
   - id: record_refuses_an_order_already_billed
@@ -680,5 +691,5 @@ rows:
       order_status: invoiced
       recorded_by: ingrid-holm
     expect:
-      outcome: refused
+      decision: refused
       reason: already_invoiced

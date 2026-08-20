@@ -17,15 +17,15 @@ from collections.abc import Iterator
 
 import driver
 import pytest
-from driver import Row
 
 import fixtures
+from mcp_erp.purchase_to_pay.fixtures import Row
 
 TOOL = "get_requisition"
 
 
 @pytest.fixture(scope="module", autouse=True)
-def rows() -> Iterator[None]:
+def loaded_fixtures() -> Iterator[None]:
     """Wipe and reload the fixtures once before this module.
 
     Nothing here writes; the reload is what keeps this module from depending on

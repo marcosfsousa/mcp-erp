@@ -22,15 +22,15 @@ from collections.abc import Iterator
 
 import driver
 import pytest
-from driver import Row
 
 import fixtures
+from mcp_erp.purchase_to_pay.fixtures import Row
 
 TOOL = "record_invoice"
 
 
 @pytest.fixture(scope="module", autouse=True)
-def rows() -> Iterator[None]:
+def loaded_fixtures() -> Iterator[None]:
     """Start from the fixtures, with the invoices reset to what they render.
 
     One row expects `already_invoiced`, and the order it names is rendered

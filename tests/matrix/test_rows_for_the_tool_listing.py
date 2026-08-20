@@ -22,7 +22,8 @@ and neither is a row in a table.
 
 import driver
 import pytest
-from driver import Row
+
+from mcp_erp.purchase_to_pay.fixtures import Row
 
 TOOL = "tools/list"
 

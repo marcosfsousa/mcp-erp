@@ -153,7 +153,9 @@ Columns: `id` · `principal` · `tool` · `given` · `expect`.
 
 `principal` is **person × scope set**, not person. Effective permission is granted scope ∩ role permission, and the two inputs are only genuinely independent if the matrix can vary them independently — including the case the exhibit most wants to show, a senior approver whose application asked only for read scope and who therefore cannot approve. Fixing scopes per persona would have filled the cast with people existing solely to be under-scoped.
 
-`expect` is `allowed` or a `reason`. Wire shape, remedy and both retry booleans are **derived** from the reason, and ADR-0002's reason-to-shape mapping is asserted in exactly one dedicated test. Rows stay short enough to render as prose, and changing the mapping is a one-line change.
+`expect` is ~~`allowed`~~ **a Decision — `permitted` or `refused`** — or a `reason`. Wire shape, remedy and both retry booleans are **derived** from the reason, and ADR-0002's reason-to-shape mapping is asserted in exactly one dedicated test. Rows stay short enough to render as prose, and changing the mapping is a one-line change.
+
+*Amended 2026-08-20 by [#43](https://github.com/marcosfsousa/mcp-erp/issues/43), which built the rows.* The field is `decision:` and its two words are `permitted` and `refused`. It shipped as `outcome: allowed | refused` and review caught it against [`CONTEXT.md`](../../CONTEXT.md): **outcome** is spent twice over — on the whole-call gate answer, and on what a handler yields to layer 1 per item — and that entry says plainly that *a Decision is never called an outcome*. What a row expects is a permit or the reason it is refused on, which is a Decision exactly. A vocabulary rule that a data file may break is not a vocabulary rule.
 
 Read rows assert **set equality** over returned identifiers. Row scoping is a question of which rows come back, not in what order; asserting an order would assert something the authorization model does not care about.
 

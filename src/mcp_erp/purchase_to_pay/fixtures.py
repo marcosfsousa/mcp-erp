@@ -53,6 +53,8 @@ from typing import Any, Final
 
 import yaml
 
+from mcp_erp.purchase_to_pay import approve_requisition, get_requisition, record_invoice
+
 MATRIX = "docs/decision-matrix/matrix.yaml"
 """The canonical matrix definition, relative to the repository root.
 
@@ -74,20 +76,20 @@ REJECTED: Final = "rejected"
 STATUSES: Final = (SUBMITTED, APPROVED, REJECTED)
 """The three values ``requisition_status`` holds, spelled as the schema spells them."""
 
+PERMITTED: Final = "permitted"
+REFUSED: Final = "refused"
+"""The two words a row's expected **Decision** takes.
+
+Never ``outcome``. ``CONTEXT.md`` spends that word twice already — on the
+whole-call gate answer, and on what a handler yields to layer 1 per item — and
+says plainly that *a Decision is never called an outcome*. What a row expects is
+a permit, or the reason it is refused on, which is a Decision exactly.
+"""
+
 OPEN: Final = "open"
 INVOICED: Final = "invoiced"
 ORDER_STATUSES: Final = (OPEN, INVOICED)
 """The two values ``purchase_order_status`` holds."""
-
-LISTING: Final = "tools/list"
-"""The one method a row may name that is not a tool.
-
-The listing filters on granted scope and nothing else, so its rows vary the
-principal and expect a set of tool names — a ``(principal x tool x resource)``
-row whose resource is the tool set itself. Named here because the generator has
-to know that such a row carries no ``given``, and layer 3 already owns every
-other name in the table.
-"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,7 +144,7 @@ class Principal:
 
 @dataclass(frozen=True, slots=True)
 class Expect:
-    """What the row expects, stated as an outcome and at most one further fact.
+    """The **Decision** the row expects, and at most one further fact.
 
     ``reason`` is the whole of a refusal's expectation. Wire shape, remedy and
     both retry booleans are **derived** from the ``Reason`` record the two layers
@@ -150,8 +152,8 @@ class Expect:
     asserted in exactly one place.
 
     Attributes:
-        allowed: Whether the call is expected to go through.
-        reason: The refusal's value, or ``None`` when it is allowed.
+        permitted: Whether the call is expected to go through.
+        reason: The refusal's value, or ``None`` when it is permitted.
         tools: For a ``tools/list`` row, the names the listing must return.
         visible_partitions: For a ``list_requisitions`` row, the centres whose
             fixtures must come back — the set the row asserts equality over.
@@ -159,7 +161,7 @@ class Expect:
             must be stamped with.
     """
 
-    allowed: bool
+    permitted: bool
     reason: str | None
     tools: tuple[str, ...] | None
     visible_partitions: tuple[str, ...] | None
@@ -223,6 +225,8 @@ def read_matrix(text: str) -> Matrix:
 
     The other three are about the table itself: a duplicated row identifier, a
     reason on a permitted row, and a ``given`` on a tool that names no resource.
+    Both block parsers additionally refuse a key they do not know, so a misspelled
+    field fails here rather than as a wire assertion two jobs later.
 
     Raises:
         ValueError: Two rows share an identifier; a ``given`` describes a state
@@ -241,10 +245,10 @@ def read_matrix(text: str) -> Matrix:
         seen.add(identifier)
 
         given = _given(entry["given"], row=identifier)
-        if given is not None and entry["tool"] in _RESOURCELESS:
+        if given is not None and entry["tool"] not in _HYDRATES:
             raise ValueError(
                 f"row {identifier!r} carries a fixture on {entry['tool']!r}, "
-                f"which acts against no resource"
+                f"which acts against no named resource"
             )
 
         rows.append(
@@ -350,13 +354,43 @@ def fixtures_for(matrix: Matrix) -> tuple[Fixture, ...]:
     return tuple(fixtures)
 
 
-_RESOURCELESS: Final = frozenset({LISTING, "list_requisitions", "submit_requisition"})
-"""The three calls that act against no named resource, and so never carry a fixture.
+_HYDRATES: Final = frozenset({get_requisition.NAME, approve_requisition.NAME, record_invoice.NAME})
+"""The three tools that act against a named row, and so the only ones a fixture serves.
 
-The listing and the unnamed read take no identifier at all; ``submit_requisition``
-takes arguments and creates a row rather than acting on one — *the thing acted
-against, never the thing created* (ADR-0013).
+Stated as the calls that **do** hydrate rather than as the calls that do not, so
+that every member is a name layer 3 owns and none is written out as a literal.
+The complement would have to spell ``tools/list``, which is layer 1's word and
+has no business being an executable constant in this package — import-linter
+reads imports and cannot see a string, so the only guard against that is not
+writing it.
+
+What the complement would have said still holds: the listing and the unscoped
+read take no identifier at all, and ``submit_requisition`` creates a row rather
+than acting on one — *the thing acted against, never the thing created*
+(ADR-0013).
 """
+
+
+_GIVEN_KEYS: Final = frozenset(
+    {
+        "cost_centre",
+        "vendor",
+        "amount",
+        "description",
+        "submitted_by",
+        "status",
+        "approved_by",
+        "order_status",
+        "recorded_by",
+    }
+)
+"""Every field a ``given`` block states, and it states all of them or none."""
+
+_PER_TOOL_KEYS: Final = frozenset({"tools", "visible_partitions", "charged_to"})
+"""The one further fact a row may expect, chosen by which tool it names."""
+
+_EXPECT_KEYS: Final = frozenset({"decision", "reason"}) | _PER_TOOL_KEYS
+"""Every key an ``expect`` block may carry. Anything else is a misspelling."""
 
 
 def _identifier(prefix: str, ordinal: int) -> str:
@@ -371,14 +405,26 @@ def _identifier(prefix: str, ordinal: int) -> str:
 
 
 def _given(entry: Mapping[str, Any] | None, *, row: str) -> Given | None:
-    """One fixture block, with the three chain implications checked.
+    """One fixture block, its field set fixed and its three chain implications checked.
+
+    **Every field is stated on every block, nulls included**, which is what "no
+    defaults" means in a data file: a block cannot omit a field and inherit a
+    permissive value, because there is nowhere for one to come from. Set equality
+    on the keys is what makes that executable rather than a convention — it
+    refuses a missing field and a misspelled one with one message.
 
     Raises:
-        ValueError: The block describes a state no run of the five tools could
-            have produced.
+        ValueError: The block states a field set other than the declared one, or
+            describes a state no run of the five tools could have produced.
     """
     if entry is None:
         return None
+
+    if set(entry) != _GIVEN_KEYS:
+        raise ValueError(
+            f"row {row!r} states the fixture fields {sorted(entry)}, "
+            f"and every block states exactly {sorted(_GIVEN_KEYS)}"
+        )
 
     status = str(entry["status"])
     if status not in STATUSES:
@@ -432,25 +478,45 @@ def _given(entry: Mapping[str, Any] | None, *, row: str) -> Given | None:
 
 
 def _expect(entry: Mapping[str, Any], *, row: str) -> Expect:
-    """One expectation block, with the outcome and the reason held to each other.
+    """One expectation block, with the decision and the reason held to each other.
+
+    **Unknown keys are refused, and so is a second per-tool key.** The three
+    further keys are optional by nature — a row states the one its own tool
+    asserts on — which is exactly the shape where ``.get()`` turns a misspelling
+    into silence: ``visible_partition`` would parse, expect nothing, and surface
+    as a wire assertion in the Compose job rather than as a table defect. So the
+    key set is checked against what this parser knows, which is the same loudness
+    :func:`_given` gets for free by subscripting.
 
     Raises:
-        ValueError: The outcome is neither of the two words, a permitted row
-            states a reason, or a refused row states none. A refusal with no
-            reason would be a row asserting only that *something* went wrong,
-            which is the assertion this table exists instead of.
+        ValueError: The decision is neither of the two words; a permitted row
+            states a reason, or a refused row states none; the block carries a
+            key this parser does not know; or it carries more than one per-tool
+            key. A refusal with no reason would be a row asserting only that
+            *something* went wrong, which is the assertion this table exists
+            instead of.
     """
-    outcome = str(entry["outcome"])
-    if outcome not in ("allowed", "refused"):
-        raise ValueError(f"row {row!r} expects {outcome!r}, which is neither allowed nor refused")
+    unknown = set(entry) - _EXPECT_KEYS
+    if unknown:
+        raise ValueError(f"row {row!r} expects keys this parser does not know: {sorted(unknown)}")
 
-    allowed = outcome == "allowed"
-    reason = _optional(entry.get("reason"))
-    if allowed != (reason is None):
-        raise ValueError(f"row {row!r} expects {outcome!r} and states reason {reason!r}")
+    stated = sorted(set(entry) & _PER_TOOL_KEYS)
+    if len(stated) > 1:
+        raise ValueError(f"row {row!r} states more than one per-tool expectation: {stated}")
+
+    decision = str(entry["decision"])
+    if decision not in (PERMITTED, REFUSED):
+        raise ValueError(
+            f"row {row!r} expects {decision!r}, which is neither {PERMITTED!r} nor {REFUSED!r}"
+        )
+
+    permitted = decision == PERMITTED
+    reason = _optional(entry["reason"])
+    if permitted != (reason is None):
+        raise ValueError(f"row {row!r} expects {decision!r} and states reason {reason!r}")
 
     return Expect(
-        allowed=allowed,
+        permitted=permitted,
         reason=reason,
         tools=_names(entry.get("tools")),
         visible_partitions=_names(entry.get("visible_partitions")),

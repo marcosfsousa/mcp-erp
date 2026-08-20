@@ -4,12 +4,21 @@ One row per `(principal × tool × resource → expected)`, driven from
 [`docs/decision-matrix/matrix.yaml`](../../docs/decision-matrix/matrix.yaml).
 Landed with #43.
 
-**This directory is generated in its entirety.** Every `test_rows_for_*.py` is a
-loop over the rows the table declares for one tool, parametrised so that
-`pytest -v` prints each row's own identifier — a red check names the expectation
-that broke rather than a parameter index. `driver.py` is what a row *means*: it
-builds the request the row's tool takes, mints a real token for the row's
-principal through the real authorization code flow, and asserts the answer.
+**This directory is driven from the table in its entirety** — *driven*, not
+*generated*, and the distinction is worth one sentence. ADR-0013 wrote that
+`tests/matrix/` would be "generated in its entirety", meaning that no expectation
+here would be hand-authored. That holds: every `test_rows_for_*.py` is a
+parametrised loop over the rows the table declares for one tool, so adding a row
+adds a test with nothing edited. What is *not* true is that a generator emits
+these files — nothing writes them, they are not renderings, and calling them
+generated would put them under a drift check that has nothing to compare against.
+Parametrising is the better build and this paragraph is why the ADR's word
+changed.
+
+`pytest -v` prints each row's own identifier, so a red check names the
+expectation that broke rather than a parameter index. `driver.py` is what a row
+*means*: it builds the request the row's tool takes, mints a real token for the
+row's principal through the real authorization code flow, and asserts the answer.
 Nothing in `driver.py` decides what is expected, and nothing in the table decides
 how an expectation is checked.
 
