@@ -406,10 +406,11 @@ jobs:
     name: Server posture
     runs-on: ubuntu-latest
     # Larger than the ten the Docker-free jobs get, for one reason: this builds
-    # two images and waits on three healthchecks before the first assertion
-    # runs. Still a budget the job clears comfortably, so anything past it
-    # reads as stuck rather than slow — a Keycloak that boots and never imports
-    # the realm is this job's version of the classic.
+    # two images, pulls two more, and stands up five containers — four of them
+    # behind a healthcheck — before the first assertion runs. Still a budget
+    # the job clears comfortably, so anything past it reads as stuck rather
+    # than slow: a Keycloak that boots and never imports the realm is this
+    # job's version of the dev server that starts and never serves.
     timeout-minutes: 20
     steps:
       # Floating major, per the named exception above.

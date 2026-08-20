@@ -184,11 +184,10 @@ gateway's published `http://localhost:8080`.
 `main`, and #66 built it. It is the **first Compose bring-up in continuous
 integration** — the three jobs expected to bring one, #43, #44 and #46, all
 arrive later — so `.github/workflows/ci.yml` carries the bring-up written
-plainly inside the job rather than factored into a shared action. That is
-deliberate and stated there: *Authorization code flow* is `yes + network` in
-ADR-0013's table and is already known to differ, so a shared seam designed
-against one real consumer and three imagined ones would be built on the wrong
-example. The three later jobs inherit the pattern by reading it.
+plainly inside the job rather than factored into a shared action, and those
+three inherit the pattern by reading it. Why it is not factored is argued where
+an editor of that file meets it, in the `server-posture` header comment, and
+recorded in ADR-0013 §*Continuous-integration jobs, one per seam*.
 
 The runner takes the **hosts-file** branch of the choice above rather than the
 rebase, so the path `compose.yaml` and this file tell a reader to take is the
