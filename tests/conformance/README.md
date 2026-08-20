@@ -39,6 +39,23 @@ minted. Mint versus earn is a constructor argument, not an architecture, and
 `test_minting_and_earning_differ_by_exactly_one_object` is that claim as an
 assertion rather than a diagram.
 
+## The half of the client this suite cannot prove
+
+`tests/test_conformance_client.py`, beside `tests/test_tokens.py` and Docker-free
+for the same reason, carried by the same `Lint and types` job.
+
+It holds the waits. Every request this suite makes is bounded by
+`conformance_client.TIMEOUT`, and a long-lived `GET` stream underneath it is
+deliberately **not** — a stream that is quiet is idle rather than stuck, and
+[#86](https://github.com/marcosfsousa/mcp-erp/issues/86) was that distinction
+being missing.
+
+A flow cannot assert it in either direction, and against this server it is never
+even reached — that constant's own docstring records which era is negotiated
+here and why nothing opens such a stream under it. So the assertion is made
+against a socket that answers with an open event stream and then says nothing,
+which is the state no clock can name.
+
 ## The second module, and why a client-side clause is asserted here
 
 `test_a_refusal_is_attributed_before_it_is_repeated.py` keeps the other half of
