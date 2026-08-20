@@ -230,6 +230,37 @@ refuses the token request outright with *Offline tokens not allowed for the user
 or client*. `tests/conformance_client.py`'s `GRANT_TYPES` carries the finding and
 what the client does about it.
 
+**A provisioned client inherits no PKCE pin either, and the pin could not be
+attached to the policy above.** The four authored clients each carry
+`"pkce.code.challenge.method": "S256"` as a client attribute, which is what makes
+them refuse `plain`. A client the executor creates carries no attributes of its
+own, so the fifth arrived accepting `plain` — and accepting a request with no
+`code_challenge` at all — while ADR-0007 claimed the method was pinned at the
+server for every client.
+
+The obvious repair does not work, and the reason is worth stating because it
+generalises to every executor. Adding `pkce-enforcer` to the
+`client-identity-metadata-document` profile is inert: `ClientIdUriSchemeCondition`
+votes on `PRE_AUTHORIZATION_REQUEST` and **abstains on every other event**, while
+`PKCEEnforcerExecutor` does its work on `AUTHORIZATION_REQUEST` and
+`TOKEN_REQUEST`. The two never meet, so the executor sits in the profile looking
+like enforcement and enforcing nothing. **A profile is only as reachable as its
+policy's condition, and conditions are per-event.**
+
+So the pin is a second policy, bound to what is actually true of every client
+here rather than to a name:
+
+```json
+{ "condition": "client-access-type", "configuration": { "type": ["public"] } }
+```
+
+`ClientAccessTypeCondition` votes on any context that carries a resolved client,
+which covers both events `pkce-enforcer` handles. Every client in this realm is
+public, so the pin now holds for the four in this file, for the fifth that is
+not, and for any sixth — and `auto-configure` stamps `S256` onto the provisioned
+client as well, so the attribute and the policy agree rather than one standing in
+for the other.
+
 ## Two traps this directory pays for, beyond the three ADR-0007 banked
 
 Both were found by a flow stopping on them, not by reading.

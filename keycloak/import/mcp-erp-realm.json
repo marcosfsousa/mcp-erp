@@ -194,6 +194,18 @@
             }
           }
         ]
+      },
+      {
+        "name": "proof-key-for-code-exchange",
+        "description": "Pin the challenge method to SHA-256 for every public client, including one this file does not contain.",
+        "executors": [
+          {
+            "executor": "pkce-enforcer",
+            "configuration": {
+              "auto-configure": true
+            }
+          }
+        ]
       }
     ]
   },
@@ -214,6 +226,20 @@
           }
         ],
         "profiles": ["client-identity-metadata-document"]
+      },
+      {
+        "name": "proof-key-for-code-exchange",
+        "description": "Every client here is public, so this binds the SHA-256 pin to the access type rather than to a name.",
+        "enabled": true,
+        "conditions": [
+          {
+            "condition": "client-access-type",
+            "configuration": {
+              "type": ["public"]
+            }
+          }
+        ],
+        "profiles": ["proof-key-for-code-exchange"]
       }
     ]
   },
