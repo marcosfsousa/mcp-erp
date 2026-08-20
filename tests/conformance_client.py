@@ -169,12 +169,43 @@ reason that has nothing to do with what it was demonstrating.
 JSON_MEDIA_TYPE: Final = "application/json"
 """What RFC 6749 §5.1 requires a token response to be, and what :meth:`Flow._record` gates on."""
 
-TIMEOUT: Final = 30.0
-"""How long any one request may take — a form post, the preflight fetch, a tool call.
+EVENT_STREAM_MEDIA_TYPE: Final = "text/event-stream"
+"""What a request naming it in `accept` is prepared to read, and :class:`Unhurried` gates on."""
 
-One number rather than three, because none of the three is slow for a reason of
-its own: everything here talks to a container on the same machine or to a static
-file, so anything approaching this is stuck rather than busy.
+TIMEOUT: Final = 30.0
+"""How long a wait may take. Four things, one number, and one wait deliberately exempt.
+
+**The three requests.** A form post, the preflight fetch, a tool call. For each
+of those it is the whole request — every wait `httpx2` resolves, connect through
+read — and it is one number rather than three because none of the three is slow
+for a reason of its own: everything here talks to a container on the same
+machine or to a static file, so anything approaching this is stuck rather than
+busy.
+
+**And the fourth thing, which is not a request.** The same number reaches the
+long-lived `GET` stream `streamable_http` opens for server-initiated messages,
+through the same client :func:`connect` hands the package — and there the
+argument above stops holding for exactly one of the four waits. A stream that is
+healthy and simply quiet is *idle*, which is the state *stuck rather than busy*
+has no name for. Its connect, write and pool waits are still bounded by this
+number — a stream that will not open, or a pool that will not lend a connection,
+is stuck in the ordinary way — and :class:`Unhurried` lifts the **read** wait
+off it alone.
+
+That is also what keeps the fix a statement about requests. A second constant on
+the client would have moved the tool call's read wait along with the stream's,
+and the tool call is one of the three this number is *for*.
+
+**Whether that stream is opened at all is the server's to decide, and against
+this one it currently is not.** The package starts it on the `initialized`
+notification and abandons it immediately without a session identifier; this
+server negotiates the era that sends neither — `server/discover`, and no
+`Mcp-Session-Id` on any response — so no run here has yet reached the exempt
+wait. That is a fact about today's negotiation rather than a property of either
+constant, and it is the whole reason this was found by reading:
+[#86](https://github.com/marcosfsousa/mcp-erp/issues/86) is a number that
+governed a wait its own argument did not cover, and a green flow says nothing
+about it in either direction.
 """
 
 CONSENT = "consent"
@@ -310,6 +341,70 @@ class Rebased(httpx2.AsyncBaseTransport):
     async def aclose(self) -> None:
         """Close the transport underneath."""
         await self._inner.aclose()
+
+
+class Unhurried(httpx2.AsyncBaseTransport):
+    """The transport that lets a stream be quiet without letting a request be slow.
+
+    `httpx2` resolves one timeout per request and hands it down as four separate
+    waits — connect, read, write and pool — in `request.extensions`, which is the
+    last place any of them can still be told apart. :data:`TIMEOUT` is the right
+    number for all four of them on every request this client makes, with one
+    exception this exists for: the read wait on the long-lived `GET` stream the
+    protocol package opens, where *nothing has arrived for thirty seconds*
+    describes a healthy idle stream exactly as well as it describes a stuck one.
+
+    So the read wait is lifted off that request and nothing else changes. **Not
+    raised to a larger number**, because a larger number would be the same claim
+    with a different threshold: there is no length of quiet that means a stream
+    is broken, which is why the package's own reconnect loop is driven by the
+    stream ending or erroring rather than by a clock. Nothing waits on this
+    stream either — it carries server-initiated messages, no assertion is
+    blocked on one, and :func:`connect` cancels the task on the way out — so an
+    unbounded read cannot become a run that hangs.
+
+    **It is a rule with nothing to apply to today**, and deliberately kept
+    anyway. :data:`TIMEOUT` records why: this server negotiates the era that
+    opens no such stream, so every request that currently passes through here is
+    left exactly as it was. What the rule buys is that the constant beside it is
+    true — the alternative to a rule nothing reaches is a number whose docstring
+    quietly stops describing it the day a server issues a session identifier.
+
+    **The stream is recognised by what the request declares it will read.** A
+    `GET` whose `accept` names `text/event-stream` is opening one; discovery
+    `GET`s carry a protocol version and no `accept` at all, and the `POST`s are
+    requests whatever they are answered with. That is the same structural gate
+    :meth:`Flow._record` uses on the way back, and for the same reason: it does
+    not require this client to know which request the package was making.
+    """
+
+    def __init__(self, inner: httpx2.AsyncBaseTransport) -> None:
+        """Wrap the transport that actually sends.
+
+        Args:
+            inner: What sends the request once the waits have been decided —
+                :class:`Rebased` here, since the address still has to be right.
+        """
+        self._inner = inner
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        """Send one request, with the read wait lifted when it is opening a stream."""
+        waits = request.extensions.get("timeout")
+        if _opens_a_stream(request) and isinstance(waits, dict):
+            request.extensions = {**request.extensions, "timeout": {**waits, "read": None}}
+
+        return await self._inner.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        """Close the transport underneath."""
+        await self._inner.aclose()
+
+
+def _opens_a_stream(request: httpx2.Request) -> bool:
+    """Whether this is the long-lived `GET` rather than one of the requests around it."""
+    accept = request.headers.get("accept", "")
+
+    return request.method == "GET" and EVENT_STREAM_MEDIA_TYPE in accept
 
 
 @dataclass
@@ -682,15 +777,33 @@ async def connect(auth: httpx2.Auth) -> AsyncIterator[Client]:
     Yields:
         A connected client, with the protocol era already negotiated.
     """
-    async with httpx2.AsyncClient(
-        auth=auth,
-        timeout=TIMEOUT,
-        transport=_reaching_the_issuer(),
-    ) as http:
+    async with _protocol_client(auth) as http:
         # The transport is handed over unentered: `Client` owns its lifetime, and
         # entering it here would hand `Client` a pair of streams instead.
         async with Client(streamable_http_client(SERVER, http_client=http)) as client:
             yield client
+
+
+def _protocol_client(auth: httpx2.Auth, *, timeout: float = TIMEOUT) -> httpx2.AsyncClient:
+    """The HTTP client the protocol package is handed, and the waits it carries.
+
+    A function rather than four lines inside :func:`connect`, because the waits
+    are the one thing about this object that a completed flow does not
+    demonstrate — :class:`Unhurried`'s exemption and the bound either side of it
+    both end in a run that passes. `tests/test_conformance_client.py` builds this
+    same client with a small `timeout` and drives it against a socket, which is
+    what makes *the stream is exempt and the requests are not* an assertion.
+
+    Args:
+        auth: What authenticates every request the package makes.
+        timeout: What bounds each of them — every wait on every request, except
+            the read wait on the long-lived `GET` stream.
+    """
+    return httpx2.AsyncClient(
+        auth=auth,
+        timeout=timeout,
+        transport=Unhurried(_reaching_the_issuer()),
+    )
 
 
 def _keep_the_session_over_plain_http(http: httpx2.AsyncClient) -> None:

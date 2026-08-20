@@ -169,22 +169,30 @@ jobs:
       - name: Every package imports
         run: uv run python -c "import mcp_erp.app"
 
-      # The token helper's pure half — base64 padding, the challenge digest,
-      # form actions, scope sets. It lands here rather than in a job of its own
-      # because ADR-0013 holds job names and the ruleset's required contexts
-      # equal in both directions; a step inside a job that already runs changes
-      # no context and needs no ruleset edit.
+      # The two flow drivers' pure halves — the token helper's base64 padding,
+      # challenge digest, form actions and scope sets, and the conformance
+      # client's read wait, asserted against a loopback socket. They land here
+      # rather than in a job of their own because ADR-0013 holds job names and
+      # the ruleset's required contexts equal in both directions; a step inside
+      # a job that already runs changes no context and needs no ruleset edit.
       #
       # The seam is right, not merely convenient. This job means *an ordinary
       # Python defect*, and a helper that pads base64 wrongly is exactly one.
-      # The Compose jobs that drive this helper cannot hold it — they need a
+      # The Compose jobs that drive these two cannot hold them — they need a
       # running authorization server to say anything at all, so a padding bug
       # would arrive there as `Server posture` red, which is a diagnosis about
       # what the server exposes — and `Layer 2 ejects clean` would report a
       # broken digest as layer 2 failing to stand alone, which is the wrong
       # diagnosis on the wrong job.
-      - name: The token helper's Docker-free half
-        run: uv run pytest tests/test_tokens.py
+      #
+      # `Authorization code flow` cannot hold the second one at all, rather than
+      # merely holding it badly: the era this server negotiates opens no
+      # server-initiated stream, so a flow reaches the wait in question never,
+      # before the fix as much as after it. The files are named rather than
+      # collected, because `testpaths` is the whole of `tests/` and most of it
+      # needs Compose.
+      - name: The flow drivers' Docker-free halves
+        run: uv run pytest tests/test_tokens.py tests/test_conformance_client.py
 
   layer-boundaries:
     name: Layer boundaries
