@@ -41,6 +41,12 @@ one line of rendering — is not needed and is not taken.
 docker compose up
 ```
 
+**Docker Compose 2.24 or newer.** The opt-in TLS profile below needs two
+constructs — `depends_on`'s `required: false` and `env_file`'s long syntax — and
+Compose parses the whole file whether or not the profile is selected, so the
+floor applies to this command too. `compose.yaml`'s header says which construct
+costs which version.
+
 The `Dockerfile` builds the image once with `--features=cimd --db=dev-mem`,
 because the metadata-document feature is a **build-time** option and a boot that
 paid for it would make every continuous-integration run pay too. The container
@@ -72,6 +78,152 @@ configures the resource server with the issuer and nothing else.
 Host-side tooling that has not had the line added can be pointed somewhere
 reachable instead — `KEYCLOAK_BASE_URL=http://localhost:8081` — which moves the
 address the requests go to and never the issuer they assert.
+
+## The opt-in TLS profile, and the browser that can log in
+
+```
+docker compose --env-file tls.env up
+```
+
+**No browser can complete a login against the default configuration, and that is
+a fact about browsers rather than about this stack.** Keycloak 26.7.1 sets
+`AUTH_SESSION_ID`, `KC_RESTART` and `KC_AUTH_SESSION_HASH` with `Secure;
+SameSite=None`. A browser stores a `Secure` cookie from a plain-HTTP origin only
+when the host is literally `localhost`, `*.localhost` or a loopback address —
+W3C Secure Contexts §3.1 decides on the **literal host string**, and RFC 6265bis
+§5.7 step 13 says the same from the other side. The `127.0.0.1 keycloak` line
+above buys resolution, and resolution is not what the rule reads. Without the
+cookies the flow dies at the login post with *Restart login cookie not found*,
+which reads like a rejected password.
+
+`https` is a secure context **by scheme**, so no host list applies and the
+service name works for the browser and inside the Docker network alike. ADR-0005
+called this option 6 and declined it as a default; [ADR-0011](../docs/adr/0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md)
+and [ADR-0014](../docs/adr/0014-the-walkthrough-is-the-write-up-and-the-image-is-never-the-proof.md)
+took it as this profile.
+
+**What moves is the scheme, and nothing else:**
+
+| | `docker compose up` | `--env-file tls.env` |
+| --- | --- | --- |
+| Issuer | `http://keycloak:8081/realms/mcp-erp` | `https://keycloak:8081/realms/mcp-erp` |
+| Published port | `8081` | `8081` |
+| Certificate | none | minted locally, trusted by you |
+| Setup | the hosts-file line | the hosts-file line, and the trust step below |
+
+The service name and the port stay put because they are what resolves
+identically on both sides of the container boundary. One port is published
+either way, so a reader who never selects the profile is unaffected by it. The
+plain listener moves to `8082` **inside** the network, where the health probe
+reaches it — the image carries nothing that speaks TLS, and the issuer is a name
+Keycloak asserts rather than the address a caller reached.
+
+The principal directory holds the Cast at **both** identifiers, rendered from
+`tls_issuer` in `docs/organisation/seed.yaml`. It is keyed by issuer *and*
+subject, so a profile whose issuer had no rows would refuse every call with
+`role_missing` after passing every gate.
+
+### Trusting the certificate, if you have never done this before
+
+`docker compose --env-file tls.env up` mints the certificate on its first run,
+into `keycloak/tls/`, and prints `minted /tls/keycloak.p12 and
+/tls/authority.crt`. Two files matter:
+
+- **`keycloak/tls/authority.crt`** — the authority that signed it. This is what
+  you install.
+- `keycloak/tls/keycloak.p12` — Keycloak's own key and certificate. Nothing
+  outside the container needs it.
+
+Nothing here is committed, and that is deliberate: installing an authority is a
+real grant, and whoever holds its private key can present a valid certificate
+for any name to anyone who trusts it. A committed authority would hand that to
+everyone who has ever cloned this repository. **The authority's private key is
+destroyed in the same run that uses it** — `keycloak/tls/generate.sh` deletes it
+after signing — so the thing you are about to install has no usable key
+anywhere. Deleting the directory and running again mints a new one, which you
+would then have to trust again.
+
+Install it once, on the machine you will browse from:
+
+**Windows.** Double-click `keycloak\tls\authority.crt` → *Install Certificate…*
+→ **Local Machine** → *Place all certificates in the following store* → *Browse*
+→ **Trusted Root Certification Authorities** → Next → Finish. Chrome and Edge
+read this store; restart the browser. Firefox does not — see below.
+
+**macOS.** `open keycloak/tls/authority.crt` opens Keychain Access. Put it in
+the **System** keychain, find *mcp-erp demo certificate authority* in the list,
+open it, expand **Trust**, and set *When using this certificate* to **Always
+Trust**. Safari and Chrome read this; restart the browser.
+
+Or, in one line:
+
+```
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain keycloak/tls/authority.crt
+```
+
+**Linux.** Copy it in and rebuild the bundle, which covers most things:
+
+```
+sudo cp keycloak/tls/authority.crt /usr/local/share/ca-certificates/mcp-erp.crt
+sudo update-ca-certificates
+```
+
+**Firefox, on every platform**, keeps its own store: *Settings* → *Privacy &
+Security* → *Certificates* → *View Certificates…* → *Authorities* → *Import…* →
+choose `authority.crt` → tick **Trust this CA to identify websites**.
+
+To undo any of it, remove *mcp-erp demo certificate authority* from the same
+place you added it.
+
+### Watching a human log in
+
+With the profile up, the certificate trusted, and `127.0.0.1 keycloak` in your
+hosts file, paste this into the browser:
+
+```
+https://keycloak:8081/realms/mcp-erp/protocol/openid-connect/auth?client_id=mcp-conformance&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8085%2Fcallback&scope=openid%20erp.read%20erp.write%20erp.decide&state=a-state-nothing-checks&code_challenge=ldyRQKlDMhcyJEmnrhIFPMTKYVSQ9letGqbGtxRZ7Ns&code_challenge_method=S256
+```
+
+Log in as `priya.raman` with the seed's password, and the consent screen names
+the three capabilities as a delegation choice. Consent, and the browser lands on
+`http://localhost:8085/callback?state=…&code=…` — nothing serves that address,
+so the page fails to load and the authorization code is in the URL bar. That is
+the callback landing; the helper below is what redeems one.
+
+The code is not redeemable from that URL alone, deliberately: the request pins a
+`code_challenge` whose verifier is not written down, so a code copied out of a
+browser is inert. It is a login and a consent to watch, not a token to reuse.
+
+### Minting a token under the profile
+
+The issuer moves, so name it — the same variable the resource server is
+configured with, and only a value the seed lists:
+
+```
+MCP_ISSUER=https://keycloak:8081/realms/mcp-erp \
+KEYCLOAK_BASE_URL=https://localhost:8081 \
+SSL_CERT_FILE=keycloak/tls/authority.crt \
+uv run python tests/tokens.py priya.raman erp.read erp.write
+```
+
+`KEYCLOAK_BASE_URL` is only needed without the hosts-file line, exactly as it is
+without the profile. `SSL_CERT_FILE` is what the helper verifies the authority
+with, and it is the same variable `compose.yaml` hands the resource server so it
+can fetch the key set over `https` at the same name.
+
+### What the profile does not change
+
+**Normative register row 2 stays open.** The deviation is a property of the
+**default** configuration, which the profile does not touch, and a profile a
+reader may decline to take does not erase what `docker compose up` does.
+
+**The headless tiers keep their own concession.** `tests/tokens.py` and
+`tests/conformance_client.py` clear the `Secure` flag on the cookie objects as
+they store them, because they run against the default configuration in
+continuous integration. That is unchanged, and it is not what this replaces —
+it is a concession a browser has no way to make, which is why the wall needed
+knocking down at the root.
 
 ## Minting a token
 

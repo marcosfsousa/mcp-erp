@@ -1,0 +1,12 @@
+# Everything this directory produces, refused by name rather than by pattern, so
+# a new output has to be thought about rather than silently ignored.
+#
+# `authority.crt` is a public certificate and would be harmless to commit; it is
+# refused anyway, because a repository that carries an authority's certificate
+# is one pull request away from carrying its key, and the reader who trusts one
+# has no way to tell which they were handed. `generate.sh` explains the grant.
+authority.crt
+authority.p12
+chain.crt
+keycloak.crt
+keycloak.p12

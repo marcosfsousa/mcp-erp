@@ -53,6 +53,32 @@
 #
 # Plain HTTP on both identifiers is normative register row 2, a hard `MUST`
 # deviation carried deliberately and not closed here.
+#
+#
+# ONE OPT-IN PROFILE, AND WHAT IT MOVES
+# -------------------------------------
+#
+#     docker compose --env-file tls.env up
+#
+# terminates TLS at the same service name, because no browser can complete a
+# login against this stack over plain HTTP: Keycloak marks its session cookies
+# `Secure`, and W3C Secure Contexts §3.1 reads the literal host string, which
+# `keycloak` is not. ADR-0014 decided it; `keycloak/README.md` §The opt-in TLS
+# profile documents it, including the one step only a human can take.
+#
+# **The scheme is the entire diff.** The issuer's authority does not move, one
+# port is published either way, and every value the profile changes is
+# interpolated below with today's value as its default — so `docker compose up`
+# with no argument is the run it has always been. The deviation above is a
+# property of that default run and the profile does not close it.
+#
+# **It costs one version floor, and it is charged to the default run.** Two
+# constructs make an opt-in profile expressible at all — `depends_on`'s
+# `required: false` (Compose 2.20) and `env_file`'s long syntax (2.24) — and
+# Compose parses this whole file whether or not the profile is selected, so an
+# older one fails on `docker compose up` too. **Compose 2.24 or newer.** That is
+# the honest price of the profile, stated where the file is rather than
+# discovered as a parse error naming a key nobody typed.
 
 name: mcp-erp
 
@@ -74,13 +100,44 @@ x-server: &server
     # identically inside the network and outside it. Inside, Compose's own DNS
     # answers; outside, one `127.0.0.1 keycloak` line in the reader's hosts
     # file does.
-    MCP_ISSUER: http://keycloak:8081/realms/mcp-erp
+    #
+    # The scheme and authority come from one variable that every issuer string
+    # in this file reads, so the opt-in TLS profile moves them in one place and
+    # cannot move one and not another. Its default is what this file said before
+    # the profile existed.
+    MCP_ISSUER: ${MCP_KEYCLOAK_ORIGIN:-http://keycloak:8081}/realms/mcp-erp
     # What the realm's audience mapper stamps into every token, so the value a
     # token carries and the value this server demands are one string set in one
     # place. It is also the address the gateway publishes, which is what makes
     # the audience a claim about the URL a caller actually used.
+    #
+    # It does **not** follow the profile. The audience names the resource
+    # server's own URL in the environment it runs in, and the gateway publishes
+    # the same plain-HTTP address either way — the profile terminates TLS at the
+    # authorization server, which is where the browser has to reach.
     MCP_RESOURCE_URL: http://localhost:8080/mcp
     DATABASE_URL: postgresql://mcp_erp:not-a-secret-demo-password@postgres:5432/mcp_erp
+  env_file:
+    # `SSL_CERT_FILE`, and only under the profile: what this server verifies the
+    # authorization server against when it fetches the key set, which under the
+    # profile it does over `https` at the same name.
+    #
+    # **An optional file rather than `${VAR:-}`, and the empty string is why.**
+    # `SSL_CERT_FILE=""` is not the same as unset to OpenSSL: it is a filename,
+    # an empty one, and `ssl.create_default_context()` in this image drops from
+    # **150 trusted authorities to nought** when it is set that way — measured.
+    # `httpx2` happens to dodge it by testing the value for truth, but the
+    # variable reaches every process in the container, and a default run whose
+    # trust store had quietly emptied is not the run it was.
+    - path: ${MCP_TLS_SERVER_ENV:-./keycloak/tls/no-profile-selected.env}
+      required: false
+  volumes:
+    # The profile's certificate directory, read-only, at the path
+    # `SSL_CERT_FILE` names above. Mounted in both configurations because a
+    # Compose volume list cannot be conditional — in the default one it is a
+    # committed directory holding a generator and two text files, and nothing
+    # reads it.
+    - ./keycloak/tls:/tls:ro
   depends_on:
     # Realm readiness and an initialised database, not process readiness. The
     # server tolerates both being down — it fetches nothing at start-up — but a
@@ -122,13 +179,44 @@ services:
     image: mcp-erp-keycloak:26.7.1
     # Port and hostname agree, because the issuer carries the port and Keycloak
     # stamps the issuer into every token it mints.
+    #
+    # **One published port in both configurations.** Under the TLS profile this
+    # port speaks TLS rather than plain HTTP; it is not joined by a second one.
+    # That is why the profile puts HTTPS on `8081` rather than on the
+    # conventional `8443`: `docker compose up` publishes what it always
+    # published, and a reader whose machine already uses `8443` is unaffected by
+    # a profile they did not select.
     ports:
       - "8081:8081"
+    depends_on:
+      # The certificate, minted on the reader's machine before anything can
+      # serve it. `required: false` is what keeps this edge invisible in the
+      # default configuration: the service below sits in the `tls` profile, and
+      # a dependency on a service no active profile selects is skipped rather
+      # than an error.
+      keycloak-certificate:
+        condition: service_completed_successfully
+        required: false
+    env_file:
+      # The TLS-only options, read only when the profile names them. Quarkus
+      # refuses an empty value — `Invalid empty value for option
+      # 'KC_HTTPS_KEY_STORE_FILE'`, measured on 26.7.1 — so `${VAR:-}` cannot
+      # say "unset here" and an optional file has to. The default path names
+      # nothing and `required: false` makes that the normal case.
+      - path: ${MCP_TLS_KEYCLOAK_ENV:-./keycloak/tls/no-profile-selected.env}
+        required: false
     environment:
-      # What every token says, and what the principal directory joins on.
-      KC_HOSTNAME: http://keycloak:8081
+      # What every token says, and what the principal directory joins on. One
+      # variable, read by the resource server's issuer above and by both
+      # health probes below, so the profile cannot move one and leave another.
+      KC_HOSTNAME: ${MCP_KEYCLOAK_ORIGIN:-http://keycloak:8081}
       KC_HTTP_ENABLED: "true"
-      KC_HTTP_PORT: "8081"
+      # Where the plain listener sits. The profile moves it off the published
+      # port and leaves it inside the network, because the health probe below
+      # speaks HTTP over one of bash's own file descriptors and this image
+      # carries nothing that speaks TLS. Unpublished, so what a caller outside
+      # the network can reach under the profile is TLS and nothing else.
+      KC_HTTP_PORT: ${MCP_KEYCLOAK_HTTP_PORT:-8081}
 
       # Fresh on every boot, like everything else here. The admin console is not
       # part of the exhibit; this exists so that a reader who wants to look at
@@ -152,6 +240,10 @@ services:
       # change immediately — which is what makes the pure-function claim
       # something a reader can try rather than take on trust.
       - ./keycloak/import:/opt/keycloak/data/import:ro
+      # Where the profile's keystore is, at the path `keycloak/tls/keycloak.env`
+      # names. Read-only: this container serves the certificate and the service
+      # below is the only one that writes it.
+      - ./keycloak/tls:/tls:ro
     healthcheck:
       # **Realm readiness, not process readiness, and the difference was
       # measured rather than assumed.** `/health/ready` on the management port
@@ -172,19 +264,66 @@ services:
       # imported the neighbour first and another imported it last — same files,
       # same image — so probing whichever realm "finishes last" is a guess that
       # was already wrong once. Each subshell gets its own descriptor.
+      #
+      # **The probe speaks plain HTTP to a port inside the network, and greps
+      # for whatever issuer the configuration stamps.** Under the TLS profile
+      # those are two different addresses — the request goes to `8082` and the
+      # document says `https://keycloak:8081` — and that is not a loose end: the
+      # issuer is a name Keycloak asserts, never the address a caller reached,
+      # and a probe that could only see it over the published port would have to
+      # speak TLS from an image that carries nothing which can.
       test:
         - CMD-SHELL
         - >-
-          (exec 3<>/dev/tcp/localhost/8081;
+          (exec 3<>/dev/tcp/localhost/${MCP_KEYCLOAK_HTTP_PORT:-8081};
           printf 'GET /realms/mcp-erp/.well-known/openid-configuration HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;
-          grep -q '"issuer":"http://keycloak:8081/realms/mcp-erp"' <&3) &&
-          (exec 3<>/dev/tcp/localhost/8081;
+          grep -q '"issuer":"${MCP_KEYCLOAK_ORIGIN:-http://keycloak:8081}/realms/mcp-erp"' <&3) &&
+          (exec 3<>/dev/tcp/localhost/${MCP_KEYCLOAK_HTTP_PORT:-8081};
           printf 'GET /realms/mcp-erp-neighbour/.well-known/openid-configuration HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;
-          grep -q '"issuer":"http://keycloak:8081/realms/mcp-erp-neighbour"' <&3)
+          grep -q '"issuer":"${MCP_KEYCLOAK_ORIGIN:-http://keycloak:8081}/realms/mcp-erp-neighbour"' <&3)
       interval: 5s
       timeout: 5s
       retries: 30
       start_period: 20s
+
+  # The opt-in TLS profile's certificate, and the only service in a profile.
+  # ADR-0005's option 6, taken as the non-default opt-in ADR-0011 named:
+  # Keycloak marks its session cookies `Secure`, and a browser stores a `Secure`
+  # cookie from a plain-HTTP origin only when the host is literally `localhost`,
+  # `*.localhost` or a loopback address — W3C Secure Contexts §3.1 reads the
+  # literal host string, so the `127.0.0.1 keycloak` line buys resolution and
+  # resolution is not what the rule reads. `https` is a secure context by
+  # scheme, which is why this closes at the root rather than by moving the
+  # issuer to loopback that no container can reach.
+  #
+  # It runs to completion and exits; `keycloak` waits for it and for nothing
+  # else new. `keycloak/tls/generate.sh` carries the whole argument, including
+  # why nothing it writes is committed and why the authority's private key is
+  # destroyed in the same run that uses it.
+  keycloak-certificate:
+    profiles:
+      - tls
+    # The image the authorization server already pins by exact tag and digest,
+    # so map constraint `#11` costs nothing here: the profile adds no external
+    # image. It is also the only one at hand that can do the job — the base is a
+    # micro image with neither `openssl` nor `curl`, and a JVM, so `keytool`.
+    build:
+      context: ./keycloak
+    image: mcp-erp-keycloak:26.7.1
+    # **Root, and the script gives the files back.** The image runs as uid 1000,
+    # and a Linux bind mount carries host ownership through unchanged — so on any
+    # machine whose user is not uid 1000, a generator running as the image's user
+    # cannot write into the reader's own checkout. It writes as root and then
+    # chowns each file to whoever owns the mounted directory, which is the reader.
+    user: root
+    entrypoint:
+      - /bin/bash
+      - /tls/generate.sh
+    volumes:
+      # The one service that writes here. Everything else mounts it read-only,
+      # and it is a bind mount rather than a named volume because the reader has
+      # to reach `authority.crt` from their own file manager to install it.
+      - ./keycloak/tls:/tls
 
   # The ERP's rows. Seeded from the seed's third rendering, which is the same
   # file the drift check re-renders and refuses a diff on — so what the database

@@ -53,6 +53,9 @@
 #                  The directory key is `subject` scoped by this, never an
 #                  email or a preferred username — OpenID Connect declines to
 #                  guarantee either as stable or unique.
+#   tls_issuer     the same realm's identifier under the opt-in TLS profile, and
+#                  the only other issuer the directory holds rows at. Optional:
+#                  a seed without it renders one row per person.
 #   password       one conspicuously fake password, shared by all seven and
 #                  committed deliberately. Per-person passwords would be seven
 #                  equally committed, equally fake secrets buying no behaviour.
@@ -90,6 +93,20 @@
 # for `keycloak:8081`, and a self-signed one makes certificate trust a setup
 # step for every third-party client.
 issuer: http://keycloak:8081/realms/mcp-erp
+
+# The same realm's identifier under the opt-in TLS profile, which exists because
+# no browser can complete a login against the address above. `keycloak/README.md`
+# §The opt-in TLS profile carries the measurement and the argument; ADR-0014
+# decided it and #91 built it.
+#
+# Two things about it belong here rather than there. **Only the scheme moves** —
+# the service name and the port are what resolve identically on both sides of the
+# container boundary, so they stay put. And **it renders into the principal
+# directory beside the default identifier**, because the directory is keyed by
+# issuer *and* subject: a profile whose issuer had no rows would refuse every
+# call with `role_missing` after passing every gate. It renders nowhere else. The
+# realm is one realm, imported once, under one name.
+tls_issuer: https://keycloak:8081/realms/mcp-erp
 
 # Not a secret, and conspicuously so. The exhibit runs on the reader's machine
 # and nowhere else, so there is nothing here to leak.

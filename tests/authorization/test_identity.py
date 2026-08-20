@@ -89,6 +89,78 @@ def test_the_committed_user_import_is_what_the_seed_renders(seed: IdentitySeed) 
     assert render_user_import(seed).encode("utf-8") == committed
 
 
+def test_the_committed_directory_holds_the_cast_at_every_issuer(
+    seed: IdentitySeed,
+    directory_rows: list[dict[str, object]],
+    realm_users: list[dict[str, object]],
+) -> None:
+    """The row count has a ceiling, and it is the cast times the issuer list.
+
+    The opt-in TLS profile reaches one realm under a second identifier, and a
+    directory keyed by issuer *and* subject has to hold both or every call under
+    the profile refuses with `role_missing`. That is a rule which generates
+    rows, so it is stated with its ceiling: two issuers, seven people, fourteen
+    rows and no third source of multiplication.
+    """
+    assert len(directory_rows) == len(seed.issuers) * len(realm_users)
+    assert {row["issuer"] for row in directory_rows} == set(seed.issuers)
+
+
+def test_the_second_issuer_moves_nothing_but_the_scheme(seed: IdentitySeed) -> None:
+    """One address, two schemes, and the profile's whole diff.
+
+    The service name and the port are what resolve identically on both sides of
+    the container boundary — Compose's own DNS inside, one `127.0.0.1 keycloak`
+    line outside — so the profile buys a secure context by moving the one thing
+    W3C Secure Contexts §3.1 reads, and moves nothing else.
+    """
+    default, under_the_profile = seed.issuers
+
+    assert default.startswith("http://")
+    assert under_the_profile == f"https://{default.removeprefix('http://')}"
+
+
+def test_a_person_renders_the_same_roles_at_every_issuer() -> None:
+    """A second issuer is a second identifier for one realm, not a second policy.
+
+    Rendering the roles per issuer rather than once is what would let the two
+    drift, and a reader comparing two rows for one person would have no way to
+    tell which the server was answering from.
+    """
+    text = _seed_text(subject="somebody", roles=["a_server_role"])
+    both = read_identity_seed(text + "tls_issuer: https://elsewhere.example/realms/exhibit\n")
+
+    rows = json.loads(render_directory(both))
+
+    assert [row["issuer"] for row in rows] == [
+        "https://issuer.example/realms/exhibit",
+        "https://elsewhere.example/realms/exhibit",
+    ]
+    assert {row["subject"] for row in rows} == {"somebody"}
+    assert all(row["roles"] == ["a_server_role"] for row in rows)
+
+
+def test_a_seed_with_no_second_issuer_renders_one_row_per_person() -> None:
+    """The second identifier is optional, because the default configuration has none."""
+    only_one = read_identity_seed(_seed_text(subject="somebody"))
+
+    assert only_one.issuers == ("https://issuer.example/realms/exhibit",)
+    assert len(json.loads(render_directory(only_one))) == 1
+
+
+def test_a_second_issuer_naming_another_realm_is_refused() -> None:
+    """The realm is the issuer's last path segment, and there is one realm here.
+
+    Two identifiers ending in different segments would render a user import for
+    whichever the parser read first, and a directory holding rows for a realm
+    that was never imported.
+    """
+    text = _seed_text(subject="somebody") + "tls_issuer: https://issuer.example/realms/other\n"
+
+    with pytest.raises(ValueError, match="realm"):
+        read_identity_seed(text)
+
+
 def test_rendering_twice_produces_the_same_bytes(seed: IdentitySeed) -> None:
     """Byte-stability, asserted rather than assumed.
 

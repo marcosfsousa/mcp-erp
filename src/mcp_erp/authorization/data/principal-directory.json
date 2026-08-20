@@ -53,5 +53,60 @@
       "approver"
     ],
     "subject": "yusuf-demir"
+  },
+  {
+    "issuer": "https://keycloak:8081/realms/mcp-erp",
+    "partition": "CC-4200",
+    "roles": [
+      "auditor"
+    ],
+    "subject": "anna-lindqvist"
+  },
+  {
+    "issuer": "https://keycloak:8081/realms/mcp-erp",
+    "partition": "CC-4100",
+    "roles": [
+      "invoice_clerk",
+      "unlimited_approver"
+    ],
+    "subject": "ingrid-holm"
+  },
+  {
+    "issuer": "https://keycloak:8081/realms/mcp-erp",
+    "partition": "CC-4300",
+    "roles": [
+      "approver"
+    ],
+    "subject": "mei-tanaka"
+  },
+  {
+    "issuer": "https://keycloak:8081/realms/mcp-erp",
+    "partition": "CC-4100",
+    "roles": [],
+    "subject": "priya-raman"
+  },
+  {
+    "issuer": "https://keycloak:8081/realms/mcp-erp",
+    "partition": "CC-4100",
+    "roles": [
+      "invoice_clerk"
+    ],
+    "subject": "rafael-costa"
+  },
+  {
+    "issuer": "https://keycloak:8081/realms/mcp-erp",
+    "partition": "CC-4100",
+    "roles": [
+      "approver"
+    ],
+    "subject": "tomas-weber"
+  },
+  {
+    "issuer": "https://keycloak:8081/realms/mcp-erp",
+    "partition": "CC-4200",
+    "roles": [
+      "approver"
+    ],
+    "subject": "yusuf-demir"
   }
 ]
