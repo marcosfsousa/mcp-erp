@@ -8,6 +8,7 @@
 - **Amended:** 2026-08-16 — substantive, by [#11](https://github.com/marcosfsousa/mcp-erp/issues/11). `senior_approver` becomes `unlimited_approver`; the four role names are ratified. See *Four roles*. *(Header added 2026-08-18 by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12).)*
 - **Amended:** 2026-08-18 — substantive, by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). The seed renders **three** ways, not two; roles leave the ERP `person` table; the matrix definition gains a committed home; the seam handed to #12 gains its successor sentence; resource hydration is named. See *Identity: one seed file, two renderings*, *The organisation is authored; the test data is generated*, *The matrix skeleton* and *Input to other tickets*. No decision here is reversed.
 - **Amended:** 2026-08-18 — cosmetic, by [#35](https://github.com/marcosfsousa/mcp-erp/issues/35). A generator count, corrected as the renderings were built: three renderings and the fixtures need **three** generators, and the ERP's rows are rendered by layer 3's second. See *Input to other tickets*. No decision here is changed.
+- **Amended:** 2026-08-20 — additive, by [#42](https://github.com/marcosfsousa/mcp-erp/issues/42), which made the purchase order a resource. The order **still copies no cost centre** — no column, no `INSERT`, no schema — and the entity now **carries the centre the join answers with**, because row scoping on `record_invoice` decides on it. The governing rule and the denormalisation rule are two tests, not one. See *PurchaseOrder does not copy the cost centre forward*. No decision here is reversed.
 
 ## Question
 
@@ -39,6 +40,14 @@ A person who must see more than one centre holds the `auditor` role, which reads
 **Invoice is where the governing rule bites hardest.** It carries no amount, no vendor, no supplier reference — the purchase order fixes all three, and since a purchase order takes exactly one invoice at full value, an amount field could only restate one. Recording an invoice validates two things: the order is `open`, and the caller is not the person who approved it.
 
 **PurchaseOrder does not copy the cost centre forward.** ADR-0002 described it as carrying "the approver identity and cost centre forward"; the identity is load-bearing and the cost centre is a join away. Denormalising it would buy a shorter query and a second copy of a fact that can disagree with the first.
+
+*Amended 2026-08-20 by [#42](https://github.com/marcosfsousa/mcp-erp/issues/42), which made the purchase order a resource.* **The column stays absent and the entity carries the centre, because the two are different claims.**
+
+`record_invoice` is decided against the `PurchaseOrder`, so row scoping needs a partition from it — and there is no third option: an order has no centre of its own, and the one it is scoped by is the one its requisition was charged to. The join above is what supplies it, evaluated at hydration, and `PurchaseOrder.cost_centre` holds that join's answer for the length of one decision. It is written by no `INSERT`, stored in no column and rendered in no schema.
+
+That is this paragraph holding rather than bending, and the distinction is worth stating because the governing rule is easy to read as one test when it is two. **A field earns its place if it changes an authorization decision** — the centre does, which is what makes it a member of the entity. **A field is denormalised if it is stored twice** — the centre is not, which is what keeps the disagreement this paragraph refuses impossible. The wire shape is decided by neither: nothing anywhere takes an authorization decision on what a caller was *told* a centre is, so the order's rendering keeps pointing at the requisition that states it.
+
+No decision here is reversed, and the schema in `db/001-schema.sql` is unchanged.
 
 `description` is the **one exception** to the governing rule, granted for the reader's benefit — "40 ergonomic desk chairs" narrates in a way `req_0104` does not, and issue #15's walkthrough has to be readable by a human. Display names on people are part of the same exception. It is recorded here as a single carve-out so a reviewer can check the claim against exactly one place rather than trusting that the rule held everywhere.
 

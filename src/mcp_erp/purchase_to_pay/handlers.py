@@ -493,7 +493,7 @@ def record_invoice(orders: PurchaseOrders) -> Handler:
 
         # Reachable only on a permit, and a permit means the chain saw a row.
         assert resource is not None
-        written = await orders.record_invoice(
+        written = await orders.bill(
             resource.id,
             # The principal's, never the caller's: no argument names a recorder,
             # which is what makes the second separation edge a check against a

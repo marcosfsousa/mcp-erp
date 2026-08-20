@@ -89,14 +89,45 @@ docstring. A row in another partition is loaded and then refused by the chain,
 which is what keeps the refusal a layer-2 property rather than a SQL one.
 """
 
+
+def _next_identifier(prefix: str) -> str:
+    """The expression that mints one table's next identifier, for a prefixed handle.
+
+    **The identifier is sequential and legible**, against a specification
+    ``SHOULD`` — the normative register's *Legible identifiers* deviation, taken
+    so that the probe scenario can guess a foreign identifier rather than be
+    handed one. So the next one is derived from the highest that exists rather
+    than drawn from a sequence: a sequence would have to be re-synchronised every
+    time the fixtures are reloaded with explicit identifiers, and a loader that
+    forgot would mint a duplicate key on the first write after it.
+
+    **Written once because the argument is one argument.** Each of the three
+    tables mints on exactly these terms, differing only in the prefix, and the
+    expression is fiddly enough that three copies is three places for the pad
+    width or the anchor to drift. The table is not a parameter: the expression
+    reads ``id`` from whatever the enclosing statement selects from, so each
+    caller's own ``FROM`` names it.
+
+    Args:
+        prefix: The handle's leading token, without its separator.
+
+    Returns:
+        A SQL fragment, for interpolation into an ``INSERT … SELECT``. It carries
+        no caller data — the only substitution is this literal — so it is not a
+        parameterised value and must never become one.
+    """
+    return (
+        f"'{prefix}_' || lpad("
+        "(coalesce(max(substring(id from '[0-9]+$')::integer), 0) + 1)::text, 4, '0')"
+    )
+
+
 _INSERT: Final = f"""
     WITH minted AS (
         INSERT INTO requisition (id, cost_centre, vendor, amount, currency, description,
                                  submitted_by)
         SELECT
-            'req_' || lpad(
-                (coalesce(max(substring(id from '[0-9]+$')::integer), 0) + 1)::text, 4, '0'
-            ),
+            {_next_identifier("req")},
             %s, %s, %s, %s, %s, %s
         FROM requisition
         RETURNING *
@@ -108,13 +139,8 @@ _INSERT: Final = f"""
 """
 """Write one row, minting the next identifier, and read it back with its labels.
 
-**The identifier is sequential and legible**, against a specification ``SHOULD``
-— the normative register's *Legible identifiers* deviation, taken so that the
-probe scenario can guess a foreign identifier rather than be handed one. So the
-next one is derived from the highest that exists rather than drawn from a
-sequence: a sequence would have to be re-synchronised every time the fixtures are
-reloaded with explicit identifiers, and a loader that forgot would mint a
-duplicate key on the first submission after it.
+The identifier comes from :func:`_next_identifier`, which carries the argument
+for why it is shaped as it is.
 
 One statement rather than an insert followed by a select, so the row a caller is
 shown is the row that was written and not a later read of the same identifier.
@@ -185,9 +211,7 @@ _INSERT_ORDER: Final = f"""
     WITH minted AS (
         INSERT INTO purchase_order (id, requisition_id, approved_by)
         SELECT
-            'po_' || lpad(
-                (coalesce(max(substring(id from '[0-9]+$')::integer), 0) + 1)::text, 4, '0'
-            ),
+            {_next_identifier("po")},
             %s, %s
         FROM purchase_order
         RETURNING *
@@ -197,11 +221,6 @@ _INSERT_ORDER: Final = f"""
     {_ORDER_JOINS}
 """
 """Emit the order an approval produces, minting its identifier the same way.
-
-Sequential and legible for the same reason a requisition's is — the normative
-register's *Legible identifiers* deviation — and derived from the highest that
-exists rather than from a sequence, so reloading fixtures with explicit
-identifiers cannot leave a sequence to mint a duplicate key.
 
 ``status`` and ``id`` are the server's; the cost centre is **not written at all**,
 which is ADR-0003's correction to ADR-0002 expressed in the statement rather than
@@ -237,13 +256,11 @@ a constraint the caller cannot see — where this answers with the domain's own
 word.
 """
 
-_INSERT_INVOICE: Final = """
+_INSERT_INVOICE: Final = f"""
     WITH minted AS (
         INSERT INTO invoice (id, purchase_order_id, recorded_by)
         SELECT
-            'inv_' || lpad(
-                (coalesce(max(substring(id from '[0-9]+$')::integer), 0) + 1)::text, 4, '0'
-            ),
+            {_next_identifier("inv")},
             %s, %s
         FROM invoice
         RETURNING *
@@ -392,8 +409,20 @@ class PurchaseOrders(Protocol):
         """
         ...
 
-    async def record_invoice(self, identifier: str, *, recorded_by: str) -> Recorded | None:
+    async def bill(self, identifier: str, *, recorded_by: str) -> Recorded | None:
         """Bill one purchase order, and write the invoice that bills it.
+
+        **``bill`` rather than ``record_invoice``**, on the rule
+        :meth:`Requisitions.decide` already keeps: a store method is named for
+        what the store does to the entity it owns, never for the tool that calls
+        it. ``decide`` sits under ``approve_requisition`` and ``create`` under
+        ``submit_requisition`` for the same reason — a store that wore a tool's
+        name would read as though it knew what a caller was allowed to do, which
+        is the one thing it must not know.
+
+        The verb is ``CONTEXT.md``'s own — an invoice is *"the record that a
+        purchase order has been billed"*. The word is barred as a **noun** for
+        that record and is the right verb for this action.
 
         Returns ``None`` when the order was invoiced already — **the
         terminal-state rule, evaluated where the write happens**, on the same
@@ -547,7 +576,7 @@ class PostgresPurchaseOrders:
 
         return None if row is None else _as_purchase_order(row)
 
-    async def record_invoice(self, identifier: str, *, recorded_by: str) -> Recorded | None:
+    async def bill(self, identifier: str, *, recorded_by: str) -> Recorded | None:
         """Bill one order and write its invoice, inside one transaction.
 
         Three statements and one transaction, which is what makes the pair

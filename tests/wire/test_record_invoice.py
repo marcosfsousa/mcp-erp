@@ -187,7 +187,7 @@ def test_the_declaration_names_one_purchase_order_and_nothing_else() -> None:
     assert tool["outputSchema"]["required"] == ["purchase_order", "invoice"]
 
 
-def test_a_clerk_records_the_invoice_for_an_order_somebody_else_approved() -> None:
+def test_an_invoice_recorder_records_against_an_order_somebody_else_approved() -> None:
     """The positive side of the second edge, and the whole write path with it.
 
     The order comes back because its status is the thing that moved: nothing in
@@ -223,6 +223,29 @@ def test_the_invoice_carries_a_reference_and_an_identity_and_nothing_else() -> N
     invoice = _permitted(RECORDER, order)["invoice"]
 
     assert set(invoice) == {"id", "purchase_order", "recorded_by"}
+
+
+def test_the_two_references_in_one_body_share_a_label_and_name_two_records() -> None:
+    """The chain reading as a chain, and the one legibility exception paying for it.
+
+    A purchase order has no name of its own, so the reader's half of a reference
+    to one is the requisition's description — the same string the order's own
+    reference to that requisition carries. The identifiers differ and the labels
+    do not, which is what lets a reader see that all three records belong to one
+    chain without following either handle.
+
+    Asserted rather than left to fall out, because the alternative reads as a
+    defect: the same string against two different identifiers in one body is a
+    decision, and ADR-0003 asked for its one exception to stay checkable.
+    """
+    order = _approved()
+
+    recorded = _permitted(RECORDER, order)
+
+    label = recorded["purchase_order"]["requisition"]["label"]
+    assert recorded["invoice"]["purchase_order"] == {"id": order, "label": label}
+    assert recorded["purchase_order"]["requisition"]["id"].startswith("req_")
+    assert order.startswith("po_")
 
 
 def test_the_write_scope_reaches_this_tool_and_the_role_is_what_stops_it() -> None:
@@ -341,7 +364,7 @@ def test_a_second_invoice_against_a_billed_order_is_refused() -> None:
     }
     assert first["invoice"]["purchase_order"]["id"] == order
 
-    # The cast holds two clerks and one of them approved this order, so *a
+    # Two People hold `invoice_clerk` and one of them approved this order, so *a
     # different person* is her — and what she gets is not `already_invoiced` at
     # all. **Authorization runs before the row's own state**, so a caller who may
     # not bill this order learns nothing about whether it has been billed.

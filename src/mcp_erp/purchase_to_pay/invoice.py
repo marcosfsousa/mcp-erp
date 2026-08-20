@@ -12,8 +12,8 @@ supplier reference: the purchase order fixes all three, and since an order takes
 exactly one invoice at full value an amount field could only restate one. What is
 left is a reference and an identity — which order was billed, and who recorded
 it — and ``recorded_by`` is there because it is the far side of the second
-segregation-of-duties edge rather than because an invoice is expected to carry a
-clerk.
+segregation-of-duties edge rather than because an invoice is expected to name who
+handled it.
 
 The tool that creates one is declared in a module of its own beside this,
 :mod:`~mcp_erp.purchase_to_pay.record_invoice`, on the rule ADR-0013 states: the
@@ -35,9 +35,9 @@ INVOICE_SCHEMA: Final[dict[str, Any]] = {
     "properties": {
         "id": {"type": "string"},
         # The order it bills, as the `{id, label}` pair every reference here
-        # takes. The label is the requisition's description, which is the same
-        # named legibility exception the order's own reference spends: `inv_0001
-        # → po_0001` narrates nothing, and this reads.
+        # takes. The label is the requisition's description — the same named
+        # legibility exception the order's own reference spends, one link
+        # further down: `inv_0001 → po_0001` narrates nothing, and this reads.
         "purchase_order": REFERENCE_SCHEMA,
         "recorded_by": REFERENCE_SCHEMA,
     },
@@ -51,6 +51,19 @@ Three fields, and the absences are the entity. No `amount`, no `vendor` and no
 away, and a field earns its place only if it changes an authorization decision.
 `recorded_by` is the one here that does: it is the position a third step on this
 chain would be checked against, on the same terms as `approved_by` one link up.
+
+**The label repeats the one the order carries, and that is the chain reading
+rather than a fact stored twice.** A whole result body shows
+`{"id": "inv_0001", "purchase_order": {"id": "po_0001", "label": "…"}}` beside
+`{"id": "po_0001", "requisition": {"id": "req_0007", "label": "…"}}`, with the
+same string against two different identifiers. Nothing else would be true: an
+order has no name of its own, so its only narratable content is the
+requisition's, and the alternative is a reference whose reader's half is
+`req_0007`. ADR-0003 grants `description` as the one legibility exception, and
+this spends the same grant one link further down rather than widening it — the
+column is still on `requisition` and only there, and the invoice table has no
+label column at all. Two references sharing a label is what a reader uses to see
+that all three records belong to one chain.
 """
 
 RECORDED_SCHEMA: Final[dict[str, Any]] = {
@@ -64,8 +77,8 @@ RECORDED_SCHEMA: Final[dict[str, Any]] = {
 **Both are required, which is where this differs from the decision's document.**
 A rejection produces no purchase order, so
 :data:`~mcp_erp.purchase_to_pay.purchase_order.DECISION_SCHEMA` makes that half
-optional; recording has no second outcome — it creates an invoice or it is
-refused — so a caller who gets a result gets both halves of it.
+optional. Recording goes one way only: it creates an invoice or it is refused, so
+a caller who gets a result gets both halves of it.
 
 The order is here because its status is the thing that moved. Nothing anywhere
 reads a purchase order back: ADR-0002 cut `list_purchase_orders` and
