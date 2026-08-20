@@ -108,6 +108,37 @@ def _next_identifier(prefix: str) -> str:
     reads ``id`` from whatever the enclosing statement selects from, so each
     caller's own ``FROM`` names it.
 
+    **Four digits is a floor, not a ceiling, since #84.** ``lpad`` truncates from
+    the right when its input is already wider than the target, so a fixed ``4``
+    minted ``req_1000`` for the ten-thousandth row — a handle the table already
+    held. The insert failed on the primary key, the retry recomputed the same
+    maximum and collided again, and the table could take no further writes: a hard
+    stop at 9999 that nobody chose, reported as a key violation that named no
+    limit. Taking the width from the number itself removes that stop rather than
+    moving it. Everything below 10000 is unchanged, which is what the committed
+    fixture rendering rests on, and the row after ``req_9999`` is ``req_10000``.
+
+    **The bound is now 2147483647 rows per table, and it is the cast that sets
+    it.** ``::integer`` is int4, so the row after ``req_2147483647`` fails the cast
+    rather than the key — a different error at a number nobody chose, which is the
+    shape of the defect above and not its recurrence only because the pad was
+    reachable and this is not: the exhibit seeds four requisitions and #84's own
+    boundary test is the only thing here that has ever passed three figures.
+    Widening to ``::bigint`` is one word and was left alone deliberately, because
+    #84 put the ``substring`` and its cast out of scope. **Written down rather than
+    fixed is the whole point** — the previous bound cost nothing to reach and was
+    stated nowhere, and that, rather than its value, is what made it a defect.
+
+    **Sorting stops agreeing with minting at the same boundary.** ``ORDER BY id``
+    is lexical, so ``req_10000`` sorts before ``req_9999``. :data:`_SELECT_ALL` is
+    the only statement that orders, its own docstring says that ordering is for
+    the reader and for nothing else, and no test asserts it — so this is a cost
+    accepted here rather than a defect deferred.
+
+    The width is computed from the number, so the number is written once here and
+    interpolated twice. Postgres folds the two identical aggregates into one, and
+    a second literal copy would be the drift this helper exists to prevent.
+
     Args:
         prefix: The handle's leading token, without its separator.
 
@@ -116,9 +147,9 @@ def _next_identifier(prefix: str) -> str:
         no caller data — the only substitution is this literal — so it is not a
         parameterised value and must never become one.
     """
+    number_expression = "(coalesce(max(substring(id from '[0-9]+$')::integer), 0) + 1)::text"
     return (
-        f"'{prefix}_' || lpad("
-        "(coalesce(max(substring(id from '[0-9]+$')::integer), 0) + 1)::text, 4, '0')"
+        f"'{prefix}_' || lpad({number_expression}, greatest(4, length({number_expression})), '0')"
     )
 
 

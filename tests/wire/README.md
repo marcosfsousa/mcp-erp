@@ -8,10 +8,22 @@ named-versus-discovered contract behaves across the live tools, everything
 everything `record_invoice` records.
 
 Needs Compose, with one exception named below. Landed with #37; #39 added two,
-#40 a third, #41 a fourth, #42 a fifth. **#43 took the tool listing's filter
-away**, which is the first thing this directory has handed over rather than
-gained; the table below said it would, and *What moved to #43* records what
-happened.
+#40 a third, #41 a fourth, #42 a fifth, #84 a sixth. **#43 took the tool
+listing's filter away**, which is the first thing this directory has handed over
+rather than gained; the table below said it would, and *What moved to #43*
+records what happened.
+
+**The sixth is about all three tools at once**, which is new for this directory
+and follows from #70 factoring the identifier mint into one expression the three
+writes share. What a table mints next is identical for every caller, so it keys
+on no `(principal x tool x resource)` and has no home in `tests/matrix/`; it is
+this directory's rule applied to a write rather than to a declaration — *what
+varies with the caller is the matrix's, what the server declares regardless is
+ours*. It is also the one module here that reloads the fixtures **between** its
+tests rather than once, because the thing it manipulates is the mint's own
+high-water mark, which no fixture row owns and every one of them moves.
+`test_the_identifier_mint.py` carries the argument. Recorded as an amendment to
+ADR-0003 by #84.
 
 **One seam, one diagnosis.** ADR-0013 names it *Server posture* and #66 gave it
 a job: *the server exposes, declares or deploys something other than what it

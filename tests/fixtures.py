@@ -24,6 +24,13 @@ a module-scoped reload, which is what makes the modules independent of each othe
 without isolating rows inside one — the shape ADR-0003 chose and the alternative
 it named.
 
+*Amended 2026-08-20 by #84.* **One suite reloads between its own tests**, and it
+is the one whose subject is what the tables mint next. ADR-0003's reason for
+wiping once is that each write row owns its fixture outright, so no row can
+disturb another; the mint's high-water mark is the state that rule does not
+cover, because no row owns it and every row moves it. That module — and
+:func:`at_the_ceiling`, which only it calls — is the whole of the exception.
+
 **Nothing is looked up by identifier.** The identifiers are ordinal and the
 generator renumbers them when a row is inserted, so every suite here asks for a
 fixture by the **matrix row that owns it** or by the partition it sits in. That
@@ -162,10 +169,26 @@ out rather than derived from :data:`ROWS`, because it has to stay absent for the
 whole run and `submit_requisition` mints the next identifier after the highest
 that exists — a value one past the last fixture would be handed out by the next
 submission. Nothing reaches four figures in a test run.
+
+**One module writes this value deliberately**, since #84: :func:`at_the_ceiling`
+puts a row here so that the next write is the one crossing into five figures,
+which is the only way to drive that boundary at all. It reloads before and after
+every one of its tests, so the absence this docstring promises holds everywhere
+else.
 """
 
 ABSENT_ORDER: Final = "po_9999"
 """The same, one entity along, for the rows that hydrate a purchase order."""
+
+ABSENT_INVOICE: Final = "inv_9999"
+"""The same again, one entity further, and no suite hydrates one.
+
+There is no tool that takes an invoice's identifier — ADR-0002's count of five
+stops one entity short — so this names no resource and appears in no matrix row.
+It is here because :func:`at_the_ceiling` writes all three tables and the third
+value should be spelled where the other two are, rather than inline at its one
+use as a fourth place the ceiling's number is written down.
+"""
 
 
 def load() -> None:
@@ -217,6 +240,64 @@ def load() -> None:
         cursor.executemany(
             "INSERT INTO invoice (id, purchase_order_id, recorded_by) VALUES (%s, %s, %s)",
             [(bill.id, bill.purchase_order_id, bill.recorded_by) for bill in INVOICES],
+        )
+        connection.commit()
+
+
+def at_the_ceiling() -> None:
+    """Add one chain at ``9999`` to each of the three generated tables.
+
+    The mint derives the next identifier from the highest that exists, so this is
+    the whole of what it takes to put a table one write away from five figures —
+    and it is the only way to reach that boundary in a test, since nothing in the
+    tool set lets a caller choose an identifier.
+
+    **One chain rather than three loose rows.** ``purchase_order`` references a
+    requisition and ``invoice`` references an order, so a row in each table needs
+    two references anyway; pointing them at each other means the three rows this
+    writes reference nothing the rendering owns, and a suite reading the fixtures
+    sees them as one extra chain rather than as three tables it has to reconcile.
+    The identities on it are the requisition's own submitter, because no rule is
+    ever applied to these rows — they exist to be the maximum and nothing else.
+
+    **It leaves all three of :data:`ABSENT_IDENTIFIER`, :data:`ABSENT_ORDER` and
+    :data:`ABSENT_INVOICE` present**, which is exactly the three values it writes.
+    The first two are documented as absent for a whole run, so a caller must
+    restore the tables with :func:`load` before any other module runs — see
+    `tests/wire/test_the_identifier_mint.py`, which is the only caller and
+    reloads between its own tests as well as after them.
+
+    These are not Fixtures in `CONTEXT.md`'s sense and no matrix row owns one.
+    They are hand-written into generated tables, which is what #43 removed from
+    this module — the difference is that a Fixture exists to be *asserted
+    against* and these exist to be the maximum, so nothing looks one up, nothing
+    expects one, and they are gone before the next module reads the tables.
+    """
+    base = ROWS[0]
+    with psycopg.connect(DATABASE_URL) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO requisition
+                (id, cost_centre, vendor, amount, description, submitted_by, status)
+            VALUES (%s, %s, %s, %s, %s, %s, 'approved')
+            """,
+            (
+                ABSENT_IDENTIFIER,
+                base.cost_centre,
+                base.vendor,
+                base.amount,
+                base.description,
+                base.submitted_by,
+            ),
+        )
+        cursor.execute(
+            "INSERT INTO purchase_order (id, requisition_id, approved_by, status)"
+            " VALUES (%s, %s, %s, 'invoiced')",
+            (ABSENT_ORDER, ABSENT_IDENTIFIER, base.submitted_by),
+        )
+        cursor.execute(
+            "INSERT INTO invoice (id, purchase_order_id, recorded_by) VALUES (%s, %s, %s)",
+            (ABSENT_INVOICE, ABSENT_ORDER, base.submitted_by),
         )
         connection.commit()
 

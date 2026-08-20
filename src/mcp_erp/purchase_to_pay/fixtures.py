@@ -400,6 +400,11 @@ def _identifier(prefix: str, ordinal: int) -> str:
     mints, because the two share a table and a run does both — the fixtures are
     loaded, and then a suite submits. Four digits rather than a bare integer so
     that the padding, which is the mint's, is what the fixtures already carry.
+
+    **Four is a floor here as it is there**, and ``:04d`` has always said so:
+    it widens rather than truncates once the ordinal needs a fifth digit. #84 made
+    the mint agree — it padded to exactly four and truncated — so the two now
+    describe one rule rather than agreeing up to a boundary neither named.
     """
     return f"{prefix}_{ordinal:04d}"
 
