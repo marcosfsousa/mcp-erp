@@ -15,9 +15,11 @@ the pair above is then asserted about a row this run created rather than only
 about seeded ones. That is also the only place all three tools appear in one
 sequence, which is what makes *holds across all three* a thing to point at.
 
-**Where this lives.** A principal, a tool and a resource mapped to an expected
-answer is `matrix.yaml`'s shape, and #43 has not written that file; `tests/wire/`
-is where ADR-0013 parks a wire assertion with no artifact to belong to yet.
+**Where this lives, since #43 wrote `matrix.yaml`.** This is the seam *between*
+two tools rather than a row about either: neither attack-suite row says that the
+**same** row takes the **other** shape through the other tool, and no
+`(principal x tool x resource)` row does either — a row names one tool. So it
+stays, on the narrow ground the wire README already records for it.
 """
 
 from collections.abc import Iterator
@@ -25,9 +27,9 @@ from typing import Any
 
 import pytest
 
+import fixtures
 import requisitions as visible
 import rpc
-import seeded_requisitions
 from tokens import mint
 
 GET = "get_requisition"
@@ -43,8 +45,8 @@ OUTSIDER = "yusuf.demir"
 
 @pytest.fixture(scope="module", autouse=True)
 def requisitions() -> Iterator[None]:
-    """Start from the seeded four; this module submits, so it must know where it began."""
-    seeded_requisitions.load()
+    """Start from the generated fixtures; this module submits, so it must know where it began."""
+    fixtures.load()
     yield
 
 
@@ -82,7 +84,7 @@ def test_the_two_read_tools_agree_about_a_row_the_caller_may_see() -> None:
     shape, so this is asserting that the sharing is real rather than that two
     descriptions happen to agree today.
     """
-    (identifier,) = seeded_requisitions.identifiers_in("CC-4200")
+    identifier = fixtures.a_row_in("CC-4200")
     named = _get(OUTSIDER, identifier)
 
     assert named["isError"] is False, named
@@ -99,7 +101,7 @@ def test_one_identifier_is_refused_by_name_and_omitted_from_the_listing() -> Non
     row in the listing, or that omitted a named row by answering an empty
     success, would satisfy one row and fail here.
     """
-    (identifier,) = seeded_requisitions.identifiers_in("CC-4300")
+    identifier = fixtures.a_row_in("CC-4300")
 
     named = _get(OUTSIDER, identifier)
     assert named["isError"] is True, named
@@ -131,7 +133,7 @@ def test_a_row_that_never_existed_is_refused_by_name_like_any_other() -> None:
     what is asserted here is only that an absent row takes the *named* shape —
     a refusal — rather than the discovered one.
     """
-    absent = _get(INSIDER, seeded_requisitions.ABSENT_IDENTIFIER)
+    absent = _get(INSIDER, fixtures.ABSENT_IDENTIFIER)
 
     assert absent["isError"] is True, absent
     assert absent["structuredContent"]["reason"] == "not_found"

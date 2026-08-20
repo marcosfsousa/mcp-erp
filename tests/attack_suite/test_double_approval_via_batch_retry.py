@@ -35,8 +35,8 @@ from typing import Any
 
 import pytest
 
+import fixtures
 import rpc
-import seeded_requisitions
 from requisitions import raised_by
 from tokens import mint
 
@@ -60,7 +60,7 @@ passes for two reasons cannot say which one it tested.
 @pytest.fixture(scope="module", autouse=True)
 def requisitions() -> Iterator[None]:
     """Wipe and reload, so this module's orders are the only ones in the table."""
-    seeded_requisitions.load()
+    fixtures.load()
     yield
 
 
@@ -98,7 +98,7 @@ def test_the_batch_is_two_rows_this_approver_may_decide() -> None:
 
     for identifier in batch:
         assert _status(APPROVER, identifier) == "submitted"
-    assert seeded_requisitions.purchase_orders_for(*batch) == 0
+    assert fixtures.purchase_orders_for(*batch) == 0
 
 
 def test_a_retried_batch_answers_already_decided_for_every_item_and_mints_nothing() -> None:
@@ -136,7 +136,7 @@ def test_a_retried_batch_answers_already_decided_for_every_item_and_mints_nothin
         }
     ] * len(batch)
 
-    assert seeded_requisitions.purchase_orders_for(*batch) == len(batch)
+    assert fixtures.purchase_orders_for(*batch) == len(batch)
     for identifier in batch:
         assert _status(APPROVER, identifier) == "approved"
 
@@ -157,7 +157,7 @@ def test_a_partly_decided_batch_retries_into_one_answer_per_item() -> None:
     others decidable again.
     """
     decidable = raised_by(SUBMITTER, AMOUNT)
-    foreign = seeded_requisitions.identifiers_in("CC-4200")
+    foreign = fixtures.identifiers_in("CC-4200")
 
     batch = [decidable, *sorted(foreign)]
     first = _decide(APPROVER, batch)
@@ -171,4 +171,4 @@ def test_a_partly_decided_batch_retries_into_one_answer_per_item() -> None:
     assert len(answers) == len(batch)
     assert answers[0]["reason"] == "already_decided"
     assert answers[1]["reason"] == "not_found"
-    assert seeded_requisitions.purchase_orders_for(*batch) == 1
+    assert fixtures.purchase_orders_for(*batch) == 1

@@ -1,14 +1,17 @@
 # `tests/wire/` — the server's own posture, over the wire
 
 The assertions that belong to no proof artifact: the endpoints that answer and
-the ones that do not, the tool listing's filter and its freshness hint, two
+the ones that do not, the tool listing's freshness hint and declared schemas, two
 replicas behind no sticky routing, what `submit_requisition` charges, how the
 named-versus-discovered contract behaves across the live tools, everything
 `approve_requisition` decides since #40, the fold since #41, and — since #42 —
 everything `record_invoice` records.
 
 Needs Compose, with one exception named below. Landed with #37; #39 added two,
-#40 a third, #41 a fourth, #42 a fifth.
+#40 a third, #41 a fourth, #42 a fifth. **#43 took the tool listing's filter
+away**, which is the first thing this directory has handed over rather than
+gained; the table below said it would, and *What moved to #43* records what
+happened.
 
 **One seam, one diagnosis.** ADR-0013 names it *Server posture* and #66 gave it
 a job: *the server exposes, declares or deploys something other than what it
@@ -30,11 +33,10 @@ places these three.
   `scenarios.yaml` and expects no `(principal × tool × resource)` row.
 - **Two replicas, round-robin, nothing remembered** is map constraint `#5`. It
   is a property of the deployment rather than of a caller.
-- The **tool listing's filter** will become five rows of `matrix.yaml` when #43
-  writes it — one per scope set the filter is exercised across. Until that file
-  exists there is nothing to generate them from, and `tests/matrix/` is
-  generated in its entirety. **`cacheScope` and the `ttlMs` cap are not among
-  them**, and the amendment below says why.
+- The **tool listing's filter** ~~will become~~ **became** five rows of
+  `matrix.yaml` — one per scope set the filter is exercised across — when #43
+  wrote that file. **`cacheScope` and the `ttlMs` cap are not among them**, and
+  the amendment below says why.
 - **What `submit_requisition` charges** (#39) is the same case one ticket later:
   a principal and a tool mapped to an expected answer is a matrix row, and there
   is still nothing to generate it from. It is not `state_handle_hijack` either —
@@ -111,25 +113,36 @@ they never had a destination in `matrix.yaml`. The dividing line is this
 directory's own — what varies with the caller is the matrix's, what the server
 declares regardless is ours. Recorded as an amendment to ADR-0013 by #66.
 
-## What moves to #43, and what does not
+**Five of the seven bullets above say *waiting for a file to be generated from*,
+and the file exists now.** #43 wrote `matrix.yaml` and every branch those bullets
+name has a row in it. The bullets stand as written because they record why this
+directory came to hold what it holds, and the reader who wants to know what is
+still true here should read *What moved to #43* below — which moved the listing's
+filter and, deliberately, nothing else. The section after it names what a later
+ticket has to decide about the rest.
+
+## What moved to #43, and what did not
 
 Named here rather than left for #43 to re-derive, because the rule is easy to
 state and the boundary is not obvious at every line. **An assertion whose
 expected value changes with the caller is decision-matrix business; an assertion
 the server makes identically to every caller stays.**
 
-Five of `test_tool_listing.py`'s assertions **move**, one per scope set the
-filter is exercised across:
+*Written in the future tense by #66 and settled by #43, which moved all five and
+nothing else.* The table below is what happened, not a plan.
+
+Five of `test_tool_listing.py`'s assertions **moved**, one per scope set the
+filter is exercised across, and each is a row of `matrix.yaml` now:
 
 | Assertion | The row it becomes |
 | --- | --- |
-| `test_a_read_token_reaches_the_read_tools` | `erp.read` → the two reading tools |
-| `test_the_write_scope_reaches_the_write_tool_and_no_read_tool` | `erp.write` → the two writing tools |
-| `test_both_scopes_reach_the_union_and_nothing_else` | both → the union, and no deciding tool |
-| `test_the_deciding_scope_reaches_the_deciding_tool_for_a_person_who_may_not_use_it` | `erp.decide` → the deciding tool, role gate invisible |
-| `test_a_token_with_no_capability_scope_reaches_nothing` | no capability scope → nothing |
+| `test_a_read_token_reaches_the_read_tools` | `listing_reaches_the_reading_tools` |
+| `test_the_write_scope_reaches_the_write_tool_and_no_read_tool` | `listing_reaches_the_writing_tools` |
+| `test_both_scopes_reach_the_union_and_nothing_else` | `listing_reaches_the_union_of_two_capabilities` |
+| `test_the_deciding_scope_reaches_the_deciding_tool_for_a_person_who_may_not_use_it` | `listing_reaches_the_deciding_tool_through_a_role_gate` |
+| `test_a_token_with_no_capability_scope_reaches_nothing` | `listing_reaches_nothing_without_a_capability_scope` |
 
-Five **stay**, and each for a reason the rule gives directly:
+Five **stayed**, and each for a reason the rule gives directly:
 
 - `test_the_listing_is_private_and_expires_with_the_token` — `cacheScope` and
   the `ttlMs` cap are declarations, identical for everyone.
@@ -153,6 +166,24 @@ decision matrix — rank 3 on cut order `#9` — now takes the tool listing's sc
 filter with it, which was not true before #66. What survives the cut is
 everything in the table's second half, so *Server posture* stays whole and this
 directory keeps its seam.
+
+## What #43 did not settle, and a later ticket has to
+
+`matrix.yaml` now holds a row for every branch of all five tools. Several
+assertions in this directory sit at the same `(principal x tool x resource ->
+expected)` shape and were **not** moved: #66's handoff named five and named no
+others, and #43 moved those five and stopped rather than quietly widening its
+own scope.
+
+The rule that would decide the rest is available and is not applied here: **a
+matrix row asserts the decision; these files additionally assert what the call
+*did*** — the purchase order an approval emitted and what it carries, the status
+the row reads back as afterwards, the declared schemas, the order the rules run
+in, and the argument errors that are not refusals at all. Where a test asserts
+only the decision it is now a genuine duplicate of a row, and where it asserts an
+effect it is not. Working through them file by file is a ticket of its own, and
+it wants the count and the cut-order line repriced in the same act — which is
+exactly the work #66 did for the five above.
 
 ## Running it
 

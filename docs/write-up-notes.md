@@ -331,6 +331,35 @@ rediscover.
   identity is its module. Worth telling because the prediction and the resolution
   differ in exactly the way a design note usually hides. — #42, ADR-0013
 
+- **Two of the project's own rules collided over one field, and the older
+  deviation won.** ADR-0003 says a generated fixture takes *an id derived from
+  the row's own name*, and the same document takes a `SHOULD` deviation to keep
+  identifiers **guessable** so that the row-probe scenario can guess a foreign
+  one. `req_over_threshold` satisfies the first and destroys the second — and
+  would read as zero to a mint that derives the next identifier from the highest
+  trailing integer. Identifiers stayed ordinal, the row's name travels beside
+  them on the rendering, and the guardrail's purpose survives because **nothing
+  keys on the number**: every suite asks for a fixture by its row or by the
+  property it needs. Worth telling because the collision was invisible until
+  something had to be built. — #43, ADR-0003
+
+- **Duplication by authorship is what a drift check is for; duplication by
+  generation is not.** The matrix states each fixture's cost centre although the
+  seed already fixes every person's, and deriving it would make the fixture
+  generator read the seed — coupling the two generators ADR-0013 keeps apart, and
+  making the equality true by construction and therefore untestable. Stating it
+  twice and asserting the two agree is the *stronger* arrangement, which is the
+  opposite of the instinct. — #43, ADR-0003, ADR-0013
+
+- **A handoff that names five assertions is worth more than a rule that implies
+  them.** #66 wrote down the five tool-listing assertions the matrix would take,
+  by name, with the row each becomes — and #43 moved exactly those and stopped.
+  The same rule implies that several assertions in `tests/wire/` are now
+  duplicates of matrix rows, and none of them moved, because *implied by a rule*
+  and *named in a handoff* are different amounts of licence to change somebody
+  else's suite. The enumeration is what made the boundary cheap; the rule alone
+  would have made it an argument. — #43, #66
+
 ---
 
 ## Findings

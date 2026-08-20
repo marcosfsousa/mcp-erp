@@ -117,5 +117,8 @@ REASONS: frozenset[Reason] = frozenset({INSUFFICIENT_SCOPE, ROLE_MISSING, NOT_FO
 
 ADR-0003's one dedicated mapping test enumerates the union of this and layer 3's
 four. Because layer 3's live in layer 3, that test imports the package the
-ejection command deletes, and so belongs in ``tests/matrix/`` rather than here.
+ejection command deletes, and so belongs in ``tests/matrix/`` rather than here —
+``tests/matrix/test_the_reason_mapping.py``, written by #43, which also took the
+two assertions in ``tests/authorization/test_reasons.py`` that had been asserting
+the same mapping over three of the seven.
 """

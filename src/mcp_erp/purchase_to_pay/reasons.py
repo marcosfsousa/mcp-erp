@@ -111,5 +111,6 @@ REASONS: frozenset[Reason] = frozenset(
 
 ADR-0003's *exactly one dedicated test* enumerates the union of this and layer
 2's three. Because this half lives in the package the ejection command deletes,
-that test belongs in ``tests/matrix/`` and arrives with #43.
+that test belongs in ``tests/matrix/``, and #43 wrote it:
+``tests/matrix/test_the_reason_mapping.py``.
 """

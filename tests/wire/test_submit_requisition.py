@@ -1,11 +1,17 @@
 """`submit_requisition` is scope-only, and the cost centre is not an argument.
 
-**Where this lives, and why not in a proof artifact.** A principal and a tool
-mapped to an expected answer is `matrix.yaml`'s shape — and
-`tests/matrix/` is generated in its entirety from a file #43 has not written
-yet. `tests/wire/` is where ADR-0013 parks a wire assertion belonging to no
-artifact, and `test_tool_listing.py` is already here on the same terms. They
-move when there is something to generate them from.
+**Where this lives, since #43 wrote `matrix.yaml`.** The decision itself is a
+matrix row now — `(principal x tool x resource -> expected)` is exactly what that
+table is canonical for, and `tests/matrix/` drives one row per branch of this
+tool over the wire. What stays here is everything a row does not express: what
+the call *did* to the rows behind it, what the declaration says, and the
+argument errors that are not refusals at all. A row states which answer came
+back; these state what else was true afterwards.
+
+The overlap between the two is real and was not resolved by this ticket. #66's
+handoff moved five assertions — one per scope set the tool listing filters on —
+and named no others, so the rest stayed where they are and `tests/wire/README.md`
+records what a later ticket has to decide.
 
 The scenario this is *not* is `state_handle_hijack`: that row is a refused write
 against a named resource, and this tool has no resource at all. Its falsifier
@@ -26,9 +32,9 @@ from typing import Any
 import httpx2
 import pytest
 
+import fixtures
 import requisitions as visible
 import rpc
-import seeded_requisitions
 from tokens import Minted, mint
 
 TOOL = "submit_requisition"
@@ -52,7 +58,7 @@ ARGUMENTS: dict[str, Any] = {
 
 @pytest.fixture(scope="module", autouse=True)
 def requisitions() -> Iterator[None]:
-    """Start from the seeded four, so a submission is observably new.
+    """Start from the generated fixtures, so a submission is observably new.
 
     This module writes, unlike the two read suites, and the reload is what keeps
     it from depending on whatever a previous module left behind. It still does
@@ -60,7 +66,7 @@ def requisitions() -> Iterator[None]:
     per row, and the alternative it rejected is a test-only reset route on a
     server whose entire subject is authorization.
     """
-    seeded_requisitions.load()
+    fixtures.load()
     yield
 
 

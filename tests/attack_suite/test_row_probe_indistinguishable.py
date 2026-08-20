@@ -32,8 +32,8 @@ from collections.abc import Iterator
 import httpx2
 import pytest
 
+import fixtures
 import rpc
-import seeded_requisitions
 from tokens import mint
 
 TOOL = "get_requisition"
@@ -66,14 +66,19 @@ def requisitions() -> Iterator[None]:
     the types job runs over `tests/`, so a second file of that name would be a
     duplicate module to mypy.
     """
-    seeded_requisitions.load()
+    fixtures.load()
     yield
 
 
 def _foreign_identifier() -> str:
-    """One seeded identifier in a cost centre the prober does not hold."""
-    (identifier,) = seeded_requisitions.identifiers_in(FOREIGN_CENTRE)
-    return identifier
+    """One generated identifier in a cost centre the prober does not hold.
+
+    Asked for by partition rather than by identifier, since #43 the fixtures are
+    generated from `matrix.yaml` and their identifiers are ordinals the generator
+    renumbers when a row is inserted. What this scenario needs is *a row he
+    cannot see*, which is a property of the partition and of nothing else.
+    """
+    return fixtures.a_row_in(FOREIGN_CENTRE)
 
 
 def _answer(username: str, identifier: str) -> httpx2.Response:
@@ -115,7 +120,7 @@ def test_a_foreign_row_and_a_row_that_never_existed_answer_byte_identically() ->
     property another suite exists to assert, and nothing to do with this one.
     """
     foreign = _answer(PROBER, _foreign_identifier())
-    absent = _answer(PROBER, seeded_requisitions.ABSENT_IDENTIFIER)
+    absent = _answer(PROBER, fixtures.ABSENT_IDENTIFIER)
 
     assert foreign.status_code == absent.status_code
     assert foreign.content == absent.content, (foreign.text, absent.text)

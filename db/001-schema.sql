@@ -21,11 +21,14 @@
 --                immutable once submitted and no editor identity exists to
 --                reason about.
 --
--- The three tables below the organisation are empty at boot. Their rows are the
--- seed's *other* half — per-row fixtures generated from the decision matrix
--- definition, which arrives with the matrix ticket. Shipping the schema without
--- them is the honest split: what a row looks like is decided, and which rows
--- exist is not this ticket's.
+-- The three tables below the organisation are empty at boot, and they stay that
+-- way: their rows are the seed's *other* half — per-row fixtures generated from
+-- `docs/decision-matrix/matrix.yaml` since #43 — and they are loaded by the
+-- suites rather than by this directory. ADR-0003 chose a wipe per run over a
+-- reset between rows, and the alternative it rejected is a test-only reset route
+-- on a server whose entire subject is authorization; so the loader is
+-- `tests/fixtures.py`, on the far side of the wire, and nothing at boot writes
+-- a requisition.
 
 BEGIN;
 
@@ -61,7 +64,7 @@ CREATE TABLE person (
     cost_centre text NOT NULL REFERENCES cost_centre (code)
 );
 
--- ─── The chain: generated per matrix row, and empty until the matrix lands ───
+-- ─── The chain: generated per matrix row, and loaded by the suites ─────────
 
 CREATE TYPE requisition_status AS ENUM ('submitted', 'approved', 'rejected');
 CREATE TYPE purchase_order_status AS ENUM ('open', 'invoiced');

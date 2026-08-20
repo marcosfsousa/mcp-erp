@@ -20,10 +20,12 @@
 # Two generators produce those three, split by the vocabulary each speaks and
 # deleted with the layer whose words it uses: `mcp_erp.authorization.identity`
 # renders the last two, `mcp_erp.purchase_to_pay.organisation` the first. The
-# fixture generator is a third and renders none of them — it reads the matrix
-# definition rather than this file, and emits the seed's other half. The `Seed
-# renders clean` job re-renders all three and fails on any diff, so a
-# hand-edited rendering is a red check rather than a surprise at boot.
+# fixture generator is a third and renders none of them — it reads
+# docs/decision-matrix/matrix.yaml rather than this file, and emits the seed's
+# other half into a fourth rendering,
+# src/mcp_erp/purchase_to_pay/data/fixtures.json. The `Seed renders clean` job
+# re-renders all four and fails on any diff, so a hand-edited rendering is a red
+# check rather than a surprise at boot.
 #
 #
 # TWO ROLE COLUMNS, AND WHY THEY ARE NOT ONE

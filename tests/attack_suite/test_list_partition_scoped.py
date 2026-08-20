@@ -28,9 +28,9 @@ from collections.abc import Iterator
 
 import pytest
 
+import fixtures
 import requisitions as visible
 import rpc
-import seeded_requisitions
 from tokens import mint
 
 TOOL = "list_requisitions"
@@ -51,7 +51,7 @@ def requisitions() -> Iterator[None]:
     ADR-0003 chose that shape and named the alternative it was avoiding — a
     test-only reset route on a server whose entire subject is authorization.
     """
-    seeded_requisitions.load()
+    fixtures.load()
     yield
 
 
@@ -63,7 +63,7 @@ def test_a_caller_sees_their_own_cost_centre_and_no_other() -> None:
     assertion would pass on a handler that returned nothing; a membership
     assertion would pass on a handler that returned everything.
     """
-    assert visible.visible_to("tomas.weber") == seeded_requisitions.identifiers_in("CC-4100")
+    assert visible.visible_to("tomas.weber") == fixtures.identifiers_in("CC-4100")
 
 
 def test_another_partition_sees_a_disjoint_set() -> None:
@@ -73,7 +73,7 @@ def test_another_partition_sees_a_disjoint_set() -> None:
     different partition — so a listing that ignored the partition would return
     the same rows to both and this pair would catch it.
     """
-    assert visible.visible_to("yusuf.demir") == seeded_requisitions.identifiers_in("CC-4200")
+    assert visible.visible_to("yusuf.demir") == fixtures.identifiers_in("CC-4200")
     assert not visible.visible_to("yusuf.demir") & visible.visible_to("tomas.weber")
 
 
@@ -85,7 +85,7 @@ def test_the_third_centre_is_its_own_answer() -> None:
     the whole reason breadth is a role rather than a wider membership would stop
     being observable.
     """
-    assert visible.visible_to("mei.tanaka") == seeded_requisitions.identifiers_in("CC-4300")
+    assert visible.visible_to("mei.tanaka") == fixtures.identifiers_in("CC-4300")
 
 
 def test_the_auditing_role_reads_across_every_partition() -> None:
@@ -97,10 +97,10 @@ def test_the_auditing_role_reads_across_every_partition() -> None:
     value — on the write tools the same mistake is invisible, and this assertion
     is the only place in the repository where it is not.
     """
-    assert visible.visible_to("anna.lindqvist") == seeded_requisitions.every_identifier()
+    assert visible.visible_to("anna.lindqvist") == fixtures.every_identifier()
     # Three of three, not two: the claim is breadth by role rather than by
     # membership, and the count is what separates them.
-    assert len({row.cost_centre for row in seeded_requisitions.ROWS}) == 3
+    assert len(fixtures.cost_centres()) == 3
 
 
 def test_a_scoped_away_row_is_omitted_rather_than_refused() -> None:

@@ -28,9 +28,13 @@ is invented, and the absences are as decided as the columns:
 **Three of the six tables are empty at boot**, and that split is the honest one.
 `cost_centre`, `vendor` and `person` are the authored organisation and are
 loaded here. `requisition`, `purchase_order` and `invoice` hold the seed's
-*other* half — per-row fixtures generated from the decision matrix definition —
-which arrives with the matrix ticket. What a row looks like is decided; which
-rows exist is not this ticket's.
+*other* half — per-row fixtures generated from
+`docs/decision-matrix/matrix.yaml` since #43, committed as
+`src/mcp_erp/purchase_to_pay/data/fixtures.json`, and loaded by
+`tests/fixtures.py` rather than by this directory. ADR-0003 has the seeder wipe
+and reload once before a run, which is a thing a suite does and not a thing a
+boot does; a loader here would put rows in the database that no run had asked
+for.
 
 ## Why the loader reads JSON rather than running SQL
 
@@ -62,7 +66,7 @@ next `up` re-runs both files — the same property Keycloak gets from an in-memo
 database, and for the same reason: what the database holds is a function of what
 is committed, not of what has happened to it since.
 
-That also matches how the matrix will use it. ADR-0003 has the seeder wipe and
+That also matches how the matrix uses it. ADR-0003 has the seeder wipe and
 reload once before a full run rather than between rows, which is what keeps a
 test-only reset route — *"the single most quotable finding a reviewer could hand
 back"* — out of a server whose entire subject is authorization.
