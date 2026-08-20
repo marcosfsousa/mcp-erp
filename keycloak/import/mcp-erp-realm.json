@@ -182,6 +182,79 @@
     }
   ],
 
+  "defaultDefaultClientScopes": ["basic", "mcp-erp-audience"],
+  "defaultOptionalClientScopes": ["erp.read", "erp.write", "erp.decide"],
+
+  "clientProfiles": {
+    "profiles": [
+      {
+        "name": "client-identity-metadata-document",
+        "description": "Accept a client that identifies itself by a document it hosts, instead of one registered here.",
+        "executors": [
+          {
+            "executor": "client-id-metadata-document",
+            "configuration": {
+              "cimd-allow-http-scheme": false,
+              "cimd-restrict-same-domain": false,
+              "only-allow-confidential-client": false,
+              "cimd-allow-permitted-domains": [
+                "marcosfsousa.github.io",
+                "localhost",
+                "127.0.0.1"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "proof-key-for-code-exchange",
+        "description": "Pin the challenge method to SHA-256 for every public client, including one this file does not contain.",
+        "executors": [
+          {
+            "executor": "pkce-enforcer",
+            "configuration": {
+              "auto-configure": true
+            }
+          }
+        ]
+      }
+    ]
+  },
+
+  "clientPolicies": {
+    "policies": [
+      {
+        "name": "client-identity-metadata-document",
+        "description": "Bind the profile above to https client identifiers served from the exhibit's own origin.",
+        "enabled": true,
+        "conditions": [
+          {
+            "condition": "client-id-uri",
+            "configuration": {
+              "client-id-uri-scheme": ["https"],
+              "client-id-uri-allow-permitted-domains": ["marcosfsousa.github.io"]
+            }
+          }
+        ],
+        "profiles": ["client-identity-metadata-document"]
+      },
+      {
+        "name": "proof-key-for-code-exchange",
+        "description": "Every client here is public, so this binds the SHA-256 pin to the access type rather than to a name.",
+        "enabled": true,
+        "conditions": [
+          {
+            "condition": "client-access-type",
+            "configuration": {
+              "type": ["public"]
+            }
+          }
+        ],
+        "profiles": ["proof-key-for-code-exchange"]
+      }
+    ]
+  },
+
   "clients": [
     {
       "clientId": "mcp-conformance",

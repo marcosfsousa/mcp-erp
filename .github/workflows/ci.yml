@@ -9,8 +9,8 @@
 # the layer without anyone opening logs. ADR-0013 enumerates the jobs and what a
 # red one means, one per seam; the jobs here are the seams that exist, and the
 # rest arrive with the seams they assert. `Lint and types` means an ordinary
-# Python defect; `Layer boundaries` means someone crossed a layer boundary.
-# Neither may come to mean the other.
+# Python defect; `Layer boundaries` means someone crossed a layer boundary;
+# `Authorization code flow` means the flow broke. None may come to mean another.
 #
 # **The count is not the rule and is not written down.** ADR-0013's heading
 # named one and #66 struck it, because a derived number kept where it can be
@@ -52,16 +52,23 @@
 # Full statement and reasoning: map issue #2, constraint `#13`.
 #
 #
-# NO SECRETS, DELIBERATELY
-# ------------------------
-# Configure none unless a job genuinely cannot run without one. A keyless run is
-# a standing assertion that the suites are offline: a test that starts reaching
-# a live service fails here even when it passes on a developer machine with a
-# populated .env. That assertion is worth more than the convenience of having a
-# key available, and it decays the moment one is added "just for now".
+# NO SECRETS, DELIBERATELY — AND *OFFLINE* IS A PER-JOB CLAIM
+# ------------------------------------------------------------
+# Configure none unless a job genuinely cannot run without one. It is also the
+# cheapest way to keep a fork's pull request from needing privileged access to
+# be reviewable, and it decays the moment one is added "just for now".
 #
-# It is also the cheapest way to keep a fork's pull request from needing
-# privileged access to be reviewable.
+# This file used to draw a second conclusion from that — *a keyless run is a
+# standing assertion that the suites are offline* — and #46 broke the
+# implication rather than the premise. `Authorization code flow` fetches a
+# public GitHub Pages URL, which needs no credential: it is keyless and it is
+# not offline. ADR-0008 replaced the repository-wide claim with a **per-job**
+# one, which is more honest than the version it replaces.
+#
+# So every job below states what it reaches, including the ones that reach
+# nothing. An assertion only some jobs make is one nobody checks, and the value
+# of the claim is that a suite which quietly starts calling a live service fails
+# here even when it passes on a developer machine with a populated .env.
 #
 #
 # NOTHING EXTERNAL FLOATS — WITH ONE NAMED EXCEPTION
@@ -114,6 +121,8 @@ permissions:
 jobs:
   lint-and-types:
     name: Lint and types
+    # Keyless and offline. Every check here runs against the checkout; the only
+    # thing that leaves the runner is the dependency install.
     runs-on: ubuntu-latest
     # Every job gets one. The budget is normally dominated by dependency
     # install, so pick a number the job clears comfortably and read anything
@@ -171,6 +180,7 @@ jobs:
 
   layer-boundaries:
     name: Layer boundaries
+    # Keyless and offline. import-linter reads a static import graph.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -191,6 +201,8 @@ jobs:
 
   layer-2-ejects-clean:
     name: Layer 2 ejects clean
+    # Keyless and offline, and the strongest instance of it: layer 2's suite runs
+    # with the domain deleted and no Docker, so there is nothing for it to reach.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -241,6 +253,8 @@ jobs:
   # cover the other's half.
   seed-renders-clean:
     name: Seed renders clean
+    # Keyless and offline. Both generators read committed files and write
+    # committed files.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -326,6 +340,10 @@ jobs:
   # boundary was crossed.
   published-documents-are-immutable:
     name: Published documents are immutable
+    # Keyless and offline. It reads this repository's own history and nothing
+    # else — deliberately not the published copy, which is the *next* job's
+    # question and a different one: this asserts what the commit did, and a
+    # network fetch would make a repository property depend on an outage.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -398,11 +416,11 @@ jobs:
   # not, the listing's declared schemas and freshness hint, two replicas behind
   # no sticky routing.
   #
-  # The clause that keeps it out of the two Compose jobs beside it is that
+  # The clause that keeps it out of the Compose jobs beside it is that
   # **nothing in `tests/wire/` reads a `Principal`.** An assertion whose
-  # expected value changes with the caller is `Decision matrix (wire)`'s and
-  # arrives with #43; an assertion that a defence held is `Attack suite
-  # (wire)`'s and arrives with #44. What is left is what the server says
+  # expected value changes with the caller is `Decision matrix (wire)`'s, which
+  # #43 landed below; an assertion that a defence held is `Attack suite
+  # (wire)`'s and still arrives with #44. What is left is what the server says
   # identically to everyone, which is one seam and one diagnosis.
   #
   # `tests/wire/` arrived with #37's fifth-directory amendment to ADR-0013 and
@@ -414,14 +432,54 @@ jobs:
   #
   # DELIBERATELY NOT FACTORED INTO A SHARED ACTION
   # ----------------------------------------------
-  # Three more Compose jobs are coming — #43, #44 and #46 — and they inherit
-  # this pattern by reading it, not by calling it. `Authorization code flow` is
-  # `yes + network` in ADR-0013's table and is already known to differ, so a
-  # shared seam designed against one real consumer and three imagined ones
-  # would be built on the wrong example. Factor it when a second job has
-  # actually been written and the common part is observed rather than guessed.
+  # This is the argument's one home. The two Compose jobs below inherit the
+  # pattern by reading it, not by calling it, and neither restates the reasoning
+  # — a second copy of it would drift from this one exactly as the counts inside
+  # it already have, twice.
+  #
+  # #66 wrote the pattern against one real consumer and three imagined ones —
+  # #43, #44 and #46 — and declined to factor it on exactly that ground. Two of
+  # the three have since landed, so the count that argument turned on is spent:
+  # `Decision matrix (wire)` repeats this job step for step, and `Authorization
+  # code flow` is the `yes + network` row of ADR-0013's table that #66 named as
+  # the reason not to guess a seam early. It differs where that predicted it
+  # would — a preflight *before* Compose, and a bring-up that builds in the same
+  # command rather than in a step of its own.
+  #
+  # So the common part is now observed rather than imagined: two jobs share it,
+  # and a third stands beside them showing where a shared seam must not reach.
+  # That is what makes factoring fair game, and it is still not done here,
+  # because neither #43 nor #46 was going to ship a refactor of somebody else's
+  # job in place of its own subject. ~~#44 is the last one expected and is what
+  # would settle the shape.~~
+  #
+  # SETTLED, 2026-08-20 BY #44, WHICH IS THE FOURTH AND LAST CONSUMER: it stays
+  # unfactored, and not for the reason the three tickets before it gave. The
+  # duplicated part is **four steps, three of them one line each** — install,
+  # a hosts-file line, `docker compose build`, `docker compose up --wait`. A
+  # composite action would replace them with one `uses:` and move those four
+  # lines somewhere else, and the four are precisely what the enumeration under
+  # each job spends its words justifying: which of two ways to settle the
+  # hostname, why readiness is not polled here, why the build is its own step.
+  # A reader who cannot see them cannot check them, on a file whose whole idiom
+  # is that a job says what it does without opening anything else.
+  #
+  # What the copies genuinely cost is a line each in four places when the
+  # bring-up changes. What they buy is that the *diagnosis* — the long comment
+  # above each job, which is the part that is never shared — sits beside the
+  # steps it is a diagnosis of. Three copies of fifteen lines of YAML is the
+  # cheaper of the two, and this is the last ticket that was going to arrive
+  # with a fresh reason to defer the question.
+  #
+  # It reopens on evidence, not on taste: a fifth Compose consumer, or a
+  # bring-up change that has to be made identically in four places twice.
   server-posture:
     name: Server posture
+    # Keyless, and not offline in the way the Docker-free jobs are: it
+    # builds and pulls images and installs the locked environment, and past
+    # that every address is a container talking to a container or this
+    # runner talking to the gateway it just started. Nothing it asserts
+    # depends on a service outside this repository.
     runs-on: ubuntu-latest
     # Larger than the ten the Docker-free jobs get, for one reason: this builds
     # two images, pulls two more, and stands up five containers — four of them
@@ -523,14 +581,9 @@ jobs:
   #
   # THE BRING-UP IS `server-posture`'S, REPEATED RATHER THAN SHARED
   # ---------------------------------------------------------------
-  # #66 wrote the first one and said why it is not factored into a shared
-  # action: `Authorization code flow` (#46) is `yes + network` in ADR-0013's
-  # table and is already known to differ, so a seam designed against one real
-  # consumer and three imagined ones would be built on the wrong example. This
-  # is the **second** real consumer, which is what makes factoring fair game —
-  # and the common part is now observed rather than guessed. It is left as two
-  # copies here so that this ticket ships the matrix rather than a refactor of
-  # somebody else's job, and #44 is the third that would settle the shape.
+  # This job is the second real consumer of the pattern, which is what made
+  # factoring fair game. Why it is nonetheless still a copy is argued once,
+  # above `server-posture`, and deliberately not repeated here.
   #
   # Four things in the copy are load-bearing, and they are #66's four:
   #
@@ -603,41 +656,37 @@ jobs:
         if: failure()
         run: docker compose logs --no-color
 
-  # ADR-0013's attack-suite seam, and the third Compose bring-up in this file. A
-  # red check means *a defence regressed* — one row of
+  # ADR-0013's attack-suite seam, and the fourth Compose bring-up in this file.
+  # A red check means *a defence regressed* — one row of
   # `docs/attack-suite/scenarios.yaml` no longer holds, or the table and the
-  # tests have come apart. That is its own diagnosis: not an ordinary Python
-  # defect, not a crossed layer boundary, not a drifted rendering, not something
-  # the server says identically to everyone, and not an authorization
-  # expectation about who may do what — which is `Decision matrix (wire)`'s, and
-  # the line between the two is what each artifact is canonical for.
-  # `scenarios.yaml` and `matrix.yaml` share no rows and neither arbitrates the
-  # other.
+  # tests that falsify it have come apart. That is its own diagnosis: not an
+  # ordinary Python defect, not a crossed layer boundary, not a drifted
+  # rendering, not the flow breaking, not something the server says identically
+  # to everyone — and, the clause that draws the closest line, not an
+  # authorization expectation about who may do what, which is `Decision matrix
+  # (wire)`'s. `scenarios.yaml` and `matrix.yaml` share no rows and neither
+  # arbitrates the other.
   #
-  # It sits **off** every live cut path. Cut order `#9` protects the attack
-  # suite's table outright and makes the asserting tests cuttable per row down
-  # to the floor of eleven — so a cut removes tests inside this job rather than
-  # removing the job, and the floor is asserted by the suite itself rather than
-  # by anything here.
+  # It sits **off** every live cut path, and that is a property of how the suite
+  # is protected rather than of this job. Cut order `#9` protects the table
+  # outright and makes the asserting tests cuttable per row down to a floor of
+  # eleven — so a cut removes tests *inside* this job and never the job, and the
+  # floor is asserted by the suite itself.
   #
-  # The drift check runs in this job and needs no Compose: it reads the table
-  # and the tests' own source. It is collected because it lives in the directory,
-  # which is the reading `Decision matrix (wire)` already takes for the file it
-  # is modelled on — a suite that skipped its own invariants when run whole would
-  # be a suite with a hole in it.
+  # **Not everything it runs needs Compose.** The drift check that holds the
+  # table and the tests in bijection reads two committed things — the table, and
+  # the tests' own source — and would run in a second anywhere. It is collected
+  # here because it lives in this directory, which is the reading
+  # `Decision matrix (wire)` already takes for the file it is modelled on: a
+  # suite that skipped its own invariants when run whole would be a suite with a
+  # hole in it.
   #
   #
-  # THE BRING-UP IS `server-posture`'S, REPEATED A THIRD TIME
-  # ---------------------------------------------------------
-  # #66 wrote it and #43 copied it, saying that this job would be "the third
-  # that would settle the shape". The shape is settled and the common part is
-  # now observed three times rather than guessed — so factoring it into a
-  # composite action is fair game and is **deliberately not done here**, for the
-  # reason #66 gave and this ticket inherits: `Authorization code flow` (#46) is
-  # `yes + network` in ADR-0013's table and is already known to differ, and a
-  # ticket whose subject is the attack suite should not also be a refactor of
-  # two other jobs. It is a ticket of its own, and it now has three real
-  # consumers to design against.
+  # THE BRING-UP IS `server-posture`'S, REPEATED RATHER THAN SHARED
+  # ---------------------------------------------------------------
+  # This job is the fourth consumer and the last one expected, so it is where
+  # the shape was due to be settled. It is argued once, above `server-posture`,
+  # and deliberately not repeated here.
   #
   # Four things in the copy are load-bearing, and they are #66's four:
   #
@@ -654,12 +703,20 @@ jobs:
   #      only after the job has already failed, which cannot withhold a context.
   attack-suite-wire:
     name: Attack suite (wire)
+    # Keyless, and not offline in the way the Docker-free jobs are, on the same
+    # terms as the two Compose jobs above: images are built and pulled, and past
+    # that every address is a container talking to a container or this runner
+    # talking to the gateway and the authorization server it just started. Three
+    # rows here address Keycloak directly and one drives the neighbour realm's
+    # key set; all of it is inside the network this job stood up. Nothing it
+    # asserts depends on a service outside this repository.
     runs-on: ubuntu-latest
-    # The same budget the two Compose jobs above take, for the same reason: two
+    # The same budget the Compose jobs above take, for the same reason: two
     # images built, two pulled, five containers up before the first attack is
-    # driven. The suite itself adds one deliberate wait — `token_expired` is a
-    # real ten-second token and a real eleven-second sleep, which ADR-0006's
-    # zero leeway on `exp` is what keeps that short.
+    # driven. The suite adds one deliberate wait of its own — `token_expired` is
+    # a real ten-second token and a real eleven-second sleep, which ADR-0006's
+    # zero leeway on `exp` is what keeps that short — and it is a rounding error
+    # against the bring-up.
     timeout-minutes: 20
     steps:
       # Floating major, per the named exception at the top of this file.
@@ -689,10 +746,10 @@ jobs:
       # the path `compose.yaml` and both READMEs tell a reader to take; the
       # `KEYCLOAK_BASE_URL` rebase stays available and stays a fallback.
       #
-      # It matters more here than in either job above: three rows in this suite
-      # talk to the authorization server directly — the password grant, the
-      # challenge-method pin and refresh rotation — and one drives the neighbour
-      # realm's key set.
+      # It reaches further here than in the two jobs above: three rows in this
+      # suite talk to the authorization server directly — the password grant,
+      # the challenge-method pin and refresh rotation — and one verifies a token
+      # against the neighbour realm's published key set.
       - name: Resolve the issuer's own hostname
         run: echo "127.0.0.1 keycloak" | sudo tee -a /etc/hosts
 
@@ -702,19 +759,118 @@ jobs:
       - name: Bring the stack up
         run: docker compose up --wait --wait-timeout 300
 
-      # The whole directory: every row of `scenarios.yaml` that asserts
-      # anything, plus the file that holds the table and the tests to each other.
-      # `-v` prints each test's own name, so a red check names the attack that
-      # got through rather than a parameter index — and the row it exercises is
-      # in its `@exercises(...)` declaration one line above it.
+      # The whole directory: every asserting row of `scenarios.yaml`, and the
+      # file that holds the table and the tests to each other. `-v` prints each
+      # test's own name, so a red check names the attack that got through rather
+      # than a parameter index — and the row it exercises is in the
+      # `@exercises(...)` declaration one line above it.
       - name: Every named attack, over the wire
         run: uv run pytest tests/attack_suite -v
 
       # Step-level and conditional, which map constraint `#13` does not reach:
       # a step that runs only once the job has already failed cannot withhold a
-      # context. On this job it is worth more than usual — a refusal that came
+      # context. It is worth more on this job than on most — a refusal that came
       # from the wrong gate looks identical from the outside, and the container
       # logs are where the chain says which one answered.
+      - name: What the containers said
+        if: failure()
+        run: docker compose logs --no-color
+
+  # ADR-0008's own job, and the repository's first one that is meant to block.
+  # A red here means **the flow broke** — not that Python is broken, not that a
+  # published document was rewritten. What it proves is the only thing in this
+  # exhibit a machine can prove about the authorization code flow: a client
+  # registered nowhere in the realm identifies itself by a document GitHub Pages
+  # serves, a Person logs in and consents, and the token that comes back reaches
+  # a tool.
+  #
+  # Blocking on something outside our control is defensible because of three
+  # mechanisms rather than trust, and two of them are steps below: the preflight,
+  # and exact version pinning on every image. The third is `Published documents
+  # are immutable` above. What remains is a Pages or egress outage inside a merge
+  # window, which the `main` ruleset's Admin bypass absorbs at the cost of one
+  # recorded override.
+  #
+  # **It is meant to block and it does not yet**, on the same terms
+  # `public/README.md` already states for the job above: no ruleset requires any
+  # context in this repository, so a red result here is visible and ignorable.
+  # Making it required is a repository-settings change, and ADR-0013 owns the
+  # order — the ruleset cannot precede the jobs it requires, because a required
+  # context whose job does not exist leaves every pull request pending
+  # indefinitely, including the one that would add them. #47 lands the ruleset
+  # and the test that holds these names and the required contexts equal in both
+  # directions. Saying so here is cheaper than discovering later that the gate
+  # was assumed.
+  authorization-code-flow:
+    name: Authorization code flow
+    # **Keyless and not offline — the one job of which both halves are true.**
+    # It fetches the published Client Identity Metadata Document, which is
+    # public, so no credential exists to add; and the containers fetch the same
+    # URL, because dereferencing it is what the authorization server is being
+    # asked to do. Every other outbound address is a container talking to a
+    # container.
+    runs-on: ubuntu-latest
+    # Longer than the Docker-free jobs, because this one builds two images and
+    # waits on four healthchecks before it asserts anything.
+    #
+    # **Measured rather than anticipated**, which is this file's own rule for
+    # budgets: the first green run took **1m23s** end to end, on a runner with
+    # no layer cache to inherit. The bound stays well above it deliberately. It
+    # is a *stuck* detector, not a target — and ADR-0013 is explicit that a
+    # flaky required job is the one thing that would earn an exemption the
+    # ruleset does not offer, so a bound tightened onto a single sample is the
+    # wrong trade on the job that gates.
+    timeout-minutes: 20
+    steps:
+      # Floating major, per the named exception above.
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      # **Before Compose, deliberately.** Without this step, GitHub Pages being
+      # unreachable and this server rejecting a valid flow present identically
+      # as *the flow failed*. With it, an external cause fails a named step
+      # before our server has run at all — which is this file's own rule, that a
+      # red check should name the layer without anyone opening logs.
+      #
+      # It asserts a `200` and that the body hashes to the committed copy, so a
+      # document that changed underneath its identifier is caught here too. That
+      # is the half `Published documents are immutable` cannot see: that job
+      # reads this repository's history, and this one reads what is being served.
+      - name: Preflight — the hosted document answers as committed
+        run: uv run python tests/conformance_client.py --preflight
+
+      # The issuer is `http://keycloak:8081/realms/mcp-erp` and that one string
+      # has to resolve identically on both sides of the container boundary.
+      # Inside, Compose's own DNS answers; outside, this line does. ADR-0005
+      # §Consequences priced exactly this and accepted it.
+      #
+      # The alternative is `KEYCLOAK_BASE_URL`, which moves the address the
+      # requests go to. It exists for a reader who cannot edit their hosts file
+      # and is deliberately *not* used here: a run that rebased nothing is the
+      # faithful one, and the gate should be the faithful one.
+      - name: Resolve the issuer's hostname
+        run: echo "127.0.0.1 keycloak" | sudo tee -a /etc/hosts
+
+      # `--wait` blocks on the healthchecks `compose.yaml` defines, which are
+      # readiness checks rather than liveness pings — the Keycloak probe matches
+      # the realm's own metadata document on the exact issuer, so a green wait
+      # means the realm is imported and the hostname is configured to stamp the
+      # issuer the seed declares.
+      - name: Bring the exhibit up
+        run: docker compose up -d --build --wait
+
+      - name: The authorization code flow
+        run: uv run pytest tests/conformance
+
+      # The one place a reader of a red check needs more than the step name. The
+      # flow spans four containers, and a refusal from Keycloak says why in its
+      # own log and nowhere else.
       - name: What the containers said
         if: failure()
         run: docker compose logs --no-color

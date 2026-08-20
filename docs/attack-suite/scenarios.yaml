@@ -454,7 +454,9 @@ scenarios:
         the mismatch, because the clause simply does not govern what we assert —
         the obligation is ADR-0007's per-client realm pin.
     normative_strength: null
-    removal: Clear the per-client challenge-method pin in the realm file.
+    removal: >-
+      Clear the per-client challenge-method pin **and** the `pkce-enforcer`
+      client policy in the realm file. Either alone still refuses.
     status: asserted
     floor: false
     note: >-
@@ -462,6 +464,15 @@ scenarios:
       because the pin is per client and discovery does not reflect per-client
       policy. This asserts the server REFUSES a plain challenge for our client —
       not that the metadata omits `plain`, which it will not.
+      REMOVAL WIDENED 2026-08-20 by #44, on merging #46. The pin was one thing
+      when this row was written and is two now: #46 found that a per-client
+      attribute cannot reach a client the realm does not contain — its
+      conformance client is provisioned from a hosted document and carries no
+      attributes, so it accepted `plain` and accepted no challenge at all — and
+      added a `pkce-enforcer` client policy conditioned on
+      `client-access-type: public`. Both are live, so clearing either one leaves
+      the other refusing, and a removal naming only the attribute would be a
+      deletion somebody could perform with nothing to show for it.
 
   - name: password_grant_refused
     basis: clause
@@ -529,9 +540,20 @@ scenarios:
       the token helper `tests/tokens.py`, and the deletion is the `iss`
       comparison in its `authorization_code`. Every other row in this file names
       a deletion in `src/` or in a committed realm file, so a reader who assumed
-      that uniformly would look for this one in the wrong tree. #46's conformance
-      client is the second client and inherits the same obligation; the check
-      lives where the flow lives rather than being written twice.
+      that uniformly would look for this one in the wrong tree.
+      THE SECOND CLIENT DOES NOT MAKE THIS CHECK, AND THE ROW ASSERTS NOTHING
+      ABOUT IT. Read from the source on merging #46, not executed: its
+      conformance client hands the redirect's parameters to the protocol package,
+      which validates RFC 9207 `iss` against the issuer it discovered — but
+      `_callback` calls `redirect_error` and raises with the authorization
+      server's own words BEFORE those parameters are handed over, so an error
+      response never reaches the party that would attribute it. That is this
+      row's own clause, on the error half it names as the one implementations
+      miss. Raised as a finding rather than fixed here: the ordering is a
+      judgement for the ticket that owns that client, this ticket cannot run its
+      network-dependent job, and a row that quietly claimed the check was
+      inherited would be the second `asserted`-with-nothing-behind-it defect
+      #44 exists to have removed.
       THE ORDER IS THE ASSERTION: `iss` is compared before `error` is read, which
       is what the quoted MUST NOT amounts to — a client that reads the error
       first reports another server's words as though they answered its own

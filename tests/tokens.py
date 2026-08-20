@@ -84,7 +84,7 @@ ISSUER_ORIGIN = REALMS_ROOT.rsplit("/realms", 1)[0]
 BASE_URL = os.environ.get("KEYCLOAK_BASE_URL", ISSUER_ORIGIN).rstrip("/")
 """Where the requests actually go. Identity is the issuer; this is transport.
 
-Normalised once, here. :func:`reachable` both compares against this value and
+Normalised once, here. :func:`rebase` both compares against this value and
 substitutes it, and a trailing slash surviving into only one of the two would
 make every rebase a no-op — quietly, by sending the requests to the issuer's own
 host, which is the address the override exists because a reader cannot reach.
@@ -290,6 +290,31 @@ def form_action(html: str) -> str:
     return match.group(2).replace("&amp;", "&").replace("&#39;", "'").replace("&quot;", '"')
 
 
+def redirect_error(location: str) -> str | None:
+    """The authorization server's own words when a redirect carries a refusal, or `None`.
+
+    Separate from :func:`authorization_code` because the two questions have
+    different owners. Whoever generated `state` is the party that can check it,
+    and the conformance client does not: it hands the redirect to the protocol
+    package, which generated the value and compares it itself (#46). *Was this
+    refused, and in what words* has no such owner — it is the same question from
+    both sides, and reading it twice is how a refusal becomes a missing code
+    three lines later.
+
+    Returns:
+        `"<error>: <description>"`, or the bare error where the authorization
+        server sent no description, or `None` when the redirect carries neither.
+    """
+    query = parse_qs(urlparse(location).query)
+
+    if "error" not in query:
+        return None
+
+    description = query.get("error_description", [""])[0]
+
+    return f"{query['error'][0]}: {description}".strip(": ")
+
+
 def authorization_code(location: str, *, expected_state: str, expected_issuer: str) -> str:
     """The `code` from a redirect back to the client, once the response is ours to read.
 
@@ -306,9 +331,8 @@ def authorization_code(location: str, *, expected_state: str, expected_issuer: s
     the authorization server it redirected to. An implementation that reads the
     error first is the common shape and it fails exactly here: handed an honest
     server's error response, it reports that server's words as though they
-    answered its own request. So the attribution runs before anything else in
-    the query is read, and `mixup_iss_mismatch` is the falsifier — the row this
-    client's half of the flow exists in the attack suite for.
+    answered its own request. So the attribution runs before :func:`redirect_error`
+    is consulted, and `mixup_iss_mismatch` is the falsifier.
 
     Args:
         location: The `Location` of the redirect back to the client.
@@ -335,9 +359,9 @@ def authorization_code(location: str, *, expected_state: str, expected_issuer: s
             f"redirect is attributed to issuer {returned_issuer!r}, expected {expected_issuer!r}"
         )
 
-    if "error" in query:
-        description = query.get("error_description", [""])[0]
-        raise ValueError(f"{query['error'][0]}: {description}".strip(": "))
+    refusal = redirect_error(location)
+    if refusal is not None:
+        raise ValueError(refusal)
 
     returned = query.get("state", [""])[0]
     if returned != expected_state:
@@ -398,7 +422,7 @@ def _perform(
     with httpx.Client(follow_redirects=False, timeout=30.0) as http:
         page = _get(
             http,
-            reachable(str(document["authorization_endpoint"])),
+            rebase(str(document["authorization_endpoint"])),
             params={
                 "client_id": client_id,
                 "response_type": "code",
@@ -432,7 +456,7 @@ def _perform(
 
         redeemed = _post(
             http,
-            reachable(str(document["token_endpoint"])),
+            rebase(str(document["token_endpoint"])),
             data={
                 "grant_type": "authorization_code",
                 "client_id": client_id,
@@ -498,7 +522,7 @@ def _walk_to_the_callback(http: httpx.Client, response: httpx.Response) -> str:
             return location
 
         if location is not None:
-            response = _get(http, reachable(location))
+            response = _get(http, rebase(location))
         else:
             response = _post(http, _action_of(response), data={"accept": "Yes"})
 
@@ -519,7 +543,7 @@ def _action_of(response: httpx.Response) -> str:
     rebase afterwards puts the result back on the address these requests can
     reach.
     """
-    return reachable(urljoin(str(response.url), form_action(response.text)))
+    return rebase(urljoin(str(response.url), form_action(response.text)))
 
 
 def _keep_the_session_over_plain_http(http: httpx.Client) -> None:
@@ -560,7 +584,7 @@ def _keep_the_session_over_plain_http(http: httpx.Client) -> None:
         cookie.secure = False
 
 
-def reachable(url: str) -> str:
+def rebase(url: str) -> str:
     """Point a discovered endpoint at the address these requests can reach.
 
     A no-op in the ordinary case, where `KEYCLOAK_BASE_URL` is the issuer's own
@@ -568,6 +592,11 @@ def reachable(url: str) -> str:
     mint a token, and it deliberately rewrites *transport only* — `metadata()`
     has already refused a document naming any issuer but ours, so this cannot
     silently retarget the run.
+
+    **Public because the conformance client shares it** (#46). That client earns
+    its token through the protocol package rather than minting one here, and the
+    package follows a discovered endpoint verbatim — so the one address a reader
+    may need to move has to be movable from both sides by one rule, not two.
     """
     parsed = urlparse(url)
     origin = f"{parsed.scheme}://{parsed.netloc}"

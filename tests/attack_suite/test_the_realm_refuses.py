@@ -43,7 +43,7 @@ from tokens import (
     challenge_for,
     metadata,
     mint,
-    reachable,
+    rebase,
 )
 
 REALM_FILE = "keycloak/import/mcp-erp-realm.json"
@@ -83,13 +83,13 @@ def _authorization_request(client_id: str, **overrides: str) -> httpx.Response:
         **overrides,
     }
     with httpx.Client(follow_redirects=False, timeout=TIMEOUT) as http:
-        return http.get(reachable(str(document["authorization_endpoint"])), params=parameters)
+        return http.get(rebase(str(document["authorization_endpoint"])), params=parameters)
 
 
 def _post_to_the_token_endpoint(data: dict[str, str]) -> httpx.Response:
     """One form post to the token endpoint, whatever it answers."""
     with httpx.Client(timeout=TIMEOUT) as http:
-        return http.post(reachable(str(metadata()["token_endpoint"])), data=data)
+        return http.post(rebase(str(metadata()["token_endpoint"])), data=data)
 
 
 @exercises("pkce_downgrade_plain")
@@ -99,7 +99,17 @@ def test_pkce_downgrade_plain() -> None:
     Scenario: `pkce_downgrade_plain`, `basis: adr`, sourced to ADR-0007 §Every
     client is public, and the weak challenge method is refused.
 
-        removal: Clear the per-client challenge-method pin in the realm file.
+        removal: Clear the per-client challenge-method pin **and** the
+                 `pkce-enforcer` client policy in the realm file. Either alone
+                 still refuses.
+
+    **The pin is two things, since #46.** It was a per-client attribute when the
+    row was written; that cannot reach a client the realm does not contain, and
+    #46's conformance client is provisioned from a hosted document and carries no
+    attributes — so it accepted `plain`. The realm gained a `pkce-enforcer`
+    client policy conditioned on `client-access-type: public`, which is the one
+    thing every client here has in common. Both are live, and the recorded
+    removal names both because deleting one changes nothing observable.
 
     **`basis: adr` and not `clause`, and the row's `context` field says why.** The
     MUST that exists — *"MCP clients MUST use the S256 code challenge method when
@@ -126,6 +136,26 @@ def test_pkce_downgrade_plain() -> None:
     assert answer["error"] == "invalid_request"
     assert "code challenge method" in answer["error_description"], answer
     assert "code" not in answer
+
+    # Every client the realm declares, on the same terms `password_grant_refused`
+    # reads them: the policy that carries the pin is conditioned on the client
+    # being **public**, which all of them are, so one client clearing it would
+    # be the whole defect and would be the one nobody checked.
+    #
+    # `openid` alone, because the clients do not share a capability scope — the
+    # decoy holds `hr.read` and the lookalike holds neither of ours, so asking
+    # for `erp.read` is refused as `invalid_scope` **before** the challenge
+    # method is looked at, and the loop would assert the wrong refusal for two
+    # of the five.
+    for client_id in _clients():
+        refused_too = _authorization_request(
+            client_id, code_challenge_method="plain", scope="openid"
+        )
+
+        assert refused_too.status_code == httpx.codes.FOUND, client_id
+        query = parse_qs(urlparse(str(refused_too.headers["location"])).query)
+        assert query.get("error") == ["invalid_request"], (client_id, query)
+        assert "code" not in query, client_id
 
 
 @exercises("pkce_downgrade_plain")

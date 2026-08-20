@@ -27,11 +27,21 @@ has its own keys, its own client and its own metadata; `token_passthrough` and
 `foreign_issuer_token` use it at the resource server, and this row uses it one
 layer up, at the client.
 
-**The client is `tests/tokens.py`, and it is the client this project authors
-today.** It performs the whole authorization code flow — challenge, login,
-consent, redemption — and #46's conformance client will perform it a second time,
-through a hosted identity document. The obligation is the same for both, and the
-check lives where the flow lives rather than being written twice.
+**The client under test is `tests/tokens.py`.** It performs the whole
+authorization code flow — challenge, login, consent, redemption — and the `iss`
+comparison this row falsifies lives in its `authorization_code`, ahead of
+everything else the redirect carries.
+
+**There is a second client we author, and this row asserts nothing about it.**
+#46's conformance client earns its identity through a hosted document and hands
+the redirect's parameters to the protocol package, which validates RFC 9207 `iss`
+against the issuer it discovered. But its `_callback` reads `redirect_error`
+first and raises with the authorization server's own words **before** those
+parameters are handed over — so on an error response, the party that would
+attribute it never sees it. That is this row's clause, on the half it names as
+the one implementations miss. It is recorded as a finding on the row rather than
+fixed here: the ordering belongs to the ticket that owns that client, and this
+suite cannot drive its network-dependent job to check a change to it.
 """
 
 import secrets
@@ -49,7 +59,7 @@ from tokens import (
     authorization_code,
     challenge_for,
     metadata,
-    reachable,
+    rebase,
 )
 
 TIMEOUT = 30.0
@@ -70,7 +80,7 @@ def _error_response_from(realm: str, client_id: str) -> tuple[str, str]:
     document = metadata(realm)
     with httpx.Client(follow_redirects=False, timeout=TIMEOUT) as http:
         answer = http.get(
-            reachable(str(document["authorization_endpoint"])),
+            rebase(str(document["authorization_endpoint"])),
             params={
                 "client_id": client_id,
                 "response_type": "code",

@@ -36,7 +36,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from scenarios import exercises
 
 import rpc
-from tokens import NEIGHBOUR_CLIENT, NEIGHBOUR_REALM, decode_claims, metadata, mint, reachable
+from tokens import NEIGHBOUR_CLIENT, NEIGHBOUR_REALM, decode_claims, metadata, mint, rebase
 
 EXPIRY_PROBE = "mcp-expiry-probe"
 """ADR-0007's ten-second client. Its whole purpose is the row below."""
@@ -432,7 +432,7 @@ def _verified_by_the_issuer_that_minted_it(token: str, *, realm: str) -> dict[st
             precondition false rather than the assertion.
     """
     document = metadata(realm)
-    keys = jwt.PyJWKClient(reachable(str(document["jwks_uri"])))
+    keys = jwt.PyJWKClient(rebase(str(document["jwks_uri"])))
     claims: dict[str, Any] = jwt.decode(
         token,
         key=keys.get_signing_key_from_jwt(token).key,
