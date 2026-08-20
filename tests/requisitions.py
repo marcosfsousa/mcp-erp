@@ -1,7 +1,7 @@
 """What one Person sees, and what one Person raises, for every suite that asks.
 
 The third piece of shared tooling above the test directories, beside `rpc.py`,
-`tokens.py` and `seeded_requisitions.py`, and it is here for the reason
+`tokens.py` and `fixtures.py`, and it is here for the reason
 `tokens.py` states: shared tooling that lives in one artifact's directory
 becomes that artifact's and gets copied by the next. This one was written three
 times before it moved — once in `list_partition_scoped`, once beside the write

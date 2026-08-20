@@ -41,12 +41,14 @@ commit as this file.
 """
 
 from collections.abc import Iterator
+from decimal import Decimal
 from typing import Any
 
 import pytest
 
+import fixtures
 import rpc
-import seeded_requisitions
+from mcp_erp.purchase_to_pay.approve_requisition import THRESHOLD
 from tokens import mint
 
 APPROVE = "approve_requisition"
@@ -63,15 +65,15 @@ the step this scenario is about.
 OWNER = "tomas.weber"
 """CC-4100, holding `approver`. Reads the row back, and decides it at the end."""
 
-TARGET_CENTRE = "CC-4100"
+OWNER_SUBJECT = "tomas-weber"
+"""The same person as the directory keys him, which is what a fixture's row holds.
 
-TARGET_AMOUNT = "480.00"
-"""Below the threshold, so nothing but the partition can be what refuses him.
-
-A row above €5,000 would be refused for a second reason — the prober holds
-`approver` and not `unlimited_approver` — and a scenario that passes for two
-reasons cannot say which one it tested.
+Written out rather than derived from :data:`OWNER`. The seed's subjects happen to
+be the usernames with the dot swapped for a hyphen, and a suite that relied on
+that would be asserting against a coincidence in seven rows of authored data.
 """
+
+TARGET_CENTRE = "CC-4100"
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -82,23 +84,26 @@ def requisitions() -> Iterator[None]:
     decided. Module-scoped rather than session-scoped for the reason the two
     suites beside it state.
     """
-    seeded_requisitions.load()
+    fixtures.load()
     yield
 
 
 def _guessed_identifier() -> str:
-    """One seeded identifier in a centre the prober does not hold, below the threshold.
+    """One generated identifier in a centre the prober does not hold, below the threshold.
 
-    Drawn from the seed rather than from a listing, because a listing would never
-    show it to him — which is the whole premise. Sequential identifiers are what
-    make it guessable, and ADR-0003 took that deviation for exactly this.
+    Drawn from the fixtures rather than from a listing, because a listing would
+    never show it to him — which is the whole premise. Sequential identifiers are
+    what make it guessable, and ADR-0003 took that deviation for exactly this.
+
+    **Below the threshold, and not the owner's own row.** Both are asked for
+    rather than assumed, because the answer has to be refused for the *partition*
+    and nothing else: a row above €5,000 would additionally be refused for the
+    amount — the prober holds `approver` and not `unlimited_approver` — and one
+    the owner raised himself would be refused at the end for the separation edge,
+    where this scenario needs the owner's decision to go through. A scenario that
+    passes for two reasons cannot say which one it tested.
     """
-    (row,) = [
-        row
-        for row in seeded_requisitions.ROWS
-        if row.cost_centre == TARGET_CENTRE and str(row.amount) == TARGET_AMOUNT
-    ]
-    return row.id
+    return fixtures.a_decidable_row_in(TARGET_CENTRE, not_raised_by=OWNER_SUBJECT)
 
 
 def _decide(username: str, identifier: str) -> dict[str, Any]:
@@ -142,8 +147,12 @@ def test_the_target_is_a_row_the_prober_could_otherwise_decide() -> None:
 
     assert row["cost_centre"] == TARGET_CENTRE
     assert row["status"] == "submitted"
-    assert row["amount"] == TARGET_AMOUNT
+    # Against the declared threshold rather than against a literal amount, since
+    # #43 the fixtures come from `matrix.yaml` and the row this picks moves with
+    # the table. What has to hold is the *property* the helper asked for.
+    assert Decimal(row["amount"]) <= THRESHOLD
     assert row["submitted_by"]["id"] != "yusuf-demir"
+    assert row["submitted_by"]["id"] != OWNER_SUBJECT
 
 
 def test_possession_of_a_guessed_identifier_does_not_authorize_the_write() -> None:

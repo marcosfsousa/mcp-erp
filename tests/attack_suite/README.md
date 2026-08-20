@@ -22,18 +22,27 @@ reachable and its acceptance criteria name them: `list_partition_scoped`,
 `audience_missing` and `foreign_issuer_token`. Each declares its scenario by
 name in the module docstring, which is what the bijection check will read.
 
-`seeded_requisitions.py` is #37's too, and **#43 deletes it.** It shipped in
-this directory and moved up to `tests/` with #39, when the wire suites became a
-second caller — the rule `tokens.py` states, applied: shared tooling that lives
-in one artifact's directory becomes that artifact's and gets copied by the next.
-ADR-0003 has the
-per-row requisitions generated from the decision matrix definition, one fixture
-owned outright by one row; `matrix.yaml` does not exist yet, and set equality
-against an empty table asserts nothing. What is there is the smallest set that
-makes `list_partition_scoped` falsifiable — one cost centre with two rows and the
-other two with one each, so that *the caller's own partition*, *another
-partition* and *all three* are three different answers. The same four rows serve
-`row_probe_indistinguishable` unchanged.
+`seeded_requisitions.py` was #37's too, and **#43 deleted it**, as its own
+docstring said it would. It shipped in this directory and moved up to `tests/`
+with #39, when the wire suites became a second caller — the rule `tokens.py`
+states, applied: shared tooling that lives in one artifact's directory becomes
+that artifact's and gets copied by the next. Its four hand-written rows were the
+smallest set that made `list_partition_scoped` falsifiable, standing in until
+there was something to generate them from.
+
+`tests/fixtures.py` is what replaced it, and the difference is the author. The
+rows are generated from `docs/decision-matrix/matrix.yaml` now — one fixture
+owned outright by one matrix row, which is what ADR-0003 specified before either
+half existed — and committed as a rendering `Seed renders clean` refuses a diff
+on. This directory reads them and asserts nothing about the table they came from:
+`matrix.yaml` and `scenarios.yaml` share no rows, and two suites consuming one
+seed is data in common rather than a row in common.
+
+**Nothing here names a fixture by identifier**, and that is what makes the shared
+seed safe. The identifiers are ordinals the generator renumbers when a matrix row
+is inserted, so every scenario asks for a row by the **property** it needs — a
+partition it cannot see, a row still decidable below the threshold — and a
+renumbered rendering changes no assertion here.
 
 **One row landed early with #39**, `row_probe_indistinguishable`, in
 `test_row_probe_indistinguishable.py`. That ticket built `get_requisition`, which
@@ -66,4 +75,4 @@ answers with a reason and no purchase order, so a response cannot distinguish
 *no second order* from *a second order that was not shown*, and there is no tool
 that lists one — ADR-0002 cut every read tool that demonstrated no authorization
 behaviour. So *minted nothing* is counted in the database, through
-`seeded_requisitions.py`, which is where a test-side credential already lives.
+`tests/fixtures.py`, which is where a test-side credential already lives.

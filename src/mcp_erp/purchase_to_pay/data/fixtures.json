@@ -1,0 +1,226 @@
+{
+  "invoices": [
+    {
+      "id": "inv_0001",
+      "purchase_order_id": "po_0006",
+      "recorded_by": "ingrid-holm",
+      "row": "record_refuses_an_order_already_billed"
+    }
+  ],
+  "purchase_orders": [
+    {
+      "approved_by": "ingrid-holm",
+      "id": "po_0001",
+      "requisition_id": "req_0011",
+      "row": "approve_refuses_a_row_already_decided",
+      "status": "open"
+    },
+    {
+      "approved_by": "tomas-weber",
+      "id": "po_0002",
+      "requisition_id": "req_0013",
+      "row": "record_refused_without_the_writing_scope",
+      "status": "open"
+    },
+    {
+      "approved_by": "tomas-weber",
+      "id": "po_0003",
+      "requisition_id": "req_0014",
+      "row": "record_refused_when_the_scope_carries_no_role",
+      "status": "open"
+    },
+    {
+      "approved_by": "ingrid-holm",
+      "id": "po_0004",
+      "requisition_id": "req_0015",
+      "row": "record_refuses_the_order_the_recorder_approved",
+      "status": "open"
+    },
+    {
+      "approved_by": "ingrid-holm",
+      "id": "po_0005",
+      "requisition_id": "req_0016",
+      "row": "record_permits_the_order_someone_else_approved",
+      "status": "open"
+    },
+    {
+      "approved_by": "tomas-weber",
+      "id": "po_0006",
+      "requisition_id": "req_0017",
+      "row": "record_refuses_an_order_already_billed",
+      "status": "invoiced"
+    }
+  ],
+  "requisitions": [
+    {
+      "amount": "1200.00",
+      "cost_centre": "CC-4100",
+      "description": "40 ergonomic desk chairs",
+      "id": "req_0001",
+      "row": "get_returns_a_row_in_the_callers_partition",
+      "status": "submitted",
+      "submitted_by": "priya-raman",
+      "vendor": "ven_0001"
+    },
+    {
+      "amount": "480.00",
+      "cost_centre": "CC-4100",
+      "description": "Quarterly window cleaning",
+      "id": "req_0002",
+      "row": "get_refuses_a_row_in_another_partition",
+      "status": "submitted",
+      "submitted_by": "priya-raman",
+      "vendor": "ven_0003"
+    },
+    {
+      "amount": "950.00",
+      "cost_centre": "CC-4300",
+      "description": "Trade stand signage",
+      "id": "req_0003",
+      "row": "get_reads_across_partitions_for_the_auditing_role",
+      "status": "submitted",
+      "submitted_by": "mei-tanaka",
+      "vendor": "ven_0004"
+    },
+    {
+      "amount": "1450.00",
+      "cost_centre": "CC-4100",
+      "description": "Desk risers, twelve",
+      "id": "req_0004",
+      "row": "approve_refused_without_the_deciding_scope",
+      "status": "submitted",
+      "submitted_by": "priya-raman",
+      "vendor": "ven_0002"
+    },
+    {
+      "amount": "620.00",
+      "cost_centre": "CC-4100",
+      "description": "Monitor arms, eight",
+      "id": "req_0005",
+      "row": "approve_refused_when_the_scope_carries_no_role",
+      "status": "submitted",
+      "submitted_by": "tomas-weber",
+      "vendor": "ven_0001"
+    },
+    {
+      "amount": "300.00",
+      "cost_centre": "CC-4100",
+      "description": "Entrance matting, quarterly",
+      "id": "req_0006",
+      "row": "approve_refuses_a_row_in_another_partition",
+      "status": "submitted",
+      "submitted_by": "priya-raman",
+      "vendor": "ven_0003"
+    },
+    {
+      "amount": "740.00",
+      "cost_centre": "CC-4100",
+      "description": "Standing desk, one",
+      "id": "req_0007",
+      "row": "approve_refuses_the_approvers_own_requisition",
+      "status": "submitted",
+      "submitted_by": "tomas-weber",
+      "vendor": "ven_0001"
+    },
+    {
+      "amount": "7500.00",
+      "cost_centre": "CC-4100",
+      "description": "Managed Kubernetes, annual",
+      "id": "req_0008",
+      "row": "approve_refuses_above_the_threshold",
+      "status": "submitted",
+      "submitted_by": "priya-raman",
+      "vendor": "ven_0002"
+    },
+    {
+      "amount": "5000.00",
+      "cost_centre": "CC-4100",
+      "description": "Build agents, annual",
+      "id": "req_0009",
+      "row": "approve_permits_at_the_threshold",
+      "status": "submitted",
+      "submitted_by": "priya-raman",
+      "vendor": "ven_0002"
+    },
+    {
+      "amount": "9200.00",
+      "cost_centre": "CC-4100",
+      "description": "Object storage, annual",
+      "id": "req_0010",
+      "row": "approve_permits_above_the_threshold_for_the_unlimited_role",
+      "status": "submitted",
+      "submitted_by": "priya-raman",
+      "vendor": "ven_0002"
+    },
+    {
+      "amount": "900.00",
+      "cost_centre": "CC-4100",
+      "description": "Bin collection, quarterly",
+      "id": "req_0011",
+      "row": "approve_refuses_a_row_already_decided",
+      "status": "approved",
+      "submitted_by": "priya-raman",
+      "vendor": "ven_0003"
+    },
+    {
+      "amount": "7500.00",
+      "cost_centre": "CC-4200",
+      "description": "Cluster autoscaling, annual",
+      "id": "req_0012",
+      "row": "approve_refuses_above_the_threshold_where_no_unlimited_approver_exists",
+      "status": "submitted",
+      "submitted_by": "anna-lindqvist",
+      "vendor": "ven_0002"
+    },
+    {
+      "amount": "1100.00",
+      "cost_centre": "CC-4100",
+      "description": "Task chairs, ten",
+      "id": "req_0013",
+      "row": "record_refused_without_the_writing_scope",
+      "status": "approved",
+      "submitted_by": "priya-raman",
+      "vendor": "ven_0001"
+    },
+    {
+      "amount": "260.00",
+      "cost_centre": "CC-4100",
+      "description": "Whiteboards, four",
+      "id": "req_0014",
+      "row": "record_refused_when_the_scope_carries_no_role",
+      "status": "approved",
+      "submitted_by": "rafael-costa",
+      "vendor": "ven_0001"
+    },
+    {
+      "amount": "6400.00",
+      "cost_centre": "CC-4100",
+      "description": "Log retention, annual",
+      "id": "req_0015",
+      "row": "record_refuses_the_order_the_recorder_approved",
+      "status": "approved",
+      "submitted_by": "priya-raman",
+      "vendor": "ven_0002"
+    },
+    {
+      "amount": "6800.00",
+      "cost_centre": "CC-4100",
+      "description": "Incident tooling, annual",
+      "id": "req_0016",
+      "row": "record_permits_the_order_someone_else_approved",
+      "status": "approved",
+      "submitted_by": "priya-raman",
+      "vendor": "ven_0002"
+    },
+    {
+      "amount": "380.00",
+      "cost_centre": "CC-4100",
+      "description": "Lobby signage, replacement",
+      "id": "req_0017",
+      "row": "record_refuses_an_order_already_billed",
+      "status": "approved",
+      "submitted_by": "priya-raman",
+      "vendor": "ven_0004"
+    }
+  ]
+}

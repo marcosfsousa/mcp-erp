@@ -1,7 +1,20 @@
-"""`tools/list` filters on granted scope alone, and says how long it may be cached.
+"""What the listing declares to everybody, and the invariance across callers.
 
-The fourth refusal in ADR-0002's set is **absence**: a tool the caller's token
-does not reach is not in the listing at all, rather than refused on the way in.
+**The filter itself is not here any more.** #66 drew the line this directory is
+named for — an assertion whose expected value *changes with the caller* is the
+decision matrix's — and #43 moved the five it named, one per scope set the filter
+is exercised across. They are rows of `matrix.yaml` now, driven by
+`tests/matrix/test_rows_for_the_tool_listing.py`. The fourth refusal in ADR-0002's
+set is **absence**, and absence varies with the token, so it went with them.
+
+What is left is the same rule read the other way. `cacheScope`, the `ttlMs` cap,
+the declared schemas and `listChanged: false` are things the server states
+**identically to every caller**, so there is no principal to key them on. *The
+listing is a function of the token and not of the person* asserts an invariance
+**across** callers rather than a value that varies with one — splitting it into
+two rows would keep both halves and lose the equality between them, which is the
+entire claim and what ADR-0002's cache proof rests on. And the agreement between
+the listing and the call is something nothing in `scenarios.yaml` consults.
 
 The freshness hint is the part that has an argument underneath it.
 `cacheScope: "private"` is forced — the specification warns that a `"public"`
@@ -25,23 +38,20 @@ FIVE_MINUTES_MS = 300_000
 
 TOOL = "list_requisitions"
 
-READ_TOOLS = {"list_requisitions", "get_requisition"}
-"""The two tools declaring `read`, and therefore the whole of what `erp.read` reaches."""
+EVERY_TOOL = {
+    "list_requisitions",
+    "get_requisition",
+    "submit_requisition",
+    "record_invoice",
+    "approve_requisition",
+}
+"""The whole declared set, which is what the schema assertion below walks.
 
-WRITE_TOOLS = {"submit_requisition", "record_invoice"}
-"""The two tools declaring `write`, and the pair ADR-0012's coarse verbs are for.
-
-One scope reaches both, and the ERP role decides which of the two a caller
-actually achieves anything with — `submit_requisition` requires none and
-`record_invoice` requires `invoice_clerk`. That is the intersection doing visible
-work, and it is why `erp.write` is ungated at issuance: a role mapping on it would
-lock every submitter out of a scope ADR-0003 gives them.
+The three per-capability sets this file used to hold went to `matrix.yaml` with
+the rows that asserted them — which scope reaches which tools is precisely a
+value that varies with the caller. What remains is a claim about every tool at
+once, so it needs the union rather than the split.
 """
-
-DECIDE_TOOLS = {"approve_requisition"}
-"""The one tool declaring `decide`, and the only one of the three sets that is
-gated by a role as well — which is what makes the listing's *scope alone* filter
-observable rather than merely stated."""
 
 
 def _listing(minted: Minted) -> dict[str, object]:
@@ -54,69 +64,6 @@ def _names(minted: Minted) -> set[str]:
     tools = _listing(minted)["tools"]
     assert isinstance(tools, list)
     return {tool["name"] for tool in tools}
-
-
-def test_a_read_token_reaches_the_read_tools() -> None:
-    """The positive case: one capability, and every tool declaring it."""
-    assert _names(mint("priya.raman", ["erp.read"])) == READ_TOOLS
-
-
-def test_a_token_with_no_capability_scope_reaches_nothing() -> None:
-    """Absence is the fourth refusal, and it is the one with no wire shape at all.
-
-    Every token carries at least `openid`, so this is a token that authenticates
-    and reaches nothing rather than a token that fails.
-    """
-    assert _names(mint("priya.raman")) == set()
-
-
-def test_the_write_scope_reaches_the_write_tool_and_no_read_tool() -> None:
-    """Scopes are a plain set with **no implication between them**.
-
-    All eight subsets of the three are legal, which is what keeps *may submit but
-    never approve* and *may approve but not submit* both expressible. A ladder
-    where one scope implied another would collapse the ceiling to one dimension
-    and make a scope a role wearing a scope's clothes.
-
-    Until `submit_requisition` shipped, the write half of that claim could only
-    be made negatively — a write token reached nothing at all, which a ladder
-    would also produce. Now the two capabilities partition the tool set, and the
-    assertion is that a token holding one reaches its own side and neither more
-    nor less.
-
-    Since #42 the write side holds two tools, and the listing shows both to a
-    Person who can use neither: Priya Raman holds no ERP role, so she reaches
-    `record_invoice` here and is refused at its role gate when she calls it. That
-    refusal is asserted where it happens, in `test_record_invoice.py`.
-    """
-    assert _names(mint("priya.raman", ["erp.write"])) == WRITE_TOOLS
-    assert not READ_TOOLS & WRITE_TOOLS
-
-
-def test_both_scopes_reach_the_union_and_nothing_else() -> None:
-    """A token is a ceiling, and two capabilities buy exactly the two sides.
-
-    Priya Raman holds no ERP role at all, so what she reaches here is the token's
-    doing alone — which is the same fact `test_the_listing_is_a_function_of_the
-    _token_and_not_of_the_person` makes from the other direction.
-    """
-    assert _names(mint("priya.raman", ["erp.read", "erp.write"])) == READ_TOOLS | WRITE_TOOLS
-    assert not (READ_TOOLS | WRITE_TOOLS) & DECIDE_TOOLS
-
-
-def test_the_deciding_scope_reaches_the_deciding_tool_for_a_person_who_may_not_use_it() -> None:
-    """The listing filters on granted scope **alone**, so a role gate is invisible here.
-
-    Priya Raman holds `approver` in the realm and no ERP role at all, so the
-    realm issues her `erp.decide` and the server refuses her at the role gate.
-    She sees the tool anyway — and that is the design: filtering on the
-    intersection would hide it from her, and the `-31010` denial class would
-    collapse into an absence with no wire shape at all.
-
-    That refusal is asserted where it happens, in `test_approve_requisition.py`.
-    What is asserted here is that she gets far enough to be refused.
-    """
-    assert _names(mint("priya.raman", ["erp.decide"])) == DECIDE_TOOLS
 
 
 def test_the_listing_is_a_function_of_the_token_and_not_of_the_person() -> None:
@@ -163,7 +110,7 @@ def test_the_listing_declares_the_schemas_layer_three_authored() -> None:
     assert isinstance(tools, list)
     declared = {tool["name"]: tool for tool in tools}
 
-    assert set(declared) == READ_TOOLS | WRITE_TOOLS | DECIDE_TOOLS
+    assert set(declared) == EVERY_TOOL
     for tool in declared.values():
         assert tool["inputSchema"]["additionalProperties"] is False
         assert tool["outputSchema"]["additionalProperties"] is False

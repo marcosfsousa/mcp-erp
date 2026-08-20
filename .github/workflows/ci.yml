@@ -219,8 +219,11 @@ jobs:
       - name: Eject layer 3, then run layer 2's own suite
         run: rm -rf src/mcp_erp/purchase_to_pay && uv run --no-sync pytest tests/authorization
 
-  # ADR-0013's fourth job. A red here means a rendering diverged from the seed —
-  # not that Python is broken, not that a layer boundary was crossed.
+  # ADR-0013's fourth job. A red here means a rendering diverged from the seed
+  # **or from the matrix** — not that Python is broken, not that a layer boundary
+  # was crossed. ADR-0013 scoped matrix-fixture drift into this job by name and
+  # #43 is where the fourth rendering arrived, so the diagnosis it already had is
+  # the one it keeps: *what is committed is not what the source renders.*
   #
   # It asks two questions that fail differently. The re-render plus diff catches
   # a *hand-edited* rendering, and it is the only cover the ERP rendering has:
@@ -250,53 +253,68 @@ jobs:
       - name: Install the locked environment
         run: uv sync --locked
 
-      # One generator per layer, each re-rendering the half of the seed whose
-      # vocabulary it speaks. Both write into the working tree; the step below
-      # is what turns that into a verdict.
-      - name: Re-render the seed
+      # Three generators, four renderings. Two of them speak layer 2's words and
+      # one speaks layer 3's; the third reads `matrix.yaml` rather than the seed
+      # at all and emits the seed's disposable half, which is why it is listed
+      # here and not called a seed generator. All three write into the working
+      # tree; the step below is what turns that into a verdict.
+      - name: Re-render the seed and the fixtures
         run: |
           uv run python -m mcp_erp.authorization.identity
           uv run python -m mcp_erp.purchase_to_pay.organisation
+          uv run python -m mcp_erp.purchase_to_pay.fixtures
 
       # `git status --porcelain` rather than `git diff --exit-code`, because a
       # rendering that is missing entirely comes back as an untracked file and a
       # diff would report nothing. Both cases are the same defect: what is
-      # committed is not what the seed renders.
-      - name: Refuse a rendering the seed does not produce
+      # committed is not what the source renders.
+      - name: Refuse a rendering its source does not produce
         run: |
           set -euo pipefail
 
           # The two `data` directories hold nothing but renderings, so they are
-          # named whole. `keycloak/import/` is not like them: since #36 it holds
-          # the hand-authored realm files beside the generated user import, and
-          # naming the directory would report an authored edit as a rendering
-          # that drifted from the seed — the one diagnosis this job exists to
-          # give, handed out for the one thing it is not. So the rendered file
-          # is named exactly.
+          # named whole — which is what enrols the fixtures #43 added without
+          # this list needing a fourth entry. `keycloak/import/` is not like
+          # them: since #36 it holds the hand-authored realm files beside the
+          # generated user import, and naming the directory would report an
+          # authored edit as a rendering that drifted from the seed — the one
+          # diagnosis this job exists to give, handed out for the one thing it
+          # is not. So the rendered file is named exactly.
           drifted=$(git status --porcelain -- \
             src/mcp_erp/authorization/data \
             src/mcp_erp/purchase_to_pay/data \
             keycloak/import/mcp-erp-users-0.json)
 
           if [ -n "${drifted}" ]; then
-            echo "::error::A rendering no longer matches the seed."
+            echo "::error::A rendering no longer matches the source it is generated from."
             echo
             echo "${drifted}"
             echo
-            echo "The seed at docs/organisation/seed.yaml is the source of truth"
-            echo "for all three renderings. Edit it and re-run both generators;"
+            echo "docs/organisation/seed.yaml is the source of truth for the"
+            echo "organisation's three renderings, and docs/decision-matrix/matrix.yaml"
+            echo "for the fixtures. Edit the source and re-run the generators;"
             echo "never edit a rendering by hand."
             exit 1
           fi
 
-          echo "All three renderings match the seed."
+          echo "All four renderings match the sources they are generated from."
 
-      # The invariants a diff cannot see: that the renderer is byte-stable, that
-      # the two role columns stay independent, and that realm membership and
+      # The invariants a diff cannot see: that the renderers are byte-stable,
+      # that the two role columns stay independent, that realm membership and
       # directory membership are equal with the divergence declared on the role
-      # columns only.
+      # columns only, and — since #43 — that the matrix's standing index agrees
+      # with its rows and that every fixture is charged to its submitter's own
+      # centre.
+      #
+      # Neither file needs Compose, which is what lets this job run them: they
+      # ask whether the committed artifacts are well formed, and that is a
+      # question about files. `Decision matrix (wire)` collects the second one
+      # too, because it lives in that directory and a suite that skipped its own
+      # invariants when run whole would be a suite with a hole in it.
       - name: The invariants between the renderings
-        run: uv run pytest tests/authorization/test_identity.py
+        run: |
+          uv run pytest tests/authorization/test_identity.py \
+                        tests/matrix/test_the_matrix_holds_together.py
 
   # The mechanism standing behind "a change is a new path" — ADR-0008's third,
   # the one it credits with removing the only genuine false green. The argument
@@ -485,6 +503,102 @@ jobs:
       # evidence ends at pytest's traceback and one that shows which container
       # said what, which for a job whose subject is what the server exposes is
       # usually where the answer is.
+      - name: What the containers said
+        if: failure()
+        run: docker compose logs --no-color
+
+  # ADR-0013's decision-matrix seam, and the second Compose bring-up in this
+  # file. A red check means *an authorization expectation is wrong* — one row of
+  # `docs/decision-matrix/matrix.yaml` got an answer the table does not declare.
+  # That is a different diagnosis from every job above it: not an ordinary Python
+  # defect, not a crossed layer boundary, not a drifted rendering, and — the
+  # clause that draws the line — not something the server says identically to
+  # everyone, which is `Server posture`'s.
+  #
+  # It sits **on** cut order `#9`'s third rank, deliberately and visibly. Cutting
+  # the decision matrix removes this job and `Seed renders clean` together, and
+  # since #66 it also takes the tool listing's scope filter with it, because the
+  # five assertions that filter is exercised through are rows here now.
+  #
+  #
+  # THE BRING-UP IS `server-posture`'S, REPEATED RATHER THAN SHARED
+  # ---------------------------------------------------------------
+  # #66 wrote the first one and said why it is not factored into a shared
+  # action: `Authorization code flow` (#46) is `yes + network` in ADR-0013's
+  # table and is already known to differ, so a seam designed against one real
+  # consumer and three imagined ones would be built on the wrong example. This
+  # is the **second** real consumer, which is what makes factoring fair game —
+  # and the common part is now observed rather than guessed. It is left as two
+  # copies here so that this ticket ships the matrix rather than a refactor of
+  # somebody else's job, and #44 is the third that would settle the shape.
+  #
+  # Four things in the copy are load-bearing, and they are #66's four:
+  #
+  #   1. `docker compose build` as its own step, so a Dockerfile failure reads
+  #      as one instead of as the stack failing to start.
+  #   2. `--wait` rather than a poll written here, because every readiness
+  #      condition is already stated in `compose.yaml` and a second definition
+  #      of ready is a second thing that can be wrong.
+  #   3. The hosts-file line rather than `KEYCLOAK_BASE_URL`. The rebase exists
+  #      for a reader who cannot edit a hosts file; taking it on the runner
+  #      would leave the documented path unexercised by anything.
+  #   4. Map constraint `#13`: no `paths:`, no `paths-ignore:`, no job-level
+  #      `if:`, no conditional matrix leg. The one conditional step below runs
+  #      only after the job has already failed, which cannot withhold a context.
+  decision-matrix-wire:
+    name: Decision matrix (wire)
+    runs-on: ubuntu-latest
+    # The same budget `Server posture` takes, for the same reason: this builds
+    # two images, pulls two more, and stands up five containers before the first
+    # row is driven. Anything past it reads as stuck rather than slow.
+    timeout-minutes: 20
+    steps:
+      # Floating major, per the named exception at the top of this file.
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      # The suite runs on the runner rather than in a container, because it is a
+      # caller — and because it holds a database credential of its own. ADR-0003
+      # accepted that in preference to a test-only reset route on a server whose
+      # entire subject is authorization, and `tests/fixtures.py` is where it
+      # lives. Compose publishes Postgres on its usual port for it.
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      # ONE HOSTNAME, TWO SIDES OF A CONTAINER BOUNDARY
+      #
+      # The issuer is `http://keycloak:8081/realms/mcp-erp`, from the seed, and
+      # the token helper mints against it. Inside the network Compose's own DNS
+      # answers for that name; on this runner nothing does. The rebase
+      # `KEYCLOAK_BASE_URL` offers stays available and stays a fallback; this
+      # job takes the `127.0.0.1 keycloak` line ADR-0005 §Consequences priced,
+      # because that is the path `compose.yaml` and both READMEs tell a reader
+      # to take.
+      - name: Resolve the issuer's own hostname
+        run: echo "127.0.0.1 keycloak" | sudo tee -a /etc/hosts
+
+      - name: Build the images
+        run: docker compose build
+
+      - name: Bring the stack up
+        run: docker compose up --wait --wait-timeout 300
+
+      # The whole directory, which is one test per matrix row plus the two files
+      # that hold the table itself to account: the union mapping test, and the
+      # standing index `Seed renders clean` also runs. `pytest -v` prints each
+      # row's own identifier, so a red check names the expectation that broke
+      # rather than a parameter index.
+      - name: Every row of the decision matrix, over the wire
+        run: uv run pytest tests/matrix -v
+
+      # Step-level and conditional, which map constraint `#13` does not reach:
+      # a step that runs only once the job has already failed cannot withhold a
+      # context. What it buys is the difference between a red check whose
+      # evidence ends at pytest's traceback and one that shows which container
+      # said what.
       - name: What the containers said
         if: failure()
         run: docker compose logs --no-color

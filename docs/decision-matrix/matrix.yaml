@@ -1,0 +1,684 @@
+# The decision matrix — canonical source for (principal × tool × resource → expected).
+#
+# Decided by #6 and #12; rules recorded in
+# docs/adr/0003-the-schema-is-the-policy-functions-argument-list.md and
+# docs/adr/0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md
+#
+# This file is the single source of truth for what one caller may do to one row.
+# `tests/matrix/` is driven from it in its entirety, and so is the seed's
+# disposable half: `mcp_erp.purchase_to_pay.fixtures` reads this file and emits
+# one requisition per row that names a `given`, plus the purchase order and the
+# invoice that row's chain reaches. The rendering is committed and `Seed renders
+# clean` refuses any diff, so a hand-edited fixture is a red check rather than a
+# surprise at run time.
+#
+# It is **disjoint from docs/attack-suite/scenarios.yaml and neither arbitrates
+# the other.** That file is canonical for named attacks — one row per clause this
+# project enforces, each recording the removal that makes it pass. This one is
+# canonical for authorization expectations. They share no rows, and the one thing
+# they touch is ADR-0002's reason-to-shape mapping, whose union test lives in
+# `tests/matrix/` because layer 3's four reasons live in layer 3.
+#
+# Both files consume the same fixtures, and that is not a shared row. The
+# fixtures are the seed's disposable half and ADR-0003 gave them one author; a
+# suite reading them is reading data, not a row in this table.
+#
+#
+# FIELDS
+# ------
+#   id          stable identifier; the fixture this row owns and the generated
+#               test are both named for it, and it is never reworded. Renaming
+#               one renames the fixture it owns, which the drift check shows.
+#   principal   **person × scope set**, never person alone. Effective permission
+#               is granted scope ∩ role permission, and the two inputs are only
+#               genuinely independent if this table can vary them independently.
+#                 person   a username from docs/organisation/seed.yaml
+#                 scopes   the capability scopes the token carries, beside
+#                          `openid`, which every token carries and which reaches
+#                          nothing on its own
+#   tool        `tools/list`, or one of the five tool names
+#   given       the row's own fixture, or null. **Flat, literal, no defaults, no
+#               inheritance and no references to another row** — ADR-0003's
+#               guardrail, and the line this file may not cross. The moment a
+#               `given` block wants a conditional it is becoming the DSL map
+#               constraint `#4` refused, and review should catch it.
+#   expect      `allowed` or a `reason`, plus at most one further key. Wire
+#               shape, remedy and both retry booleans are **derived** from the
+#               reason record the two layers declare, never restated here.
+#
+#
+# WHICH RESOURCE A ROW ACTS ON, WITHOUT A COLUMN FOR IT
+# -----------------------------------------------------
+# One rule, so that `(principal × tool × resource)` is complete without a third
+# field that could disagree with the second:
+#
+#   * A row that names a `given` acts on **the fixture that block produces** —
+#     the requisition, or the purchase order its chain reaches when the tool is
+#     `record_invoice`. Each such row owns its fixture outright, so no row can
+#     disturb another.
+#   * A row with no `given`, on a tool that names a resource, acts on **the
+#     identifier no row carries** — `req_9999` or `po_9999`.
+#   * `tools/list`, `list_requisitions` and `submit_requisition` name no
+#     resource at all, so they never carry a `given`.
+#
+#
+# THE `given` BLOCK'S FIELDS
+# --------------------------
+#   cost_centre   the centre the row is charged to. Stated rather than derived
+#                 from the submitter, because the fixture generator reads this
+#                 file and not the seed — the two are held equal by an invariant
+#                 test rather than by one generator reading the other's half.
+#   vendor        a vendor id from the seed
+#   amount        a decimal string, which is what decides whether the threshold
+#                 refuses an approver
+#   description   the label. ADR-0003's single named legibility exception.
+#   submitted_by  the subject that raised it, and the first separation edge's
+#                 other side
+#   status        submitted | approved | rejected
+#   approved_by   the approver's subject, or null. Non-null exactly when the
+#                 status is `approved` — a rejection is equally terminal and
+#                 emits no order, which is why the reason is `already_decided`
+#                 rather than `already_approved`.
+#   order_status  open | invoiced, or null. Non-null exactly when there is an
+#                 approver, because an order is what an approval emits.
+#   recorded_by   the recorder's subject, or null. Non-null exactly when the
+#                 order is `invoiced`, because an invoice is what a recording
+#                 writes.
+#
+# Every field is stated on every `given`, nulls included. That is what "no
+# defaults" means here: a block cannot omit a field and inherit a permissive
+# value from anywhere, because there is nowhere for one to come from.
+#
+# `currency` is absent and is not a missing field. It has exactly one legal
+# value, so a column here could only restate the schema's own `CHECK`, and a
+# per-row copy of a constant is a per-row chance to disagree with it.
+#
+#
+# TOKEN SHAPES ARE BOUNDED
+# ------------------------
+# The **cumulative ladder of four** — `{}`, `{read}`, `{read,write}`, all three —
+# is what a row reaches for by default. Two people differing only in role, tested
+# under the same rung, is the comparison this table is built to make; a row that
+# invents its own scope set makes its result a fact about two variables.
+#
+# A non-cumulative set is admitted **only by citing the row that needs it**, and
+# there are two:
+#
+#   {erp.decide}   `listing_reaches_the_deciding_tool_through_a_role_gate`, and
+#                  the six deciding rows that follow it. The listing claim is
+#                  that the filter reads granted scope alone, and a token also
+#                  carrying read and write would show four tools beside the one
+#                  the claim is about.
+#   {erp.write}    `listing_reaches_the_writing_tools`. The claim is *and no
+#                  read tool*, which `{read,write}` cannot make.
+#
+# #43's ticket named `{erp.decide}` as the only one so far. It was written before
+# #66 handed the tool listing's five assertions to this table, and the second
+# exception arrives with them — the rule operating as written rather than a
+# breach of it.
+#
+#
+# INVARIANTS
+# ----------
+#   - `meta` below is the standing index, and every count in it is asserted
+#     against the rows by `tests/matrix/test_the_matrix_holds_together.py`. A
+#     count kept where it can be read and not checked is what ADR-0011 caught
+#     drifting four times in one month.
+#   - **Every reason in the union of both layers' declared sets is expected by at
+#     least one row.** That is what makes the closed vocabulary reachable rather
+#     than merely declared, and it is this table's floor: a reason no row expects
+#     is a value the exhibit cannot demonstrate.
+#   - Every tool the server declares is named by at least one row, and so is
+#     `tools/list`.
+#   - Soft ceiling 45. Crossing it reviews whether two rows are restating one
+#     branch rather than adding a row — the likely cause is a `given` varying a
+#     field no rule reads.
+#   - Every fixture's `cost_centre` is its submitter's own centre. A row that
+#     broke that would be data no tool could have produced: `submit_requisition`
+#     takes no cost centre and stamps the submitter's.
+#   - Row identifiers are unique, and every non-cumulative scope set is one of
+#     the two cited above.
+
+meta:
+  ticket: 43
+  decided: 2026-08-20
+  total: 33
+  ceiling: 45
+  fixtures: 17
+  # Per tool, which is the index a reader walks. ADR-0003 sketched "about 29
+  # rows" over a six-way split; the shape held and three of the six moved,
+  # because #66 handed `tools/list` a fifth scope set and because both tools
+  # that hydrate a named row earn a row for the identifier no row carries.
+  by_tool:
+    tools/list: 5
+    list_requisitions: 4
+    get_requisition: 5
+    submit_requisition: 3
+    approve_requisition: 10
+    record_invoice: 6
+  # Which reasons the rows make reachable, and how many rows reach each. Derived
+  # from `expect.reason` and asserted against it, so this cannot become a second
+  # opinion about the rows.
+  by_reason:
+    insufficient_scope: 5
+    role_missing: 2
+    not_found: 5
+    segregation_of_duties: 2
+    over_threshold: 2
+    already_decided: 1
+    already_invoiced: 1
+  allowed: 15
+
+rows:
+
+  # ─── tools/list — the filter, one row per scope set ────────────────────────
+  #
+  # All five mint for Priya Raman, who holds no ERP role at all, so what she
+  # reaches is the token's doing and nothing else. Swap in a Person who also
+  # holds the deciding role and the fifth row still passes while demonstrating
+  # nothing. Moved here from `tests/wire/test_tool_listing.py` by #66: an
+  # assertion whose expected value changes with the caller is this table's, and
+  # one the server makes identically to every caller stays there.
+
+  - id: listing_reaches_nothing_without_a_capability_scope
+    principal:
+      person: priya.raman
+      scopes: []
+    tool: tools/list
+    given: null
+    expect:
+      outcome: allowed
+      reason: null
+      tools: []
+
+  - id: listing_reaches_the_reading_tools
+    principal:
+      person: priya.raman
+      scopes: [erp.read]
+    tool: tools/list
+    given: null
+    expect:
+      outcome: allowed
+      reason: null
+      tools: [get_requisition, list_requisitions]
+
+  - id: listing_reaches_the_writing_tools
+    principal:
+      person: priya.raman
+      scopes: [erp.write]
+    tool: tools/list
+    given: null
+    expect:
+      outcome: allowed
+      reason: null
+      tools: [record_invoice, submit_requisition]
+
+  - id: listing_reaches_the_union_of_two_capabilities
+    principal:
+      person: priya.raman
+      scopes: [erp.read, erp.write]
+    tool: tools/list
+    given: null
+    expect:
+      outcome: allowed
+      reason: null
+      tools: [get_requisition, list_requisitions, record_invoice, submit_requisition]
+
+  - id: listing_reaches_the_deciding_tool_through_a_role_gate
+    principal:
+      person: priya.raman
+      scopes: [erp.decide]
+    tool: tools/list
+    given: null
+    expect:
+      outcome: allowed
+      reason: null
+      tools: [approve_requisition]
+
+  # ─── list_requisitions — omission, and the breadth that is a role ──────────
+
+  - id: list_refused_without_the_reading_scope
+    principal:
+      person: priya.raman
+      scopes: []
+    tool: list_requisitions
+    given: null
+    expect:
+      outcome: refused
+      reason: insufficient_scope
+
+  - id: list_returns_the_callers_own_partition
+    principal:
+      person: tomas.weber
+      scopes: [erp.read]
+    tool: list_requisitions
+    given: null
+    expect:
+      outcome: allowed
+      reason: null
+      visible_partitions: [CC-4100]
+
+  - id: list_returns_another_partition_to_its_own_holder
+    principal:
+      person: yusuf.demir
+      scopes: [erp.read]
+    tool: list_requisitions
+    given: null
+    expect:
+      outcome: allowed
+      reason: null
+      visible_partitions: [CC-4200]
+
+  - id: list_returns_every_partition_to_the_auditing_role
+    principal:
+      person: anna.lindqvist
+      scopes: [erp.read]
+    tool: list_requisitions
+    given: null
+    expect:
+      outcome: allowed
+      reason: null
+      visible_partitions: [CC-4100, CC-4200, CC-4300]
+
+  # ─── get_requisition — a named row is refused, never omitted ───────────────
+
+  - id: get_refused_without_the_reading_scope
+    principal:
+      person: priya.raman
+      scopes: []
+    tool: get_requisition
+    given: null
+    expect:
+      outcome: refused
+      reason: insufficient_scope
+
+  - id: get_returns_a_row_in_the_callers_partition
+    principal:
+      person: tomas.weber
+      scopes: [erp.read]
+    tool: get_requisition
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0001
+      amount: "1200.00"
+      description: 40 ergonomic desk chairs
+      submitted_by: priya-raman
+      status: submitted
+      approved_by: null
+      order_status: null
+      recorded_by: null
+    expect:
+      outcome: allowed
+      reason: null
+
+  - id: get_refuses_a_row_in_another_partition
+    principal:
+      person: yusuf.demir
+      scopes: [erp.read]
+    tool: get_requisition
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0003
+      amount: "480.00"
+      description: Quarterly window cleaning
+      submitted_by: priya-raman
+      status: submitted
+      approved_by: null
+      order_status: null
+      recorded_by: null
+    expect:
+      outcome: refused
+      reason: not_found
+
+  - id: get_refuses_an_identifier_no_row_carries
+    principal:
+      person: tomas.weber
+      scopes: [erp.read]
+    tool: get_requisition
+    given: null
+    expect:
+      outcome: refused
+      reason: not_found
+
+  - id: get_reads_across_partitions_for_the_auditing_role
+    principal:
+      person: anna.lindqvist
+      scopes: [erp.read]
+    tool: get_requisition
+    given:
+      cost_centre: CC-4300
+      vendor: ven_0004
+      amount: "950.00"
+      description: Trade stand signage
+      submitted_by: mei-tanaka
+      status: submitted
+      approved_by: null
+      order_status: null
+      recorded_by: null
+    expect:
+      outcome: allowed
+      reason: null
+
+  # ─── submit_requisition — the partition is supplied, never decided ─────────
+
+  - id: submit_refused_without_the_writing_scope
+    principal:
+      person: priya.raman
+      scopes: [erp.read]
+    tool: submit_requisition
+    given: null
+    expect:
+      outcome: refused
+      reason: insufficient_scope
+
+  - id: submit_is_charged_to_the_submitters_own_partition
+    principal:
+      person: priya.raman
+      scopes: [erp.read, erp.write]
+    tool: submit_requisition
+    given: null
+    expect:
+      outcome: allowed
+      reason: null
+      charged_to: CC-4100
+
+  - id: submit_is_charged_to_a_third_partition_for_its_own_inhabitant
+    principal:
+      person: mei.tanaka
+      scopes: [erp.read, erp.write]
+    tool: submit_requisition
+    given: null
+    expect:
+      outcome: allowed
+      reason: null
+      charged_to: CC-4300
+
+  # ─── approve_requisition — the whole chain, one branch per row ─────────────
+
+  - id: approve_refused_without_the_deciding_scope
+    principal:
+      person: tomas.weber
+      scopes: [erp.read, erp.write]
+    tool: approve_requisition
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0002
+      amount: "1450.00"
+      description: Desk risers, twelve
+      submitted_by: priya-raman
+      status: submitted
+      approved_by: null
+      order_status: null
+      recorded_by: null
+    expect:
+      outcome: refused
+      reason: insufficient_scope
+
+  - id: approve_refused_when_the_scope_carries_no_role
+    principal:
+      person: priya.raman
+      scopes: [erp.decide]
+    tool: approve_requisition
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0001
+      amount: "620.00"
+      description: Monitor arms, eight
+      submitted_by: tomas-weber
+      status: submitted
+      approved_by: null
+      order_status: null
+      recorded_by: null
+    expect:
+      outcome: refused
+      reason: role_missing
+
+  - id: approve_refuses_a_row_in_another_partition
+    principal:
+      person: yusuf.demir
+      scopes: [erp.decide]
+    tool: approve_requisition
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0003
+      amount: "300.00"
+      description: Entrance matting, quarterly
+      submitted_by: priya-raman
+      status: submitted
+      approved_by: null
+      order_status: null
+      recorded_by: null
+    expect:
+      outcome: refused
+      reason: not_found
+
+  - id: approve_refuses_an_identifier_no_row_carries
+    principal:
+      person: tomas.weber
+      scopes: [erp.decide]
+    tool: approve_requisition
+    given: null
+    expect:
+      outcome: refused
+      reason: not_found
+
+  - id: approve_refuses_the_approvers_own_requisition
+    principal:
+      person: tomas.weber
+      scopes: [erp.decide]
+    tool: approve_requisition
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0001
+      amount: "740.00"
+      description: Standing desk, one
+      submitted_by: tomas-weber
+      status: submitted
+      approved_by: null
+      order_status: null
+      recorded_by: null
+    expect:
+      outcome: refused
+      reason: segregation_of_duties
+
+  - id: approve_refuses_above_the_threshold
+    principal:
+      person: tomas.weber
+      scopes: [erp.decide]
+    tool: approve_requisition
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0002
+      amount: "7500.00"
+      description: Managed Kubernetes, annual
+      submitted_by: priya-raman
+      status: submitted
+      approved_by: null
+      order_status: null
+      recorded_by: null
+    expect:
+      outcome: refused
+      reason: over_threshold
+
+  - id: approve_permits_at_the_threshold
+    principal:
+      person: tomas.weber
+      scopes: [erp.decide]
+    tool: approve_requisition
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0002
+      amount: "5000.00"
+      description: Build agents, annual
+      submitted_by: priya-raman
+      status: submitted
+      approved_by: null
+      order_status: null
+      recorded_by: null
+    expect:
+      outcome: allowed
+      reason: null
+
+  - id: approve_permits_above_the_threshold_for_the_unlimited_role
+    principal:
+      person: ingrid.holm
+      scopes: [erp.decide]
+    tool: approve_requisition
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0002
+      amount: "9200.00"
+      description: Object storage, annual
+      submitted_by: priya-raman
+      status: submitted
+      approved_by: null
+      order_status: null
+      recorded_by: null
+    expect:
+      outcome: allowed
+      reason: null
+
+  - id: approve_refuses_a_row_already_decided
+    principal:
+      person: tomas.weber
+      scopes: [erp.decide]
+    tool: approve_requisition
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0003
+      amount: "900.00"
+      description: Bin collection, quarterly
+      submitted_by: priya-raman
+      status: approved
+      approved_by: ingrid-holm
+      order_status: open
+      recorded_by: null
+    expect:
+      outcome: refused
+      reason: already_decided
+
+  - id: approve_refuses_above_the_threshold_where_no_unlimited_approver_exists
+    principal:
+      person: yusuf.demir
+      scopes: [erp.decide]
+    tool: approve_requisition
+    given:
+      cost_centre: CC-4200
+      vendor: ven_0002
+      amount: "7500.00"
+      description: Cluster autoscaling, annual
+      submitted_by: anna-lindqvist
+      status: submitted
+      approved_by: null
+      order_status: null
+      recorded_by: null
+    expect:
+      outcome: refused
+      reason: over_threshold
+
+  # ─── record_invoice — the second separation edge, on the other entity ──────
+
+  - id: record_refused_without_the_writing_scope
+    principal:
+      person: rafael.costa
+      scopes: [erp.read]
+    tool: record_invoice
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0001
+      amount: "1100.00"
+      description: Task chairs, ten
+      submitted_by: priya-raman
+      status: approved
+      approved_by: tomas-weber
+      order_status: open
+      recorded_by: null
+    expect:
+      outcome: refused
+      reason: insufficient_scope
+
+  - id: record_refused_when_the_scope_carries_no_role
+    principal:
+      person: priya.raman
+      scopes: [erp.read, erp.write]
+    tool: record_invoice
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0001
+      amount: "260.00"
+      description: Whiteboards, four
+      submitted_by: rafael-costa
+      status: approved
+      approved_by: tomas-weber
+      order_status: open
+      recorded_by: null
+    expect:
+      outcome: refused
+      reason: role_missing
+
+  - id: record_refuses_an_identifier_no_order_carries
+    principal:
+      person: rafael.costa
+      scopes: [erp.read, erp.write]
+    tool: record_invoice
+    given: null
+    expect:
+      outcome: refused
+      reason: not_found
+
+  - id: record_refuses_the_order_the_recorder_approved
+    principal:
+      person: ingrid.holm
+      scopes: [erp.read, erp.write]
+    tool: record_invoice
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0002
+      amount: "6400.00"
+      description: Log retention, annual
+      submitted_by: priya-raman
+      status: approved
+      approved_by: ingrid-holm
+      order_status: open
+      recorded_by: null
+    expect:
+      outcome: refused
+      reason: segregation_of_duties
+
+  - id: record_permits_the_order_someone_else_approved
+    principal:
+      person: rafael.costa
+      scopes: [erp.read, erp.write]
+    tool: record_invoice
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0002
+      amount: "6800.00"
+      description: Incident tooling, annual
+      submitted_by: priya-raman
+      status: approved
+      approved_by: ingrid-holm
+      order_status: open
+      recorded_by: null
+    expect:
+      outcome: allowed
+      reason: null
+
+  - id: record_refuses_an_order_already_billed
+    principal:
+      person: rafael.costa
+      scopes: [erp.read, erp.write]
+    tool: record_invoice
+    given:
+      cost_centre: CC-4100
+      vendor: ven_0004
+      amount: "380.00"
+      description: Lobby signage, replacement
+      submitted_by: priya-raman
+      status: approved
+      approved_by: tomas-weber
+      order_status: invoiced
+      recorded_by: ingrid-holm
+    expect:
+      outcome: refused
+      reason: already_invoiced

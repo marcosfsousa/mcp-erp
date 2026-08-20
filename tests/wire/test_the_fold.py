@@ -40,8 +40,8 @@ from typing import Any
 
 import pytest
 
+import fixtures
 import rpc
-import seeded_requisitions
 from mcp_erp import transport
 from requisitions import raised_by
 from tokens import mint
@@ -71,12 +71,12 @@ AMOUNT = "480.00"
 
 @pytest.fixture(scope="module", autouse=True)
 def requisitions() -> Iterator[None]:
-    """Start from the seeded four, with the descendant tables cleared.
+    """Start from the generated fixtures, with the descendant tables cleared.
 
     This module writes — it raises rows and decides them — so it must know where
     it began. Module-scoped for the reason every suite beside it states.
     """
-    seeded_requisitions.load()
+    fixtures.load()
     yield
 
 

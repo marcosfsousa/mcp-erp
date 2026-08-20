@@ -28,8 +28,8 @@ from mcp.shared.inbound import MCP_METHOD_HEADER
 from mcp_types.jsonrpc import METHOD_NOT_FOUND
 from mcp_types.version import HANDSHAKE_PROTOCOL_VERSIONS, LATEST_MODERN_VERSION
 
+import fixtures
 import rpc
-import seeded_requisitions
 from tokens import mint
 
 TOOL = "list_requisitions"
@@ -62,10 +62,10 @@ def requisitions() -> Iterator[None]:
     and the types job runs over `tests/`, so a second file of that name is a
     duplicate module to mypy.
 
-    #43 deletes `seeded_requisitions.py` and generates the rows from
-    `matrix.yaml` instead, and this fixture goes with it.
+    Since #43 the rows are generated from `matrix.yaml` rather than written
+    out by hand, and this fixture reloads what that generator rendered.
     """
-    seeded_requisitions.load()
+    fixtures.load()
     yield
 
 
@@ -119,7 +119,7 @@ def test_the_legacy_leg_is_authorized_identically_when_it_is_permitted() -> None
     assert _identifiers(legacy) == _identifiers(modern)
     # Against the seed rather than only against each other: two legs agreeing on
     # the wrong set would satisfy the line above and nothing else here.
-    assert _identifiers(legacy) == seeded_requisitions.identifiers_in("CC-4100")
+    assert _identifiers(legacy) == fixtures.identifiers_in("CC-4100")
 
 
 def test_token_verification_precedes_era_routing() -> None:

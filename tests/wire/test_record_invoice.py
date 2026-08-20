@@ -29,10 +29,18 @@ Recording is terminal, so an order shared between two tests would hand the secon
 one `already_invoiced` — and an order at all has to be minted through
 `approve_requisition`, because nothing else emits one.
 
-**Where this lives.** A principal, a tool and a resource mapped to an expected
-answer is `matrix.yaml`'s shape, and #43 has not written that file. `tests/wire/`
-is where ADR-0013 parks a wire assertion with no artifact to belong to yet, on
-the same terms as `test_approve_requisition.py` beside it.
+**Where this lives, since #43 wrote `matrix.yaml`.** The decision itself is a
+matrix row now — `(principal x tool x resource -> expected)` is exactly what that
+table is canonical for, and `tests/matrix/` drives one row per branch of this
+tool over the wire. What stays here is everything a row does not express: what
+the call *did* to the rows behind it, what the declaration says, and the
+argument errors that are not refusals at all. A row states which answer came
+back; these state what else was true afterwards.
+
+The overlap between the two is real and was not resolved by this ticket. #66's
+handoff moved five assertions — one per scope set the tool listing filters on —
+and named no others, so the rest stayed where they are and `tests/wire/README.md`
+records what a later ticket has to decide.
 """
 
 from collections.abc import Iterator
@@ -41,8 +49,8 @@ from typing import Any
 import httpx2
 import pytest
 
+import fixtures
 import rpc
-import seeded_requisitions
 from tokens import mint
 
 TOOL = "record_invoice"
@@ -57,6 +65,14 @@ AMOUNT = "480.00"
 
 RECORDER = "rafael.costa"
 """CC-4100, `invoice_clerk` and nothing else — the positive side of the second edge."""
+
+RECORDER_CENTRE = "CC-4100"
+"""His partition, named because one assertion needs a requisition he can read.
+
+The convergence below presents a *requisition's* identifier to a tool that
+hydrates orders, and the answer has to be `not_found` for the entity rather than
+for the partition — so the row it names is one he could otherwise see.
+"""
 
 APPROVER = "ingrid.holm"
 """CC-4100, `unlimited_approver` **and** `invoice_clerk`.
@@ -81,14 +97,14 @@ figures in a test run.
 
 @pytest.fixture(scope="module", autouse=True)
 def requisitions() -> Iterator[None]:
-    """Start from the seeded four, with the orders and invoices cleared.
+    """Start from the generated fixtures, with the orders and invoices cleared.
 
     This module writes three times over — a row raised, approved, then invoiced —
     so it must know where it began. The loader clears `invoice` before
     `purchase_order` before `requisition`, which is what makes the orders and
     invoices this module mints the only ones in their tables.
     """
-    seeded_requisitions.load()
+    fixtures.load()
     yield
 
 
@@ -405,7 +421,7 @@ def test_a_requisition_identifier_is_not_a_purchase_order() -> None:
     it never touches an invoice, which does not exist when the decision is taken.
     """
     absent = _record(RECORDER, ABSENT_ORDER)
-    requisition = _record(RECORDER, seeded_requisitions.ROWS[0].id)
+    requisition = _record(RECORDER, fixtures.a_row_in(RECORDER_CENTRE))
 
     assert requisition.content == absent.content, (requisition.text, absent.text)
 

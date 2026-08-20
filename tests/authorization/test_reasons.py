@@ -1,10 +1,20 @@
 """A reason is a record, the vocabularies are closed, and nothing maps between them.
 
-The mapping from a reason to its wire shape was a derivation in ADR-0002; here
-it is a construction invariant. These tests assert the invariant rather than
-re-deriving the table: that each reason states its own shape, that layer 2
-declares three of them, and that no lookup exists anywhere for a fourth to be
-missing from.
+These tests assert the *construction*: that a reason is a five-field frozen
+record, that layer 2 declares three of them, that the two enumerations it owns
+are closed, and that a domain can declare its own without registering it
+anywhere.
+
+**What each reason maps to is deliberately not here, since #43.** ADR-0003 asked
+for the reason-to-shape mapping in *exactly one dedicated test*, and the set it
+has to be asserted over is the **union** of layer 2's three and layer 3's four —
+which cannot be enumerated from a directory that survives ejection. So
+`tests/matrix/test_the_reason_mapping.py` owns it whole, and the two assertions
+that used to stand here — the three denial classes and their remedies, and both
+retry booleans on all three — went with it. Two places asserting a mapping is two
+places for it to disagree with itself, and the cost is stated plainly: the
+ejected run no longer checks the shapes, because the shapes are not a layer-2
+fact on their own.
 """
 
 from dataclasses import fields, is_dataclass
@@ -42,30 +52,6 @@ def test_layer_2_declares_exactly_three_reasons() -> None:
         "role_missing",
         "not_found",
     }
-
-
-def test_the_three_records_are_the_three_denial_classes() -> None:
-    """Refusal shape follows the remedy, and the three shapes are all reachable."""
-    assert INSUFFICIENT_SCOPE.denial_class is DenialClass.CHALLENGE
-    assert INSUFFICIENT_SCOPE.remedy is Remedy.REAUTHORIZE
-
-    assert ROLE_MISSING.denial_class is DenialClass.PROTOCOL_ERROR
-    assert ROLE_MISSING.remedy is Remedy.ADMINISTRATOR_GRANT
-
-    assert NOT_FOUND.denial_class is DenialClass.TOOL_RESULT
-    assert NOT_FOUND.remedy is Remedy.NONE
-
-
-def test_no_layer_2_reason_is_worth_retrying() -> None:
-    """Both booleans false on all three, and ``not_found`` is the load-bearing one.
-
-    ``retry_as_other_person_helps`` true on ``not_found`` would confirm that the
-    row exists and somebody else can see it, which is the existence oracle the
-    indistinguishable refusal is there to prevent.
-    """
-    for reason in REASONS:
-        assert not reason.retry_identical_helps
-        assert not reason.retry_as_other_person_helps
 
 
 def test_the_remedy_vocabulary_is_closed_at_four() -> None:

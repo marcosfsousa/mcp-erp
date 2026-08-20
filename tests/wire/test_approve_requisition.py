@@ -43,10 +43,18 @@ ADR-0003 chose a wipe per run over a reset between rows. Raising through
 `submit_requisition` is also the only way to get a row at a chosen amount into a
 chosen centre: the partition is the submitter's and no argument can change it.
 
-**Where this lives.** A principal, a tool and a resource mapped to an expected
-answer is `matrix.yaml`'s shape, and #43 has not written that file. `tests/wire/`
-is where ADR-0013 parks a wire assertion with no artifact to belong to yet, on
-the same terms as `test_submit_requisition.py` beside it.
+**Where this lives, since #43 wrote `matrix.yaml`.** The decision itself is a
+matrix row now — `(principal x tool x resource -> expected)` is exactly what that
+table is canonical for, and `tests/matrix/` drives one row per branch of this
+tool over the wire. What stays here is everything a row does not express: what
+the call *did* to the rows behind it, what the declaration says, and the
+argument errors that are not refusals at all. A row states which answer came
+back; these state what else was true afterwards.
+
+The overlap between the two is real and was not resolved by this ticket. #66's
+handoff moved five assertions — one per scope set the tool listing filters on —
+and named no others, so the rest stayed where they are and `tests/wire/README.md`
+records what a later ticket has to decide.
 """
 
 from collections.abc import Iterator
@@ -55,9 +63,9 @@ from typing import Any
 import httpx2
 import pytest
 
+import fixtures
 import requisitions as raising
 import rpc
-import seeded_requisitions
 from requisitions import raised_by
 from tokens import mint
 
@@ -101,13 +109,13 @@ put that hole there on purpose.
 
 @pytest.fixture(scope="module", autouse=True)
 def requisitions() -> Iterator[None]:
-    """Start from the seeded four, with the purchase orders cleared.
+    """Start from the generated fixtures, with the purchase orders cleared.
 
     This module writes twice over — a row raised, then decided — so it must know
     where it began. The loader clears `purchase_order` before `requisition`,
     which is what makes the orders this module mints the only ones in the table.
     """
-    seeded_requisitions.load()
+    fixtures.load()
     yield
 
 
@@ -463,7 +471,7 @@ def test_a_foreign_row_and_a_row_that_never_existed_answer_byte_identically() ->
     identifier = raised_by(SUBMITTER, "480.00")
 
     foreign = _decide(OUTSIDER, identifier)
-    absent = _decide(OUTSIDER, seeded_requisitions.ABSENT_IDENTIFIER)
+    absent = _decide(OUTSIDER, fixtures.ABSENT_IDENTIFIER)
 
     assert foreign.status_code == absent.status_code
     assert foreign.content == absent.content, (foreign.text, absent.text)
@@ -571,7 +579,7 @@ def test_permitted_and_refused_items_arrive_in_one_result_body() -> None:
     decided = raised_by(SUBMITTER, "480.00")
     refused = raised_by(SUBMITTER, WELL_ABOVE)
 
-    answers, marked = _answers(APPROVER, [decided, refused, seeded_requisitions.ABSENT_IDENTIFIER])
+    answers, marked = _answers(APPROVER, [decided, refused, fixtures.ABSENT_IDENTIFIER])
 
     assert marked is True
     assert answers[0]["requisition"]["id"] == decided
