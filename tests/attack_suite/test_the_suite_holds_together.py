@@ -28,6 +28,8 @@ be a suite with a hole in it — the reading `Decision matrix (wire)` already ta
 for the file this one is modelled on.
 """
 
+import subprocess
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -298,6 +300,79 @@ def test_the_collector_sees_the_two_shapes_that_could_have_escaped_it(tmp_path: 
     assert {entry.scenario for entry in scenarios.declarations(tmp_path)} == {
         "a_row",
         "another_row",
+    }
+
+
+def test_pytest_collects_exactly_what_the_collector_sees(tmp_path: Path) -> None:
+    """The third direction of the bijection, and the one nobody writes down.
+
+    *Every row has a falsifier* and *every falsifier names a row* are asserted
+    above. The direction neither covers is **no test in this directory declaring
+    nothing** — and a test pytest runs that :func:`~scenarios._tests_in` cannot
+    see satisfies both halves while breaking that one, invisibly.
+
+    Under pytest's defaults there were three such shapes: `*_test.py`, methods of
+    `Test*` classes, and a function named `testfoo`. `pyproject.toml` narrows
+    collection to what the collector implements rather than the collector growing
+    to match — one declaration of *what counts as a test here* instead of two
+    that must be kept equal.
+
+    **Asserted by running pytest, not by reading the setting.** Restating the
+    three patterns here would be the second declaration the narrowing exists to
+    avoid; what is checked instead is the equality itself, over a directory
+    holding one file of every shape. That is also the only form that stays true
+    if a later pytest changes what a pattern means.
+    """
+    (tmp_path / "test_seen.py").write_text("def test_it() -> None:\n    pass\n", encoding="utf-8")
+    (tmp_path / "suffix_test.py").write_text("def test_it() -> None:\n    pass\n", encoding="utf-8")
+    (tmp_path / "test_in_a_class.py").write_text(
+        "class TestThings:\n    def test_it(self) -> None:\n        pass\n", encoding="utf-8"
+    )
+    (tmp_path / "test_no_underscore.py").write_text(
+        "def testit() -> None:\n    pass\n", encoding="utf-8"
+    )
+
+    assert _collected_by_pytest(tmp_path) == {
+        f"{path.name}::{function.name}" for path, function in scenarios._tests_in(tmp_path)
+    }
+
+
+def _collected_by_pytest(directory: Path) -> set[str]:
+    """What pytest, configured as this repo configures it, collects from a directory.
+
+    A subprocess rather than an in-process hook, because the question is about
+    the settings in `pyproject.toml` and the run that reads them — an in-process
+    collection would inherit this session's own configuration and answer a
+    different question.
+
+    **`-c`, not `--rootdir`.** pytest finds its configuration by walking up from
+    the arguments, and the arguments here are a temporary directory outside the
+    checkout — so `--rootdir` moves where paths are reported from and leaves the
+    settings at their defaults, which is the very state this asserts against.
+    Naming the file is what makes the run the repo's own.
+    """
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-c",
+            str(scenarios.REPO / "pyproject.toml"),
+            str(directory),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    return {
+        line.strip().rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        for line in completed.stdout.splitlines()
+        if "::" in line
     }
 
 

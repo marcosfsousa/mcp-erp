@@ -53,7 +53,13 @@ from typing import Any, Final
 
 import yaml
 
-from mcp_erp.purchase_to_pay import approve_requisition, get_requisition, record_invoice
+from mcp_erp.purchase_to_pay import (
+    approve_requisition,
+    get_requisition,
+    list_requisitions,
+    record_invoice,
+    submit_requisition,
+)
 
 MATRIX = "docs/decision-matrix/matrix.yaml"
 """The canonical matrix definition, relative to the repository root.
@@ -144,7 +150,12 @@ class Principal:
 
 @dataclass(frozen=True, slots=True)
 class Expect:
-    """The **Decision** the row expects, and at most one further fact.
+    """The **Decision** the row expects, and the one further fact its tool owns.
+
+    Which further fact is not a choice the row makes: :data:`_KEY_OF_TOOL` ties
+    each key to the tool it belongs to, and a permitted row on a tool that owns
+    one states exactly that key. The three fields below are therefore ``None``
+    together on every refused row, and on every row of a tool owning no key.
 
     ``reason`` is the whole of a refusal's expectation. Wire shape, remedy and
     both retry booleans are **derived** from the ``Reason`` record the two layers
@@ -223,16 +234,20 @@ def read_matrix(text: str) -> Matrix:
     state the five tools cannot reach, so a fixture in one of them would be data
     the exhibit is asserting against and could never have written.
 
-    The other three are about the table itself: a duplicated row identifier, a
-    reason on a permitted row, and a ``given`` on a tool that names no resource.
-    Both block parsers additionally refuse a key they do not know, so a misspelled
-    field fails here rather than as a wire assertion two jobs later.
+    The other four are about the table itself: a duplicated row identifier, a
+    reason on a permitted row, a ``given`` on a tool that names no resource, and
+    a per-tool fact that is not the one the row's tool and decision call for —
+    :func:`_expect` argues that last one, which #81 added when membership alone
+    turned out to let ``charged_to`` ride on a listing row. Both block parsers
+    additionally refuse a key they do not know, so a misspelled field fails here
+    rather than as a wire assertion two jobs later.
 
     Raises:
         ValueError: Two rows share an identifier; a ``given`` describes a state
             no tool could produce; a permitted row states a reason or a refused
-            row states none; or a row carries a ``given`` on a tool that acts
-            against no resource.
+            row states none; a row carries a ``given`` on a tool that acts
+            against no resource; or the per-tool facts a row expects are not the
+            ones its tool and its decision call for.
     """
     document = yaml.safe_load(text)
 
@@ -260,7 +275,7 @@ def read_matrix(text: str) -> Matrix:
                 ),
                 tool=str(entry["tool"]),
                 given=given,
-                expect=_expect(entry["expect"], row=identifier),
+                expect=_expect(entry["expect"], row=identifier, tool=str(entry["tool"])),
             )
         )
 
@@ -386,11 +401,75 @@ _GIVEN_KEYS: Final = frozenset(
 )
 """Every field a ``given`` block states, and it states all of them or none."""
 
-_PER_TOOL_KEYS: Final = frozenset({"tools", "visible_partitions", "charged_to"})
+_KEY_OF_TOOL: Final[Mapping[str, str]] = {
+    list_requisitions.NAME: "visible_partitions",
+    submit_requisition.NAME: "charged_to",
+}
+"""Which of layer 3's tools owns which further fact, as a map rather than a set.
+
+**The tie, not the set.** Holding these as a flat set of legal keys is what let a
+row state ``charged_to`` on a listing row: every key was known and no row stated
+two, so the block parsed, expected nothing, and surfaced three jobs later as a
+wire assertion. Keyed by tool, *does this key belong here* has an answer, and
+:func:`_key_owned_by` is where it is asked.
+
+Absence from this map does **not** mean *owns nothing*: the listing is absent too,
+and owns :data:`_LISTING_KEY`. The tools that own nothing are named in
+:data:`_NO_FURTHER_FACT`, and :func:`_key_owned_by` is what reads the three
+constants together.
+"""
+
+_NO_FURTHER_FACT: Final = frozenset(
+    {get_requisition.NAME, approve_requisition.NAME, record_invoice.NAME}
+)
+"""The tools whose rows assert the decision, the reason, and nothing else.
+
+The same three names as :data:`_HYDRATES` and **not** the same set. That one
+answers *does a fixture serve this call*; this one answers *is there a further
+fact to expect*. They coincide today by arithmetic rather than by argument — a
+tool acting against a named row is a tool whose answer is the row itself — and
+holding them apart is what lets a sixth tool make one true and the other false
+without the coincidence having to be noticed first.
+"""
+
+_LISTING_KEY: Final = "tools"
+"""The further fact a listing row expects: the names the listing must return.
+
+Named by its key rather than by its call, for the reason :data:`_HYDRATES` gives
+— the call is ``tools/list``, which is layer 1's word and has no business being
+an executable constant in this package.
+"""
+
+_PER_TOOL_KEYS: Final = frozenset(_KEY_OF_TOOL.values()) | {_LISTING_KEY}
 """The one further fact a row may expect, chosen by which tool it names."""
 
 _EXPECT_KEYS: Final = frozenset({"decision", "reason"}) | _PER_TOOL_KEYS
 """Every key an ``expect`` block may carry. Anything else is a misspelling."""
+
+
+def _key_owned_by(tool: str) -> str | None:
+    """The one further fact a row on this tool expects, or ``None`` if it owns none.
+
+    **Stated as the calls layer 3 owns, with the listing as the complement** —
+    the same construction :data:`_HYDRATES` is written in and for the same
+    reason: every name written here is one this package owns, and the one call
+    that is layer 1's is reached by not being any of them.
+
+    **The complement is only sound because the tool names are checked elsewhere**,
+    and this is deliberately not the place that checks them: a name neither map
+    holds reads as the listing here and is then held to stating ``tools``, which
+    is a wrong diagnosis rather than a silent pass. What refuses it is
+    ``tests/matrix/test_the_matrix_holds_together.py``'s
+    ``test_every_tool_the_server_declares_is_named_by_a_row``, which holds the
+    tools the rows name equal to ``driver.ACTIONS`` and the listing — in the
+    suite, where ``tools/list`` is already spelled. Naming which tool owns what is
+    this map's job; naming which tool names exist is not.
+    """
+    if tool in _KEY_OF_TOOL:
+        return _KEY_OF_TOOL[tool]
+    if tool in _NO_FURTHER_FACT:
+        return None
+    return _LISTING_KEY
 
 
 def _identifier(prefix: str, ordinal: int) -> str:
@@ -482,32 +561,36 @@ def _given(entry: Mapping[str, Any] | None, *, row: str) -> Given | None:
     )
 
 
-def _expect(entry: Mapping[str, Any], *, row: str) -> Expect:
-    """One expectation block, with the decision and the reason held to each other.
+def _expect(entry: Mapping[str, Any], *, row: str, tool: str) -> Expect:
+    """One expectation block, held to the row's decision, its reason and its tool.
 
-    **Unknown keys are refused, and so is a second per-tool key.** The three
-    further keys are optional by nature — a row states the one its own tool
-    asserts on — which is exactly the shape where ``.get()`` turns a misspelling
-    into silence: ``visible_partition`` would parse, expect nothing, and surface
-    as a wire assertion in the Compose job rather than as a table defect. So the
-    key set is checked against what this parser knows, which is the same loudness
-    :func:`_given` gets for free by subscripting.
+    **Unknown keys are refused, and so is a per-tool key that is not this tool's.**
+    The three further keys are optional by nature — a row states the one its own
+    tool asserts on — which is exactly the shape where ``.get()`` turns a
+    misspelling into silence: ``visible_partition`` would parse, expect nothing,
+    and surface as a wire assertion in the Compose job rather than as a table
+    defect. So the key set is checked against what this parser knows, which is
+    the same loudness :func:`_given` gets for free by subscripting.
+
+    **Membership was not enough**, which is why ``tool`` is an argument. Checking
+    that a key is one of the three and that no row states two let ``charged_to``
+    ride on a listing row: known, singular, and about a tool the row does not
+    name. What is checked instead is a biconditional — a permitted row states its
+    own tool's key and no other, a refused row states none, and a tool that owns
+    no key has none to state — because a call that was refused wrote nothing and
+    returned nothing for a further fact to be about.
 
     Raises:
         ValueError: The decision is neither of the two words; a permitted row
             states a reason, or a refused row states none; the block carries a
-            key this parser does not know; or it carries more than one per-tool
-            key. A refusal with no reason would be a row asserting only that
-            *something* went wrong, which is the assertion this table exists
-            instead of.
+            key this parser does not know; or the per-tool keys it states are not
+            exactly the one its tool and decision call for. A refusal with no
+            reason would be a row asserting only that *something* went wrong,
+            which is the assertion this table exists instead of.
     """
     unknown = set(entry) - _EXPECT_KEYS
     if unknown:
         raise ValueError(f"row {row!r} expects keys this parser does not know: {sorted(unknown)}")
-
-    stated = sorted(set(entry) & _PER_TOOL_KEYS)
-    if len(stated) > 1:
-        raise ValueError(f"row {row!r} states more than one per-tool expectation: {stated}")
 
     decision = str(entry["decision"])
     if decision not in (PERMITTED, REFUSED):
@@ -519,6 +602,15 @@ def _expect(entry: Mapping[str, Any], *, row: str) -> Expect:
     reason = _optional(entry["reason"])
     if permitted != (reason is None):
         raise ValueError(f"row {row!r} expects {decision!r} and states reason {reason!r}")
+
+    owned = _key_owned_by(tool)
+    due = {owned} if permitted and owned is not None else set()
+    stated = set(entry) & _PER_TOOL_KEYS
+    if stated != due:
+        raise ValueError(
+            f"a {decision} {tool!r} row expects {sorted(due)}, "
+            f"and row {row!r} states {sorted(stated)}"
+        )
 
     return Expect(
         permitted=permitted,

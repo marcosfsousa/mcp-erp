@@ -22,6 +22,7 @@ in the test is not an exception, it is an absence of checking.
 """
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -270,10 +271,93 @@ def test_an_issuer_side_role_name_is_carried_through_uninterpreted() -> None:
 
 def test_a_duplicated_subject_fails_at_the_renderer() -> None:
     """Two people cannot share a subject; the directory key would collide."""
-    text = _seed_text(subject="twice") + _person_block(subject="twice")
+    text = _seed_text(subject="twice", username="first.person") + _person_block(
+        subject="twice", username="second.person"
+    )
 
     with pytest.raises(ValueError, match="duplicate subject"):
         read_identity_seed(text)
+
+
+def test_a_duplicated_username_fails_at_the_renderer() -> None:
+    """Two people cannot share a username; the realm import would be rejected.
+
+    Not a directory key — the directory is keyed by issuer and subject, and
+    :class:`~mcp_erp.authorization.identity.Identity` says why. It is the realm's
+    key, and a user import naming one twice is a file the authorization server
+    refuses whole, which is the failure this loader exists to move earlier.
+    """
+    text = _seed_text(subject="first", username="shared.name") + _person_block(
+        subject="second", username="shared.name"
+    )
+
+    with pytest.raises(ValueError, match=re.escape("duplicate username 'shared.name'")):
+        read_identity_seed(text)
+
+
+def test_an_issuer_with_no_last_path_segment_fails_at_the_renderer() -> None:
+    """A trailing slash would otherwise render an empty realm name everywhere.
+
+    The realm is the issuer's last path segment rather than a second authored
+    copy of it, so the one input that segment cannot be taken from has to be
+    refused where it is read. Nothing downstream would notice: the user import
+    would carry ``"realm": ""`` and the rendering would be wrong in every file
+    at once, with no line of the seed to point at.
+    """
+    with pytest.raises(ValueError, match="names no realm"):
+        read_identity_seed(_seed_text(subject="anybody", issuer="https://issuer.example/realms/"))
+
+
+@pytest.mark.parametrize(
+    ("column", "missing"),
+    [
+        # `null` and the key being absent altogether are one branch in the
+        # loader and two ways to author the same defect, so both are stated —
+        # the `.get()` that reads them cannot tell them apart, and a falsifier
+        # for one is not a falsifier for the other until it is written down.
+        ("roles", "    roles: null\n    realm_roles: []\n"),
+        ("roles", "    realm_roles: []\n"),
+        ("realm_roles", "    roles: []\n    realm_roles: null\n"),
+        ("realm_roles", "    roles: []\n"),
+    ],
+)
+def test_a_person_stating_no_roles_at_all_fails_as_a_seed_defect(column: str, missing: str) -> None:
+    """Absent or null, which is a malformed row — not the empty list, which is Priya.
+
+    ``roles: []`` is the role-column exception and ADR-0007 calls it
+    load-bearing, so it stays legal. What is refused is the column being missing
+    or ``null``, which reached ``sorted`` and reported itself as a `TypeError`
+    from the standard library rather than as a defect naming the row.
+
+    Both columns, because the loader reads them through one helper and a
+    refusal asserted on only one of them is a refusal half asserted.
+    """
+    text = (
+        "issuer: https://issuer.example/realms/exhibit\n"
+        "password: not-a-secret\n"
+        "cost_centres: []\n"
+        "vendors: []\n"
+        "people:\n"
+        "  - name: A Person\n"
+        "    subject: rolesless\n"
+        "    username: a.person\n"
+        "    cost_centre: P-1\n" + missing
+    )
+
+    with pytest.raises(ValueError, match=re.escape(f"'rolesless' states no {column!r}")):
+        read_identity_seed(text)
+
+
+def test_a_person_holding_no_server_role_is_not_a_defect() -> None:
+    """The empty list is the state Priya Raman is in, and the exhibit needs it.
+
+    Stated beside the refusal above because the two are one line apart in the
+    loader, and a tightening that swallowed this case would delete the
+    scope-without-role state ADR-0007 keeps reachable.
+    """
+    seed = read_identity_seed(_seed_text(subject="no-roles", roles=[], realm_roles=["approver"]))
+
+    assert seed.identities[0].roles == ()
 
 
 def test_a_subject_too_long_for_the_realm_fails_at_the_renderer() -> None:
@@ -342,14 +426,16 @@ def _seed_text(
     subject: str,
     roles: list[str] | None = None,
     realm_roles: list[str] | None = None,
+    username: str = "a.person",
+    issuer: str = "https://issuer.example/realms/exhibit",
 ) -> str:
     """A one-person seed, for the cases the committed organisation cannot show."""
     return (
-        "issuer: https://issuer.example/realms/exhibit\n"
+        f"issuer: {issuer}\n"
         "password: not-a-secret\n"
         "cost_centres: []\n"
         "vendors: []\n"
-        "people:\n" + _person_block(subject, roles, realm_roles)
+        "people:\n" + _person_block(subject, roles, realm_roles, username)
     )
 
 
@@ -357,12 +443,19 @@ def _person_block(
     subject: str,
     roles: list[str] | None = None,
     realm_roles: list[str] | None = None,
+    username: str = "a.person",
 ) -> str:
-    """One `people` entry, in the seed's own shape."""
+    """One `people` entry, in the seed's own shape.
+
+    ``username`` is a parameter rather than a constant because a second block
+    appended to a first is how the duplicate-key cases are built, and two of
+    them turn on which key is duplicated — so a block that always carried the
+    same username would make the subject case assert the username refusal.
+    """
     return (
         f"  - name: A Person\n"
         f"    subject: {subject}\n"
-        f"    username: a.person\n"
+        f"    username: {username}\n"
         f"    cost_centre: P-1\n"
         f"    roles: {json.dumps(roles or [])}\n"
         f"    realm_roles: {json.dumps(realm_roles or [])}\n"
