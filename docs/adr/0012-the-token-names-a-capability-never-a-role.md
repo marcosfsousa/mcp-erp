@@ -4,6 +4,7 @@
 - **Date:** 2026-08-16
 - **Ticket:** [#11 Settle scope granularity and naming](https://github.com/marcosfsousa/mcp-erp/issues/11)
 - **Evidence:** [ADR-0002](0002-refusal-shape-follows-the-remedy.md), [ADR-0003](0003-the-schema-is-the-policy-functions-argument-list.md), [ADR-0004](0004-layer-2-is-a-portable-pattern-layer-3-is-ejectable.md), [ADR-0007](0007-the-realm-is-the-exhibit.md); map constraints #2, #3, #10; RFC 6749 §3.3, RFC 6750 §3, RFC 9728
+- **Amended:** 2026-08-20 — additive, by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46), which built the conformance client. The open verification item is **answered by observation**: Keycloak honours RFC 6749 §3.3's `MUST` on the authorization code flow, so the outcome is a conformance proof and the normative register gains no row. See *One open verification item*. No decision here is changed.
 
 ## Question
 
@@ -142,7 +143,7 @@ Falsified the way ADR-0004 requires: **deleting the layer-3 module leaves layer 
 
 The choice of `decide` is what makes this claim honest rather than aspirational — it beat `approve` precisely because all three words survive ejection. Had `approve` won, the vocabulary would have been layer 3 wearing a layer-2 label.
 
-### One open verification item
+### ~~One open verification item~~ — answered, and it is honoured
 
 The role scope mapping above deliberately manufactures the situation RFC 6749 §3.3 governs: a person without `approver` or `unlimited_approver` requests `erp.decide` and silently does not receive it, because Keycloak omits an unpermitted scope and the flow succeeds. That behaviour is itself conformant — the same section says the authorization server *"MAY fully or partially ignore the scope requested by the client"* — so it is a property of the design, not a Keycloak quirk.
 
@@ -155,6 +156,22 @@ But the narrowing triggers a `MUST`:
 **Whether Keycloak honours this on the authorization code flow is unverified.** The issues found ([keycloak#29614](https://github.com/keycloak/keycloak/issues/29614), [keycloak#30704](https://github.com/keycloak/keycloak/issues/30704)) concern token exchange and refresh, not our path, and do not settle it.
 
 The conformance client compares the `scope` response parameter against what it requested and reports any silent narrowing. The outcome is decided by observation and **not pre-committed here**: if Keycloak honours the `MUST`, the exhibit gains a conformance proof and no register row; if it does not, this becomes **a normative register row of its own**, in the same shape as the RFC 8707 finding ADR-0005 already carries. *(Number dropped 2026-08-19 by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which took row 6 for an unrelated interpretation before this one was ever observed. Reserving a register row by number reserves nothing: the register assigns numbers on creation, and two documents claimed the same one within a fortnight. Register rows are cited by what they say from here on.)* Writing the row now would record a gap nobody has observed, in a document whose entire value is being trustworthy.
+
+*Answered 2026-08-20 by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46), which built the conformance client and observed it.* **Keycloak honours the `MUST`.**
+
+Rafael Costa holds `invoice_clerk` and neither deciding role. The client requests `erp.read erp.write erp.decide` — derived from this server's own `WWW-Authenticate` challenge rather than from a list the client holds — and the authorization code flow completes. The token carries `erp.read erp.write`, and the token response carries:
+
+```
+"scope": "erp.write erp.read"
+```
+
+So the parameter is present, and it reports the granted scope rather than echoing the requested one. A client learns it was narrowed without decoding anything, which is the whole of what §3.3 asks for. Verified on 26.7.1, through the flow this section named as the one that would decide it — not through token exchange or refresh, which is what the two Keycloak issues above concern and what makes them still not evidence either way.
+
+**The exhibit gains a conformance proof and the register gains no row.** `test_a_declined_scope_is_reported_in_the_scope_response_parameter` is where it lives, in `tests/conformance/`. There is no gap to record, and the sentence above stands unchanged as the reason a row is not written.
+
+**The reading has to be taken off the wire, and that is a finding of its own.** RFC 6749 §5.1 lets an authorization server omit the parameter when nothing was narrowed, and the protocol package conformantly fills an absent one in from what it requested — so a client that read its own token model could not tell *reported* from *assumed*, and would have recorded a proof it had not observed. The conformance client wraps the auth flow and reads the token response's own `scope` key as it passes.
+
+**One thing this does not generalise to**, also found by running it. Keycloak does **not** narrow every unentitled scope away silently. `offline_access` is refused outright at the token endpoint — `not_allowed: Offline tokens not allowed for the user or client` — rather than omitted from the grant, so the §3.3 behaviour proved here is a property of the role scope mapping mechanism rather than of the authorization server in general. `tests/conformance_client.py`'s `GRANT_TYPES` carries what the client does about it.
 
 ## Options considered
 

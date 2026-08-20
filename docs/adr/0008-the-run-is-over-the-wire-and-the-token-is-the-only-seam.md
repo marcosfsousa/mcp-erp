@@ -5,6 +5,7 @@
 - **Ticket:** [#8 Decide what performs the run](https://github.com/marcosfsousa/mcp-erp/issues/8)
 - **Evidence:** [`docs/research/0004-mcp-client-landscape.md`](../research/0004-mcp-client-landscape.md), [`docs/research/0003-2026-07-28-authorization-requirements.md`](../research/0003-2026-07-28-authorization-requirements.md); [ADR-0001](0001-off-the-shelf-clients-cannot-run-a-modern-only-server.md), [ADR-0004](0004-layer-2-is-a-portable-pattern-layer-3-is-ejectable.md), [ADR-0006](0006-fail-closed-in-a-fixed-order.md), [ADR-0007](0007-the-realm-is-the-exhibit.md); Client Identity Metadata Document draft `-00` §3 and §6.5; map constraints #1, #4, #5, #6, #8, #9, #10; official Python `mcp` 2.0.0 documentation, read 2026-08-11
 - **Amended:** 2026-08-18 — additive, by [#53](https://github.com/marcosfsousa/mcp-erp/issues/53). This ADR made a document's path immutable without saying that its *origin* is the other half of the identifier and is held by nothing. See *The identifier's origin is held by an account name*. No decision here is changed.
+- **Amended:** 2026-08-20 — additive, by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46), which built the conformance client, the preflight and the blocking job. The packaging claim is executed rather than read, and three things this ADR did not anticipate are recorded. See *Consequences*. No decision here is changed.
 
 ## Question
 
@@ -153,5 +154,14 @@ They are decided the same way here, but for different reasons. The capability sh
 - **#12 (module boundaries)** inherits the one-package-two-entry-points shape, and the auth object as the seam between them.
 - **#15 (walkthrough)** owns which Person the conformance client authenticates as. The demonstrator's script is the exhibit's narrative, and ADR-0007 has already nominated the moment worth using.
 - **#10 (deployment)** is untouched by design: the hosted document decoupled a public HTTPS URL from a public deployment, so that ticket stays open on its own merits.
+
+
+**Executed 2026-08-20 by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46), and the caveat above is discharged for this ADR's own leg.** The authentication attachment point is what this document read it to be: `mcp` 2.0.0's unified `Client` takes no authentication parameter, the auth object hangs on the HTTP client underneath the transport, and `connect(auth)` runs the identical protocol conversation with an `OAuthClientProvider` and with a pre-minted bearer. *Mint versus earn is a constructor argument* is now an assertion in `tests/conformance/` rather than a reading of documentation.
+
+Three things this document did not anticipate, all found by running it:
+
+1. **Keycloak's Client Identity Metadata Document support is a client policy, not a switch.** `--features=cimd` makes the discovery document advertise support and the realm still refuses the identifier until a policy admits it. [ADR-0007](0007-the-realm-is-the-exhibit.md) carries what the realm gained, including the realm-level default client scopes a provisioned client inherits.
+2. **The `localhost` callback survives a conformant configuration.** The rejected vendor claim above is refuted twice over: the draft prohibits nothing, and Keycloak's own executor accepts the loopback redirect with its `http`-scheme allowance switched **off**, because that flag governs the identifier and the URL-valued metadata properties rather than `redirect_uris`.
+3. **The scope selection is the resource server's, not the client's.** The protocol package derives what it requests from the `WWW-Authenticate` challenge, so the requested-versus-granted comparison this ADR handed to the conformance client turns out to be a statement about the authorization server rather than about a list the client held. [ADR-0012](0012-the-token-names-a-capability-never-a-role.md) records the answer: the `MUST` is honoured, and the normative register gains no row.
 
 **Caveat, in the same terms ADR-0001 used.** Nothing here was executed. The protocol package's era routing, its authentication attachment point and the absence of a legacy switch all derive from its published documentation, read 2026-08-11, because there is no Python in this repository yet to run them against. ADR-0009's three assertions exist precisely to convert the load-bearing part of that reading into something executed.

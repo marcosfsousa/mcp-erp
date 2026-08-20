@@ -9,8 +9,8 @@
 # the layer without anyone opening logs. ADR-0013 enumerates the jobs and what a
 # red one means, one per seam; the jobs here are the seams that exist, and the
 # rest arrive with the seams they assert. `Lint and types` means an ordinary
-# Python defect; `Layer boundaries` means someone crossed a layer boundary.
-# Neither may come to mean the other.
+# Python defect; `Layer boundaries` means someone crossed a layer boundary;
+# `Authorization code flow` means the flow broke. None may come to mean another.
 #
 # **The count is not the rule and is not written down.** ADR-0013's heading
 # named one and #66 struck it, because a derived number kept where it can be
@@ -52,16 +52,23 @@
 # Full statement and reasoning: map issue #2, constraint `#13`.
 #
 #
-# NO SECRETS, DELIBERATELY
-# ------------------------
-# Configure none unless a job genuinely cannot run without one. A keyless run is
-# a standing assertion that the suites are offline: a test that starts reaching
-# a live service fails here even when it passes on a developer machine with a
-# populated .env. That assertion is worth more than the convenience of having a
-# key available, and it decays the moment one is added "just for now".
+# NO SECRETS, DELIBERATELY — AND *OFFLINE* IS A PER-JOB CLAIM
+# ------------------------------------------------------------
+# Configure none unless a job genuinely cannot run without one. It is also the
+# cheapest way to keep a fork's pull request from needing privileged access to
+# be reviewable, and it decays the moment one is added "just for now".
 #
-# It is also the cheapest way to keep a fork's pull request from needing
-# privileged access to be reviewable.
+# This file used to draw a second conclusion from that — *a keyless run is a
+# standing assertion that the suites are offline* — and #46 broke the
+# implication rather than the premise. `Authorization code flow` fetches a
+# public GitHub Pages URL, which needs no credential: it is keyless and it is
+# not offline. ADR-0008 replaced the repository-wide claim with a **per-job**
+# one, which is more honest than the version it replaces.
+#
+# So every job below states what it reaches, including the ones that reach
+# nothing. An assertion only some jobs make is one nobody checks, and the value
+# of the claim is that a suite which quietly starts calling a live service fails
+# here even when it passes on a developer machine with a populated .env.
 #
 #
 # NOTHING EXTERNAL FLOATS — WITH ONE NAMED EXCEPTION
@@ -114,6 +121,8 @@ permissions:
 jobs:
   lint-and-types:
     name: Lint and types
+    # Keyless and offline. Every check here runs against the checkout; the only
+    # thing that leaves the runner is the dependency install.
     runs-on: ubuntu-latest
     # Every job gets one. The budget is normally dominated by dependency
     # install, so pick a number the job clears comfortably and read anything
@@ -171,6 +180,7 @@ jobs:
 
   layer-boundaries:
     name: Layer boundaries
+    # Keyless and offline. import-linter reads a static import graph.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -191,6 +201,8 @@ jobs:
 
   layer-2-ejects-clean:
     name: Layer 2 ejects clean
+    # Keyless and offline, and the strongest instance of it: layer 2's suite runs
+    # with the domain deleted and no Docker, so there is nothing for it to reach.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -241,6 +253,8 @@ jobs:
   # cover the other's half.
   seed-renders-clean:
     name: Seed renders clean
+    # Keyless and offline. Both generators read committed files and write
+    # committed files.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -326,6 +340,10 @@ jobs:
   # boundary was crossed.
   published-documents-are-immutable:
     name: Published documents are immutable
+    # Keyless and offline. It reads this repository's own history and nothing
+    # else — deliberately not the published copy, which is the *next* job's
+    # question and a different one: this asserts what the commit did, and a
+    # network fetch would make a repository property depend on an outage.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -414,14 +432,20 @@ jobs:
   #
   # DELIBERATELY NOT FACTORED INTO A SHARED ACTION
   # ----------------------------------------------
-  # Three more Compose jobs are coming — #43, #44 and #46 — and they inherit
-  # this pattern by reading it, not by calling it. `Authorization code flow` is
-  # `yes + network` in ADR-0013's table and is already known to differ, so a
-  # shared seam designed against one real consumer and three imagined ones
-  # would be built on the wrong example. Factor it when a second job has
-  # actually been written and the common part is observed rather than guessed.
+  # Two more Compose jobs are coming — #43 and #44 — and they inherit this
+  # pattern by reading it, not by calling it. The third, `Authorization code
+  # flow`, is below: it is `yes + network` in ADR-0013's table and differs
+  # exactly where that predicted it would, so the pair now standing here is
+  # one real consumer and one deliberate exception rather than one consumer
+  # and three imagined ones. Factor it when the common part is observed
+  # across more than a preflight step and a bring-up, not before.
   server-posture:
     name: Server posture
+    # Keyless, and not offline in the way the Docker-free jobs are: it
+    # builds and pulls images and installs the locked environment, and past
+    # that every address is a container talking to a container or this
+    # runner talking to the gateway it just started. Nothing it asserts
+    # depends on a service outside this repository.
     runs-on: ubuntu-latest
     # Larger than the ten the Docker-free jobs get, for one reason: this builds
     # two images, pulls two more, and stands up five containers — four of them
@@ -599,6 +623,87 @@ jobs:
       # context. What it buys is the difference between a red check whose
       # evidence ends at pytest's traceback and one that shows which container
       # said what.
+      - name: What the containers said
+        if: failure()
+        run: docker compose logs --no-color
+
+  # ADR-0008's own job, and the repository's first one that is meant to block.
+  # A red here means **the flow broke** — not that Python is broken, not that a
+  # published document was rewritten. What it proves is the only thing in this
+  # exhibit a machine can prove about the authorization code flow: a client
+  # registered nowhere in the realm identifies itself by a document GitHub Pages
+  # serves, a Person logs in and consents, and the token that comes back reaches
+  # a tool.
+  #
+  # Blocking on something outside our control is defensible because of three
+  # mechanisms rather than trust, and two of them are steps below: the preflight,
+  # and exact version pinning on every image. The third is `Published documents
+  # are immutable` above. What remains is a Pages or egress outage inside a merge
+  # window, which the `main` ruleset's Admin bypass absorbs at the cost of one
+  # recorded override.
+  authorization-code-flow:
+    name: Authorization code flow
+    # **Keyless and not offline — the one job of which both halves are true.**
+    # It fetches the published Client Identity Metadata Document, which is
+    # public, so no credential exists to add; and the containers fetch the same
+    # URL, because dereferencing it is what the authorization server is being
+    # asked to do. Every other outbound address is a container talking to a
+    # container.
+    runs-on: ubuntu-latest
+    # Longer than the Docker-free jobs, and the budget is dominated by building
+    # the Keycloak image — `kc.sh build` with `--features=cimd` runs once per
+    # runner, since nothing here has a layer cache to inherit.
+    timeout-minutes: 20
+    steps:
+      # Floating major, per the named exception above.
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      # **Before Compose, deliberately.** Without this step, GitHub Pages being
+      # unreachable and this server rejecting a valid flow present identically
+      # as *the flow failed*. With it, an external cause fails a named step
+      # before our server has run at all — which is this file's own rule, that a
+      # red check should name the layer without anyone opening logs.
+      #
+      # It asserts a `200` and that the body hashes to the committed copy, so a
+      # document that changed underneath its identifier is caught here too. That
+      # is the half `Published documents are immutable` cannot see: that job
+      # reads this repository's history, and this one reads what is being served.
+      - name: Preflight — the hosted document answers as committed
+        run: uv run python tests/conformance_client.py --preflight
+
+      # The issuer is `http://keycloak:8081/realms/mcp-erp` and that one string
+      # has to resolve identically on both sides of the container boundary.
+      # Inside, Compose's own DNS answers; outside, this line does. ADR-0005
+      # §Consequences priced exactly this and accepted it.
+      #
+      # The alternative is `KEYCLOAK_BASE_URL`, which moves the address the
+      # requests go to. It exists for a reader who cannot edit their hosts file
+      # and is deliberately *not* used here: a run that rebased nothing is the
+      # faithful one, and the gate should be the faithful one.
+      - name: Resolve the issuer's hostname
+        run: echo "127.0.0.1 keycloak" | sudo tee -a /etc/hosts
+
+      # `--wait` blocks on the healthchecks `compose.yaml` defines, which are
+      # readiness checks rather than liveness pings — the Keycloak probe matches
+      # the realm's own metadata document on the exact issuer, so a green wait
+      # means the realm is imported and the hostname is configured to stamp the
+      # issuer the seed declares.
+      - name: Bring the exhibit up
+        run: docker compose up -d --build --wait
+
+      - name: The authorization code flow
+        run: uv run pytest tests/conformance
+
+      # The one place a reader of a red check needs more than the step name. The
+      # flow spans four containers, and a refusal from Keycloak says why in its
+      # own log and nowhere else.
       - name: What the containers said
         if: failure()
         run: docker compose logs --no-color

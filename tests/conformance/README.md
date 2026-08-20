@@ -1,7 +1,126 @@
 # `tests/conformance/` — the authorization code flow, wire and outbound
 
-The proof the map asks for: a real OAuth flow completing against a running
-server. The only suite that reaches the network, and its preflight names
-external causes first so an outage does not read as a regression.
+The proof map constraint `#1` calls primary: a real OAuth flow completing
+against a running server. Every other suite here is handed a token; this one
+**earns** one. A client that is registered nowhere in the realm identifies itself
+by a document GitHub Pages serves, a Person logs in and consents, the code is
+redeemed, and the token reaches a tool through the whole gate chain.
 
-Needs Compose plus network. Lands with #46.
+The only suite that reaches the network, and its preflight names external causes
+first so an outage does not read as a regression.
+
+Landed with [#46](https://github.com/marcosfsousa/mcp-erp/issues/46), which is
+also when the `Authorization code flow` job started running it.
+
+## The client is beside this directory, not inside it
+
+`tests/conformance_client.py`, above the four test directories with `tokens.py`
+and `rpc.py`, for the reason `tokens.py` states: shared tooling that lives in one
+artifact's directory becomes that artifact's and gets copied by the next.
+
+It is [ADR-0008](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/adr/0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md)'s
+**one library surface with two entry points** — this suite imports it, and its
+`__main__` block performs the flow from a command line. The two differ by
+**exactly one object**, and that is a property of the protocol package rather
+than a choice: `mcp` 2.0.0's unified `Client` takes no authentication parameter,
+so authentication attaches to the HTTP client underneath the transport.
+`connect()` takes an `httpx2.Auth` and knows nothing else about it — `Flow`
+earns a token through the hosted document, `Bearer` presents one `tokens.py`
+minted. Mint versus earn is a constructor argument, not an architecture, and
+`test_minting_and_earning_differ_by_exactly_one_object` is that claim as an
+assertion rather than a diagram.
+
+## Running it
+
+```
+docker compose up -d --wait
+uv run pytest tests/conformance
+```
+
+Or watch one flow happen, which is the same code with a different caller:
+
+```
+uv run python tests/conformance_client.py --preflight
+uv run python tests/conformance_client.py priya.raman
+uv run python tests/conformance_client.py rafael.costa
+```
+
+The second pair is the interesting one. Priya Raman holds `approver` and is
+granted every scope requested; Rafael Costa holds `invoice_clerk` and neither
+deciding role, so `erp.decide` is declined and `approve_requisition` disappears
+from the listing.
+
+**The issuer has to resolve.** The protocol package follows a discovered
+endpoint verbatim and has no rebasing hook of its own, so this client needs the
+one line
+[ADR-0005](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/adr/0005-the-authorization-server-is-a-dependency-not-a-deliverable.md)
+priced:
+
+```
+127.0.0.1 keycloak
+```
+
+Without it, point the transport somewhere reachable — which moves the address
+the requests go to and never the issuer they assert:
+
+```
+KEYCLOAK_BASE_URL=http://localhost:8081 uv run pytest tests/conformance
+```
+
+The `Authorization code flow` job adds the hosts line rather than setting the
+variable, deliberately: a run that rebased nothing is the faithful one, and the
+gate should be the faithful one.
+
+**One assertion needs a cold boot.** Keycloak remembers a grant per Person and
+per client, so *login and consent were both posted* is a claim about the first
+flow of a boot. Continuous integration always is one — the database is in memory
+and the realm re-imports on every start — which is what
+[ADR-0012](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/adr/0012-the-token-names-a-capability-never-a-role.md)
+means by *"deterministic rather than sometimes-remembered"*. A reader who has
+already run the flow for that Person against the same container has a warm one;
+the assertion says so in its own failure message.
+
+## The preflight, and why it is a step rather than a fixture
+
+ADR-0008's second mechanism, and half the reason this job is allowed to block.
+Without it, Pages being unreachable and this server rejecting a valid flow
+present identically as *the flow failed*. With it, an external cause fails a
+**named step before our server has run at all**.
+
+It asserts an HTTP `200` — redirects deliberately not followed, because the
+`client_id` **is** the URL and a document served from somewhere else is a
+different client wearing this one's identifier — and that the body hashes to
+`public/clients/conformance/1.json`.
+
+That digest is the half `Published documents are immutable` cannot see. That job
+reads this repository's history and refuses a commit that rewrites a published
+document; this reads what is **actually being served**, which is a different
+question with a different failure.
+
+## What the run answered, and what it therefore does not record
+
+ADR-0012 left one thing open: Keycloak omits an unpermitted scope **silently**,
+and RFC 6749 §3.3 puts a `MUST` on the authorization server to report the
+narrowing in the `scope` response parameter. Whether it honoured that was
+unverified, and the outcome was deliberately not pre-committed — a conformance
+proof, or a normative register row.
+
+**Measured on 26.7.1: it honours it.** Rafael Costa requests
+`erp.read erp.write erp.decide`, the token carries `erp.read erp.write`, and the
+token response carries `"scope": "erp.write erp.read"`. So the exhibit gains a
+conformance proof and
+[`docs/normative-register.md`](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/normative-register.md)
+gains **no row**. There is no gap to record, and a register that recorded one
+anyway would be worth less for it.
+
+The reading is taken off the wire rather than out of the package's own model,
+and that detail is load-bearing. RFC 6749 §5.1 lets an authorization server omit
+the parameter when nothing was narrowed, and the package conformantly fills an
+absent one in from what it requested — which erases exactly the distinction this
+suite exists to observe. `Flow` wraps the auth flow and reads the token
+response's own `scope` key as it passes.
+
+**The behaviour is real but not general**, which the run also found. Keycloak
+refuses an unentitled `offline_access` at the token endpoint outright rather than
+omitting it from the grant. `conformance_client.GRANT_TYPES` carries that
+finding and what this client does about it.

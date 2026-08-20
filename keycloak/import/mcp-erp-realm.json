@@ -171,6 +171,53 @@
     }
   ],
 
+  "defaultDefaultClientScopes": ["basic", "mcp-erp-audience"],
+  "defaultOptionalClientScopes": ["erp.read", "erp.write", "erp.decide"],
+
+  "clientProfiles": {
+    "profiles": [
+      {
+        "name": "client-identity-metadata-document",
+        "description": "Accept a client that identifies itself by a document it hosts, instead of one registered here.",
+        "executors": [
+          {
+            "executor": "client-id-metadata-document",
+            "configuration": {
+              "cimd-allow-http-scheme": false,
+              "cimd-restrict-same-domain": false,
+              "only-allow-confidential-client": false,
+              "cimd-allow-permitted-domains": [
+                "marcosfsousa.github.io",
+                "localhost",
+                "127.0.0.1"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+
+  "clientPolicies": {
+    "policies": [
+      {
+        "name": "client-identity-metadata-document",
+        "description": "Bind the profile above to https client identifiers served from the exhibit's own origin.",
+        "enabled": true,
+        "conditions": [
+          {
+            "condition": "client-id-uri",
+            "configuration": {
+              "client-id-uri-scheme": ["https"],
+              "client-id-uri-allow-permitted-domains": ["marcosfsousa.github.io"]
+            }
+          }
+        ],
+        "profiles": ["client-identity-metadata-document"]
+      }
+    ]
+  },
+
   "clients": [
     {
       "clientId": "mcp-conformance",

@@ -164,6 +164,72 @@ Unlike the Cast, this one user is **authored**, and the rule at the top of this
 file is untouched by that: the split exists to keep generated content out of a
 file a person edits, and there is nothing generated here to overwrite.
 
+## What a hosted identity document costs the realm
+
+*Added 2026-08-20 by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46),
+which built the conformance client and found all of this by running it.*
+
+`--features=cimd` in the `Dockerfile` makes the discovery document advertise
+`"client_id_metadata_document_supported": true`, and that is where the free part
+ends. **The feature ships switched off in the realm.** An authorization request
+naming the published document as its `client_id` answers *Client not found* —
+`error="client_not_found"` in the event log — until the realm says which
+identifiers it will dereference.
+
+Keycloak implements the draft as a **client policy**, not as a realm switch, and
+both halves are in `mcp-erp-realm.json`:
+
+| | Provider id | What it does |
+| --- | --- | --- |
+| Profile executor | `client-id-metadata-document` | Fetches the document and provisions a client from it |
+| Policy condition | `client-id-uri` | Decides which `client_id` URLs reach that executor |
+
+Two settings in there are worth reading rather than copying:
+
+- **`cimd-allow-http-scheme` is off**, and the loopback callback still works.
+  The flag governs the client identifier and the URL-valued *metadata*
+  properties — `client_uri`, `logo_uri`, `tos_uri`, `policy_uri`, `jwks_uri` —
+  and `redirect_uris` is not among them. So the exhibit keeps the production
+  setting and `public/README.md`'s *only the document must be HTTPS, never the
+  redirect URI* survives contact with an implementation.
+- **`cimd-allow-permitted-domains` lists three hosts**, and it has to. The
+  executor checks the client identifier *and* the redirect URI against that
+  list, so `marcosfsousa.github.io` alone would refuse the document's own
+  `localhost` and `127.0.0.1` callbacks. The policy's condition is narrower —
+  `https` from `marcosfsousa.github.io` and nothing else — which is what decides
+  whether a stranger's document is looked at in the first place.
+
+**A provisioned client inherits the realm's defaults, and this realm had none.**
+The four hand-authored clients each name their own `defaultClientScopes` and
+`optionalClientScopes`, so nothing had ever needed realm-level ones — and a
+client the executor creates gets exactly those. It arrived with no `basic` scope
+(no `sub` claim), no `mcp-erp-audience` (no audience, so this server refuses the
+token at gate 4) and none of the three capability scopes, which answers an
+authorization request with `Invalid scopes: erp.read erp.write erp.decide`.
+
+So the realm declares them:
+
+```json
+"defaultDefaultClientScopes": ["basic", "mcp-erp-audience"],
+"defaultOptionalClientScopes": ["erp.read", "erp.write", "erp.decide"]
+```
+
+That is the same pair `mcp-conformance` names for itself, which is the point: the
+client that earns its identity and the client that was handed one differ by how
+they are known and by nothing else. It changes none of the four authored
+clients — each states its own lists, and the decoy still carries somebody else's
+audience — and the policy condition above is what keeps *any* client the realm
+provisions to identifiers from one origin.
+
+**`offline_access` is deliberately absent from that second list.** Keycloak
+advertises the scope in `scopes_supported` in every realm, and SEP-2207 has a
+client append it to the request when it declares `refresh_token`. No Person in
+the Cast holds the `offline_access` role, and Keycloak does **not** narrow an
+unentitled one away the way a role scope mapping narrows `erp.decide` — it
+refuses the token request outright with *Offline tokens not allowed for the user
+or client*. `tests/conformance_client.py`'s `GRANT_TYPES` carries the finding and
+what the client does about it.
+
 ## Two traps this directory pays for, beyond the three ADR-0007 banked
 
 Both were found by a flow stopping on them, not by reading.
