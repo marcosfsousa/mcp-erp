@@ -416,11 +416,11 @@ jobs:
   # not, the listing's declared schemas and freshness hint, two replicas behind
   # no sticky routing.
   #
-  # The clause that keeps it out of the two Compose jobs beside it is that
+  # The clause that keeps it out of the Compose jobs beside it is that
   # **nothing in `tests/wire/` reads a `Principal`.** An assertion whose
-  # expected value changes with the caller is `Decision matrix (wire)`'s and
-  # arrives with #43; an assertion that a defence held is `Attack suite
-  # (wire)`'s and arrives with #44. What is left is what the server says
+  # expected value changes with the caller is `Decision matrix (wire)`'s, which
+  # #43 landed below; an assertion that a defence held is `Attack suite
+  # (wire)`'s and still arrives with #44. What is left is what the server says
   # identically to everyone, which is one seam and one diagnosis.
   #
   # `tests/wire/` arrived with #37's fifth-directory amendment to ADR-0013 and
