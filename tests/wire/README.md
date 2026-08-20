@@ -10,6 +10,13 @@ everything `record_invoice` records.
 Needs Compose, with one exception named below. Landed with #37; #39 added two,
 #40 a third, #41 a fourth, #42 a fifth.
 
+**One seam, one diagnosis.** ADR-0013 names it *Server posture* and #66 gave it
+a job: *the server exposes, declares or deploys something other than what it
+should, with no caller's authorization involved.* The clause that draws the
+boundary is that **nothing here reads a `Principal`** — which is what keeps this
+directory out of the decision matrix's territory rather than beside it, and what
+decides every handoff argued below.
+
 ## Why there is a fifth directory
 
 ADR-0013 named four test directories **for artifacts** — the decision matrix,
@@ -23,9 +30,11 @@ places these three.
   `scenarios.yaml` and expects no `(principal × tool × resource)` row.
 - **Two replicas, round-robin, nothing remembered** is map constraint `#5`. It
   is a property of the deployment rather than of a caller.
-- The **tool listing's filter, `cacheScope` and `ttlMs`** will become four rows
-  of `matrix.yaml` when #43 writes it. Until that file exists there is nothing
-  to generate them from, and `tests/matrix/` is generated in its entirety.
+- The **tool listing's filter** will become five rows of `matrix.yaml` when #43
+  writes it — one per scope set the filter is exercised across. Until that file
+  exists there is nothing to generate them from, and `tests/matrix/` is
+  generated in its entirety. **`cacheScope` and the `ttlMs` cap are not among
+  them**, and the amendment below says why.
 - **What `submit_requisition` charges** (#39) is the same case one ticket later:
   a principal and a tool mapped to an expected answer is a matrix row, and there
   is still nothing to generate it from. It is not `state_handle_hijack` either —
@@ -94,6 +103,57 @@ class of reason: a property true by **absence** has no behaviour to drive. The
 alternative was a sixth directory holding one file. Recorded as an amendment to
 ADR-0013 by #41, which narrows the struck sentence above rather than keeping it.
 
+**The listing's freshness hint stays here, since #66.** `cacheScope`, the
+`ttlMs` cap, the declared schemas and `listChanged: false` were listed above as
+matrix-bound and are not: they are things the server states **identically to
+every caller**, so there is no `(principal × tool × resource)` to key them on and
+they never had a destination in `matrix.yaml`. The dividing line is this
+directory's own — what varies with the caller is the matrix's, what the server
+declares regardless is ours. Recorded as an amendment to ADR-0013 by #66.
+
+## What moves to #43, and what does not
+
+Named here rather than left for #43 to re-derive, because the rule is easy to
+state and the boundary is not obvious at every line. **An assertion whose
+expected value changes with the caller is decision-matrix business; an assertion
+the server makes identically to every caller stays.**
+
+Five of `test_tool_listing.py`'s assertions **move**, one per scope set the
+filter is exercised across:
+
+| Assertion | The row it becomes |
+| --- | --- |
+| `test_a_read_token_reaches_the_read_tools` | `erp.read` → the two reading tools |
+| `test_the_write_scope_reaches_the_write_tool_and_no_read_tool` | `erp.write` → the two writing tools |
+| `test_both_scopes_reach_the_union_and_nothing_else` | both → the union, and no deciding tool |
+| `test_the_deciding_scope_reaches_the_deciding_tool_for_a_person_who_may_not_use_it` | `erp.decide` → the deciding tool, role gate invisible |
+| `test_a_token_with_no_capability_scope_reaches_nothing` | no capability scope → nothing |
+
+Five **stay**, and each for a reason the rule gives directly:
+
+- `test_the_listing_is_private_and_expires_with_the_token` — `cacheScope` and
+  the `ttlMs` cap are declarations, identical for everyone.
+- `test_the_listing_declares_the_schemas_layer_three_authored` — likewise.
+- `test_the_tool_set_is_fixed_at_deploy` — `listChanged: false`, likewise.
+- `test_the_listing_is_a_function_of_the_token_and_not_of_the_person` — this is
+  the same rule read backwards. It asserts an invariance **across** callers
+  rather than a value that varies with one, so splitting it into two matrix rows
+  would keep both halves and lose the equality between them, which is the whole
+  claim.
+- `test_calling_a_tool_the_listing_omits_is_refused_and_says_which_scope` —
+  stays, and it is **not** a duplicate of the attack suite's `insufficient_scope`
+  row. That row defends the challenge's *shape*. This asserts the **agreement
+  between the listing and the call**: a tool the listing omits, called anyway, is
+  refused naming the scope that would have reached it. Nothing in
+  `scenarios.yaml` consults the listing, so handing it away would drop the
+  linkage rather than relocate it. Recorded for #44 as well.
+
+**The cost of the handoff is priced in the map, not left implicit.** Cutting the
+decision matrix — rank 3 on cut order `#9` — now takes the tool listing's scope
+filter with it, which was not true before #66. What survives the cut is
+everything in the table's second half, so *Server posture* stays whole and this
+directory keeps its seam.
+
 ## Running it
 
 ```
@@ -118,12 +178,24 @@ KEYCLOAK_BASE_URL=http://localhost:8081 uv run pytest tests/wire
 `MCP_ERP_BASE_URL` moves the server's address the same way; it defaults to the
 gateway's published `http://localhost:8080`.
 
-## Not yet in continuous integration
+## In continuous integration
 
-No job runs these. ADR-0013 fixes the job set at eight and hands the three
-Compose jobs to the tickets that own their suites — *Decision matrix (wire)* to
-#43, *Attack suite (wire)* to #44, *Authorization code flow* to #46 — and a
-ninth job named for this ticket would be a job named for a ticket rather than
-for a seam. #36 left Compose in the same position for the same reason. The
-evidence for this slice is a recorded run, not a green tick, and the pull
-request carries it.
+**`Server posture`** runs this directory on every pull request and every push to
+`main`, and #66 built it. It is the **first Compose bring-up in continuous
+integration** — the three jobs expected to bring one, #43, #44 and #46, all
+arrive later — so `.github/workflows/ci.yml` carries the bring-up written
+plainly inside the job rather than factored into a shared action. That is
+deliberate and stated there: *Authorization code flow* is `yes + network` in
+ADR-0013's table and is already known to differ, so a shared seam designed
+against one real consumer and three imagined ones would be built on the wrong
+example. The three later jobs inherit the pattern by reading it.
+
+The runner takes the **hosts-file** branch of the choice above rather than the
+rebase, so the path `compose.yaml` and this file tell a reader to take is the
+one exercised on every run.
+
+~~ADR-0013 fixes the job set at eight~~ — it never did, and #66 struck the
+count. The heading named a number and the paragraph under it requires set
+equality between job names and the ruleset's required contexts; *one job per
+seam* is the only rule. What holds the table and the workflow together is the
+test #47 brings, never a number either document has to keep current.
