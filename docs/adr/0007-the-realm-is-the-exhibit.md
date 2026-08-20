@@ -10,6 +10,7 @@
 - **Amended:** 2026-08-18 — substantive, by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). The seed renders **three** ways and carries **two independent role columns**; realm and directory membership is held equal by a test, with Priya's divergence declared as a role-column exception. See *Hand-authored, with only the users generated* and *Scopes are gated by roles that mirror the ERP's*. No decision here is reversed.
 - **Amended:** 2026-08-18 — substantive, by [#35](https://github.com/marcosfsousa/mcp-erp/issues/35). The generated users land in a **second file beside** the hand-authored realm rather than in an array inside it. See *Hand-authored, with only the users generated*. No decision here is reversed; the split is what makes this section's own rule structural.
 - **Amended:** 2026-08-18 — additive, by [#36](https://github.com/marcosfsousa/mcp-erp/issues/36), which built it. The two-file directory import is **verified against a running container**, and execution banked **three further traps** plus one consequence of register deviation 2 that this document did not anticipate. See *Hand-authored, with only the users generated* and *Consequences*. No decision here is reversed.
+- **Amended:** 2026-08-20 — substantive, by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46), which built the conformance client. Four clients is what the file *contains*; a **fifth exists at run time**, provisioned from a hosted document, and the realm had to gain a client policy and realm-level default client scopes before it would. See *Four clients, one stated job each*. No decision here is reversed, and none of the four changes.
 
 ## Question
 
@@ -93,11 +94,25 @@ The realm file is **baked into the image and bind-mounted over it in Compose**, 
 | `mcp-conformance-bare` | none | the fail-closed check on audience-less tokens |
 | `mcp-expiry-probe` | ours, ten-second lifespan | `token_expired` |
 
+*Amended 2026-08-20 by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46), which built the conformance client and found this by running it.* **A fifth client exists at run time, and the realm has to invite it.**
+
+The four above are what this file *contains*. The client the conformance run drives is not one of them and is registered nowhere: it identifies itself by a document GitHub Pages serves, and Keycloak provisions a client from that document on the authorization request. Two realm-level statements were needed before it would, and neither is plumbing — both are decisions this section is the right place for.
+
+**The feature is a client policy, not a switch.** `--features=cimd` in the Dockerfile makes the discovery document advertise `client_id_metadata_document_supported`, and the realm still answers *Client not found* until a policy says which identifiers it will dereference. So the realm carries a profile whose executor is `client-id-metadata-document` and a policy whose condition, `client-id-uri`, admits `https` identifiers from `marcosfsousa.github.io` and nothing else. That condition is the whole of the trust decision, and it reads as one.
+
+Two settings inside it are findings rather than configuration. `cimd-allow-http-scheme` stays **off** — the production setting — and the document's loopback callbacks still work, because that flag governs the identifier and the URL-valued metadata properties and `redirect_uris` is not among them; [ADR-0008](0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md)'s *only the document must be HTTPS, never the redirect URI* therefore survives contact with an implementation. `cimd-allow-permitted-domains` has to list `localhost` and `127.0.0.1` beside the publishing origin, because the executor checks the redirect URI against the same list.
+
+**A provisioned client inherits realm defaults, and this realm had never needed any.** Every client above names its own scopes, so the realm-level lists were empty — and a client the executor creates gets exactly those. It arrived with no `sub` claim, no audience and none of the three capability scopes. The realm now declares `defaultDefaultClientScopes` of `basic` and `mcp-erp-audience` and `defaultOptionalClientScopes` of the three capability scopes: the same pair `mcp-conformance` names for itself, which is the point. The client that earns its identity and the client that was handed one differ by **how they are known** and by nothing else, so the flow is the same flow.
+
+Nothing above changes for it. Each of the four states its own lists, and the decoy still carries somebody else's audience.
+
 Plus a **second realm**, `mcp-erp-neighbour`, with one client. It is a genuinely different issuer with its own signing keys and its own real flow, which is what lets the suite reject a token that is **perfect in every respect except who issued it** — clauses #2 (`token_passthrough`) and #3 (`foreign_issuer_token`). Minting those in the test instead would have exercised the same branch while asserting against a token we invented.
 
 ### Every client is public, and the weak challenge method is refused
 
 All clients are **public**, authenticating with Proof Key for Code Exchange, with the challenge method **pinned to SHA-256 at the server**. No secret exists anywhere in the repository.
+
+*Amended 2026-08-20 by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46).* **The pin is a realm policy, because a per-client attribute cannot reach a client this file does not contain.** *All clients* acquired a fifth member above, and the sentence stopped being true of it: the four here pin the method as a client attribute, and a client the executor provisions carries no attributes, so it accepted `plain` — and accepted no challenge at all. The pin is therefore a client policy conditioned on `client-access-type: public`, which is the one thing every client here has in common and the fifth inherits by being one. Binding it to the metadata-document policy instead does nothing, for a reason `keycloak/README.md` records: that policy's condition votes only on `PRE_AUTHORIZATION_REQUEST` and the PKCE executor acts on `AUTHORIZATION_REQUEST`, so an executor placed there is inert while looking exactly like enforcement.
 
 This matches the shape of every real client the exhibit targets — Inspector and Claude Code both run on a user's machine and neither can hold a secret — so tier 1 drives the same flow as tier 3. A confidential conformance client would have made the load-bearing offline proof exercise a flow no real client uses.
 

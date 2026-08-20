@@ -116,9 +116,12 @@ row got an answer the table does not declare. That is a different diagnosis from
 `Server posture`, which is what the server says *identically to every caller*.
 
 It is the second Compose bring-up in `.github/workflows/ci.yml` and repeats
-`server-posture`'s pattern rather than sharing it. #66 declined to factor the
-first one out against three imagined consumers; this is the second real one, so
-factoring is now fair game and #44 is the third that would settle the shape.
+`server-posture`'s pattern rather than sharing it. Being the second real
+consumer is what made factoring fair game; why it is nonetheless still a copy
+is argued where an editor of that file meets it, in the `server-posture` header
+comment, and recorded in ADR-0013 §*Continuous-integration jobs, one per seam*.
+It is not restated here, because the count it turned on has already drifted in
+three places once.
 
 **This job sits on a cut path, visibly.** Cut order `#9` ranks the decision
 matrix third, and cutting it removes this job and `Seed renders clean` together —

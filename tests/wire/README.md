@@ -213,12 +213,20 @@ gateway's published `http://localhost:8080`.
 
 **`Server posture`** runs this directory on every pull request and every push to
 `main`, and #66 built it. It is the **first Compose bring-up in continuous
-integration** — the three jobs expected to bring one, #43, #44 and #46, all
-arrive later — so `.github/workflows/ci.yml` carries the bring-up written
-plainly inside the job rather than factored into a shared action, and those
-three inherit the pattern by reading it. Why it is not factored is argued where
-an editor of that file meets it, in the `server-posture` header comment, and
-recorded in ADR-0013 §*Continuous-integration jobs, one per seam*.
+integration** — of the three jobs expected to bring one, #43 and #46 have since
+landed beside it and only #44 is still to come — so `.github/workflows/ci.yml`
+carries the bring-up written plainly inside the job rather than factored into a
+shared action, and the rest inherit the pattern by reading it. Why it is not
+factored is argued where an editor of that file meets it, in the
+`server-posture` header comment, and recorded in ADR-0013
+§*Continuous-integration jobs, one per seam*.
+
+**`Authorization code flow` landed on 2026-08-20 and does not run this
+directory**, which is the point rather than an omission: it runs
+`tests/conformance` alone, because a red check there has to mean the flow broke.
+A job that also ran these would report a tool listing's freshness hint as the
+authorization code flow failing — two seams answering to one diagnosis, which is
+the thing *one job per seam* exists to prevent.
 
 The runner takes the **hosts-file** branch of the choice above rather than the
 rebase, so the path `compose.yaml` and this file tell a reader to take is the

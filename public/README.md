@@ -85,6 +85,27 @@ document* from *a public deployment of the server* — which is what let
 [ADR-0011](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/adr/0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md)
 decline hosting outright while this capability survived.
 
+## The other side has to invite it
+
+*Added 2026-08-20 by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46),
+which drove the flow.* Publishing the document is half of what makes it an
+identifier. The authorization server has to be willing to dereference it, and
+Keycloak is not by default: the preview feature makes the discovery document
+advertise support, and the realm answers *Client not found* until a **client
+policy** names which identifiers it will fetch.
+
+`keycloak/import/mcp-erp-realm.json` carries that policy — `https` from
+`marcosfsousa.github.io` and nothing else — and
+[`keycloak/README.md`](https://github.com/marcosfsousa/mcp-erp/blob/main/keycloak/README.md)
+carries the reasoning, including what a client provisioned this way inherits and
+why the realm grew default client scopes for the first time.
+
+**One claim on this page is confirmed by that configuration**: the loopback
+redirect URIs below are accepted with Keycloak's `http`-scheme allowance
+switched **off**, which is the production setting. That flag governs the client
+identifier and the URL-valued metadata properties, and `redirect_uris` is not
+among them.
+
 ## The redirect URI is `localhost`, deliberately
 
 `clients/conformance/1.json` declares two loopback callbacks, on port `8085`:

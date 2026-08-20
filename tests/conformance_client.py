@@ -1,0 +1,754 @@
+"""The conformance client: one authorization code flow, earned through the hosted document.
+
+ADR-0008 packages this as **one library surface with two entry points** — the
+suite in `tests/conformance/` imports it, and the `__main__` block below performs
+the flow from a command line. That is not a compromise between two designs. In
+`mcp` 2.0.0 the unified `Client` takes no authentication parameter, so
+authentication attaches to the HTTP client underneath the transport, and every
+line of *connect, call, assert* is identical whichever object is attached.
+:class:`Flow` earns a token through the Client Identity Metadata Document;
+:class:`Bearer` presents one `tests/tokens.py` already minted. **Mint versus earn
+is a constructor argument, not an architecture**, and :func:`connect` is where
+that stops being a claim: it takes an `httpx2.Auth` and knows nothing else.
+
+**This is the client under test, not the fixture minter.** `tokens.py` drives the
+same three forms against a client registered in the realm; this one is not
+registered anywhere. Its identity is a URL that GitHub Pages serves, the
+authorization server dereferences that URL on the authorization request, and the
+whole point is that a client we did not pre-provision can complete a flow.
+
+**What is shared with `tokens.py`, and what is copied.** The two drive the same
+three forms, so the overlap is real and worth being explicit about rather than
+noticed later.
+
+*Shared, imported from there:* every pure function and every constant —
+`form_action`, `redirect_error`, `rebase`, `scope_set`, `decode_claims`,
+`PASSWORD`, `LOGIN_FORM`, `MAX_AUTHORIZATION_STEPS`. Two of those were made
+public for this module, which is the shape sharing takes when it can be taken.
+
+*Copied, deliberately:* everything that touches a client — the request helpers,
+the cookie concession, the walk to the callback. They cannot be shared, and not
+for a reason a little more effort would remove: that helper is **synchronous and
+speaks `httpx`**, this one is **asynchronous and speaks `httpx2`**, and both
+packages are in this environment on purpose — the 2.x line is what the protocol
+package carries and the 0.x line belongs to the fixture minter. Bridging them
+means an abstraction over two HTTP packages and two concurrency models, to save
+a handful of functions whose whole content is *do one request and raise with the
+server's words*. The copy is the cheaper honesty. Where the two diverge in more
+than colour — the cookie concession, the consent step being recorded — the
+function that differs says so at its own definition.
+
+**Preflight, and why it runs before Compose.** ADR-0008's second mechanism.
+Without it, Pages being unreachable and this server rejecting a valid flow
+present identically as *the flow failed*. :func:`preflight` fetches the document
+URL, refuses anything but a `200`, and hashes the body against the committed
+bytes — so an external cause fails a **named step before our server has run at
+all**. The `Authorization code flow` job runs it as its own step, ahead of
+`docker compose up`; the suite asserts it first for a reader running locally.
+
+**Two addresses, one identity**, on exactly the terms `tokens.py` states. The
+issuer is `http://keycloak:8081/...`, and the protocol package follows a
+discovered endpoint verbatim — it has no rebasing hook of its own. So a reader
+without the `127.0.0.1 keycloak` line in their hosts file points the transport
+somewhere reachable, and :class:`Rebased` moves the address the requests go to
+and never the issuer they assert::
+
+    KEYCLOAK_BASE_URL=http://localhost:8081
+
+Standalone, which is what a reader runs to watch the flow happen::
+
+    uv run python tests/conformance_client.py --preflight
+    uv run python tests/conformance_client.py priya.raman
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import hashlib
+import json
+import sys
+from collections.abc import AsyncGenerator, AsyncIterator, Generator, Mapping
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Final
+from urllib.parse import parse_qs, urljoin, urlparse
+
+import httpx2
+from mcp.client import Client
+from mcp.client.auth import OAuthClientProvider
+from mcp.client.streamable_http import streamable_http_client
+from mcp.shared.auth import (
+    AuthorizationCodeResult,
+    OAuthClientInformationFull,
+    OAuthClientMetadata,
+    OAuthToken,
+)
+
+import rpc
+from tokens import (
+    BASE_URL as KEYCLOAK_BASE_URL,
+)
+from tokens import (
+    ISSUER_ORIGIN,
+    LOGIN_FORM,
+    MAX_AUTHORIZATION_STEPS,
+    PASSWORD,
+    decode_claims,
+    form_action,
+    rebase,
+    redirect_error,
+    scope_set,
+)
+
+REPO = Path(__file__).parents[1]
+
+DOCUMENT = REPO / "public" / "clients" / "conformance" / "1.json"
+"""The committed copy of the Client Identity Metadata Document.
+
+The same bytes `.github/workflows/pages.yml` publishes and the
+`Published documents are immutable` job refuses to see modified. `.gitattributes`
+pins it `-text` so no checkout rewrites its line endings — which is what makes
+the digest comparison in :func:`preflight` mean anything.
+"""
+
+METADATA: Final[Mapping[str, Any]] = json.loads(DOCUMENT.read_text(encoding="utf-8"))
+"""What the document says, read once and never restated in Python.
+
+Every property this client acts on comes from here rather than from a constant
+beside it — with the single exception :data:`GRANT_TYPES` states and argues. A
+second copy of `redirect_uris` would be a second thing to keep equal to a file
+that **cannot be corrected in place**: the `client_id` is the URL, so a
+divergence is not a bug to fix but a new document version to publish.
+"""
+
+CLIENT_ID = str(METADATA["client_id"])
+"""The client identifier, which is the document's own URL and its own address.
+
+Read out of the document rather than written beside it, so the identifier this
+client presents and the identifier :func:`preflight` fetches cannot come apart.
+Draft `-00` §4.2 puts the authorization server under a `MUST` to check that the
+two agree, and a client that could fail that check by editing one of two
+constants would be testing our copy-paste rather than their validation.
+"""
+
+SERVER = f"{rpc.BASE_URL}{rpc.ENDPOINT}"
+"""The address the tool endpoint answers at — the gateway's, like every suite's."""
+
+GRANT_TYPES: Final = ["authorization_code"]
+"""What the client tells **its own library** it can do, and the one place that is not the document.
+
+The published document names `refresh_token` as well, deliberately, and **the
+run still drives the document as published** — because under a hosted document
+the `client_metadata` handed to the package is local configuration rather than
+anything sent. There is no registration request to put it in. Exactly two of its
+members leave this process: `redirect_uris[0]`, on the authorization request,
+and `scope`, which the package overwrites from this server's own metadata before
+it is used. `grant_types` is never one of them. The authorization server reads
+`grant_types` off the document it fetched for itself, and it still issues this
+client a refresh token.
+
+The protocol package reads it for exactly one other purpose. SEP-2207 appends
+`offline_access` to the requested scope when the client declares `refresh_token`
+**and** the authorization server advertises that scope — both true here, since
+Keycloak lists `offline_access` in `scopes_supported` in every realm. This realm
+issues rotating refresh tokens with zero reuse and no offline tokens, and no
+Person in the Cast holds the `offline_access` role, so the append asks for
+something that cannot be granted.
+
+**And it does not degrade into a narrowing, which is the part worth recording.**
+Keycloak refuses an unentitled `offline_access` at the token endpoint outright —
+`not_allowed: Offline tokens not allowed for the user or client` — rather than
+omitting it from the grant the way a role scope mapping omits `erp.decide`. So
+the RFC 6749 §3.3 behaviour this run exists to observe is real but not general,
+and a client that asked anyway would fail at the last step of the flow for a
+reason that has nothing to do with what it was demonstrating.
+"""
+
+JSON_MEDIA_TYPE: Final = "application/json"
+"""What RFC 6749 §5.1 requires a token response to be, and what :meth:`Flow._record` gates on."""
+
+TIMEOUT: Final = 30.0
+"""How long any one request may take — a form post, the preflight fetch, a tool call.
+
+One number rather than three, because none of the three is slow for a reason of
+its own: everything here talks to a container on the same machine or to a static
+file, so anything approaching this is stuck rather than busy.
+"""
+
+CONSENT = "consent"
+"""The second form, and the one ADR-0012 warned would be discovered on the day."""
+
+LOGIN = "login"
+"""The first form. Recorded, with :data:`CONSENT`, on :attr:`Flow.posted`.
+
+ADR-0012 called the consent post *"a build step not to discover on the day"*, and
+a run that silently skipped it would still end in a token — Keycloak remembers a
+grant, and only an empty database on every boot makes first-consent the
+deterministic path. So the run asserts that both were posted rather than
+inferring it from the token that came back.
+"""
+
+
+class PreflightFailure(RuntimeError):
+    """The published document did not answer as committed.
+
+    A named exception rather than an assertion, because its whole purpose is to
+    be attributable: everything it reports is **outside this repository's
+    running code** — GitHub Pages, egress from the runner, or a document whose
+    bytes are no longer the committed ones.
+    """
+
+
+def preflight(*, timeout: float = TIMEOUT) -> str:
+    """Fetch the hosted document and refuse anything but the committed bytes.
+
+    Redirects are deliberately **not** followed. The `client_id` is the URL, so
+    a document served from somewhere else is a different client wearing this
+    one's identifier — the substitution ADR-0008 spends its argument preventing.
+    A `301` here is a finding, not a hop.
+
+    Returns:
+        The SHA-256 digest of the body, hexadecimal, which equals the digest of
+        the committed file.
+
+    Raises:
+        PreflightFailure: The document is unreachable, did not answer `200`, or
+            does not hash to the committed copy.
+    """
+    committed = hashlib.sha256(DOCUMENT.read_bytes()).hexdigest()
+
+    try:
+        response = httpx2.get(CLIENT_ID, timeout=timeout, follow_redirects=False)
+    except httpx2.HTTPError as unreachable:
+        raise PreflightFailure(f"{CLIENT_ID} could not be fetched: {unreachable}") from unreachable
+
+    if response.status_code != httpx2.codes.OK:
+        raise PreflightFailure(f"{CLIENT_ID} answered {response.status_code}, expected 200")
+
+    served = hashlib.sha256(response.content).hexdigest()
+    if served != committed:
+        raise PreflightFailure(
+            f"{CLIENT_ID} serves {served}, and {DOCUMENT.name} hashes to {committed}"
+        )
+
+    return served
+
+
+class Rebased(httpx2.AsyncBaseTransport):
+    """The transport that moves an address without moving an identity.
+
+    The protocol package resolves the authorization server from the protected
+    resource metadata document and then requests **exactly** the endpoints it
+    discovers. That is correct of it and leaves no hook: `tokens.py` can rebase
+    because it builds its own requests, and this client cannot because it does
+    not build them.
+
+    So the rebase moves down to where it belongs. A transport rewrites transport
+    — the host a connection is opened to, and the `Host` header that names it —
+    and nothing above it changes: the issuer in the discovered metadata, the
+    `iss` on the redirect and the `iss` claim in the token are all still the
+    seed's, and the package compares them itself under RFC 9207 and SEP-2468.
+
+    Inert unless `KEYCLOAK_BASE_URL` names something other than the issuer's own
+    origin, which is the ordinary case.
+
+    **It is not a general replacement for :func:`rebase`, and the form-driving
+    client must still call that.** A transport sees a request after the cookie
+    jar has already read its host to decide what to send, so a request built
+    against the issuer's name and rewritten down here would be sent without the
+    session cookies Keycloak set under the address it was actually reached at —
+    and the flow would die at the login post with *Restart login cookie not
+    found*, which reads like a rejected password. Requests this client builds are
+    therefore rebased where they are built; this exists for the ones it does not
+    build.
+    """
+
+    def __init__(self, *, origin: str, onto: str) -> None:
+        """Prepare a transport that rewrites one origin onto another.
+
+        Args:
+            origin: The scheme and authority the discovered endpoints carry —
+                the issuer's, which is identity and never moves.
+            onto: The scheme and authority the requests actually go to.
+        """
+        self._origin = origin
+        self._onto = urlparse(onto)
+        self._inner = httpx2.AsyncHTTPTransport()
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        """Send one request, on the rewritten address when the origin matches."""
+        if f"{request.url.scheme}://{request.url.netloc.decode('ascii')}" == self._origin:
+            request.url = request.url.copy_with(
+                scheme=self._onto.scheme, host=self._onto.hostname, port=self._onto.port
+            )
+            request.headers["host"] = self._onto.netloc
+
+        return await self._inner.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        """Close the transport underneath."""
+        await self._inner.aclose()
+
+
+@dataclass
+class Wallet:
+    """Where one flow's tokens and client record live, and nowhere else.
+
+    The protocol package asks for a `TokenStorage`, and every implementation of
+    one is a decision about persistence. This one keeps nothing past the process,
+    for the reason `tokens.py`'s cache keeps nothing past the run: Keycloak
+    re-imports from an empty in-memory database on every boot, so a token cannot
+    outlive the authorization server that issued it and a stored one would be
+    signed by keys that no longer exist.
+
+    It is also what makes the run honest about consent. A client record that
+    survived would let a second run reuse a grant instead of posting the consent
+    form again, and the assertion that both forms were posted would start passing
+    on history.
+    """
+
+    tokens: OAuthToken | None = None
+    client_info: OAuthClientInformationFull | None = None
+
+    async def get_tokens(self) -> OAuthToken | None:
+        """The tokens this flow has earned so far, which is none until it has."""
+        return self.tokens
+
+    async def set_tokens(self, tokens: OAuthToken) -> None:
+        """Keep what the token endpoint answered with."""
+        self.tokens = tokens
+
+    async def get_client_info(self) -> OAuthClientInformationFull | None:
+        """The client record, which under a hosted document is never a registration."""
+        return self.client_info
+
+    async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
+        """Keep the record the package built from the document URL."""
+        self.client_info = client_info
+
+
+class Flow(httpx2.Auth):
+    """One authorization code flow, performed headlessly — and the record of it.
+
+    **The auth object and the observation are one object on purpose.** ADR-0008
+    makes the auth object the entire difference between this client and a
+    pre-minted token, so anything the run needs to assert about the flow has to
+    travel on it or :func:`connect` grows a second parameter and the claim stops
+    being literally true.
+
+    What it wraps is the package's own `OAuthClientProvider`, which performs
+    discovery, the Client Identity Metadata Document path, Proof Key for Code
+    Exchange and the token exchange. What it adds is a browser that is not one —
+    :meth:`_open` posts the login form and the consent form — and one reading
+    taken off the wire on the way past.
+
+    **The `scope` response parameter is read here because it is unreadable
+    afterwards.** RFC 6749 §3.3 puts a `MUST` on the authorization server to send
+    it when the granted scope differs from the requested one, and the package
+    conformantly fills an absent one in from what it asked for (RFC 6749 §5.1),
+    which erases the distinction this run exists to observe. Wrapping the auth
+    flow sees the token response before that happens, and uses only public
+    API — a package that renamed something internal would leave
+    :attr:`reported` at `None`, which fails the assertion rather than quietly
+    weakening it.
+    """
+
+    def __init__(self, username: str, *, timeout: float = TIMEOUT) -> None:
+        """Prepare a flow for one Person, without performing anything yet.
+
+        Args:
+            username: What the Person types at the login form — `priya.raman`,
+                not the subject. The subject is what comes back in the token.
+            timeout: How long any one of the three form requests may take.
+        """
+        self.username = username
+        self.posted: list[str] = []
+        """Every form this flow posted, in order — `login`, then `consent`.
+
+        **Every** form, not the last flow's: it accumulates if the client
+        authorizes twice in one process. That is the record being honest rather
+        than a leak to reset. One earned grant is what a run performs — the
+        wallet holds the token, so a second `401` means something reauthorized —
+        and an assertion of `[login, consent]` that quietly tolerated a second
+        pair would be hiding exactly that.
+        """
+
+        self.reported: str | None = None
+        """The token response's own `scope` parameter, verbatim, or `None`."""
+
+        self.wallet = Wallet()
+        self._timeout = timeout
+        self._callback_location: str | None = None
+        self._provider = OAuthClientProvider(
+            server_url=SERVER,
+            client_metadata=OAuthClientMetadata.model_validate(
+                {**METADATA, "grant_types": GRANT_TYPES}
+            ),
+            storage=self.wallet,
+            redirect_handler=self._open,
+            callback_handler=self._callback,
+            client_metadata_url=CLIENT_ID,
+        )
+
+    @property
+    def requested(self) -> frozenset[str]:
+        """What the client asked the authorization server for.
+
+        Not ours to choose, and that is the point. The package selects the scope
+        from what the resource server publishes — the `WWW-Authenticate`
+        challenge first, then `scopes_supported` — so the request is derived from
+        this server's own metadata rather than from a list written twice.
+        """
+        return scope_set(self._provider.context.client_metadata.scope)
+
+    @property
+    def granted(self) -> frozenset[str]:
+        """What the access token actually carries.
+
+        Read from the token's own claim rather than from the response parameter,
+        for the reason `tokens.py` gives: the token is the artifact that is
+        definitely authoritative, and whether the response parameter agrees with
+        it is the question this run was opened to answer.
+        """
+        return scope_set(str(self.claims.get("scope", "")))
+
+    @property
+    def narrowed(self) -> frozenset[str]:
+        """Requested scopes the authorization server declined to grant."""
+        return self.requested - self.granted
+
+    @property
+    def access_token(self) -> str:
+        """The token this flow earned.
+
+        Raises:
+            RuntimeError: The flow has not completed, so there is none.
+        """
+        if self.wallet.tokens is None:
+            raise RuntimeError("the flow has not earned a token yet")
+
+        return self.wallet.tokens.access_token
+
+    @property
+    def claims(self) -> Mapping[str, Any]:
+        """The access token's payload, decoded and **deliberately not verified**.
+
+        The resource server is the party under a `MUST` to verify, and a run
+        whose client validated its own token would prove the client.
+        """
+        return decode_claims(self.access_token)
+
+    async def async_auth_flow(
+        self, request: httpx2.Request
+    ) -> AsyncGenerator[httpx2.Request, httpx2.Response]:
+        """Drive the package's auth flow, reading the token response on the way past."""
+        inner = self._provider.async_auth_flow(request)
+        outbound = await inner.__anext__()
+
+        while True:
+            response = yield outbound
+            await self._record(response)
+
+            try:
+                outbound = await inner.asend(response)
+            except StopAsyncIteration:
+                return
+
+    async def _record(self, response: httpx2.Response) -> None:
+        """Keep the `scope` parameter off a token response, and read nothing else.
+
+        Recognised by the body carrying an `access_token` rather than by the
+        address, so the reading does not depend on this client having resolved
+        the token endpoint to the same string the package did — under
+        :class:`Rebased` it would not have, since a rewritten request no longer
+        carries the discovered host.
+
+        **The content-type gate is a safety property, not a shortcut.** Every
+        response the client sends passes through here, including the transport's
+        own — and `streamable_http` opens a long-lived `text/event-stream` GET
+        through the same client. Reading that one buffers until the server closes
+        the stream, which is a hang rather than a failure. RFC 6749 §5.1 requires
+        a token response to be `application/json`, so gating on it excludes the
+        stream structurally rather than by knowing which request was which.
+        """
+        if response.status_code not in (httpx2.codes.OK, httpx2.codes.CREATED):
+            return
+
+        if not response.headers.get("content-type", "").startswith(JSON_MEDIA_TYPE):
+            return
+
+        try:
+            body = json.loads(await response.aread())
+        except ValueError:
+            return
+
+        if isinstance(body, dict) and "access_token" in body:
+            self.reported = body.get("scope")
+
+    async def _open(self, authorization_url: str) -> None:
+        """Be the browser: fetch the authorization request, then log in and consent.
+
+        The package hands over a URL and expects a person to appear at the other
+        end of it. What arrives instead is one cookie jar across three requests,
+        with redirects followed by hand — the last one **must not** be followed,
+        because it points at a callback port nothing is listening on and the code
+        is in its `Location` header.
+        """
+        async with httpx2.AsyncClient(
+            follow_redirects=False,
+            timeout=self._timeout,
+            transport=_reaching_the_issuer(),
+        ) as http:
+            page = await _get(http, rebase(authorization_url))
+            _keep_the_session_over_plain_http(http)
+
+            answered = await _post(
+                http,
+                _action_of(page),
+                {"username": self.username, "password": PASSWORD, "credentialId": ""},
+            )
+            self.posted.append(LOGIN)
+            _keep_the_session_over_plain_http(http)
+
+            # A rejected password re-renders the login form with a `200`, which
+            # the walk below would otherwise post an `accept` to.
+            if LOGIN_FORM in answered.text:
+                raise RuntimeError(f"the authorization server did not accept {self.username!r}")
+
+            self._callback_location = await self._walk_to_the_callback(http, answered)
+
+    async def _walk_to_the_callback(self, http: httpx2.AsyncClient, page: httpx2.Response) -> str:
+        """Follow the authorization server's own steps until one redirects to the client.
+
+        **Consent arrives as a redirect, not as a page.** A logged-in caller who
+        has not consented is sent to
+        `login-actions/required-action?execution=OAUTH_GRANT`, and the screen is
+        what answers *that* — so this is a loop rather than a single `if`, and
+        the shape that fails here fails by reporting a missing code rather than a
+        missing consent.
+
+        Returns:
+            The `Location` of the redirect back to the client.
+
+        Raises:
+            RuntimeError: The authorization server kept asking for something. A
+                step count rather than a timeout, so a realm that grew a required
+                action fails naming the step it stopped on.
+        """
+        callback = str(METADATA["redirect_uris"][0])
+
+        for _ in range(MAX_AUTHORIZATION_STEPS):
+            location: str | None = page.headers.get("location")
+
+            if location is not None and location.startswith(callback):
+                return location
+
+            if location is not None:
+                page = await _get(http, rebase(location))
+            else:
+                page = await _post(http, _action_of(page), {"accept": "Yes"})
+                self.posted.append(CONSENT)
+
+            _keep_the_session_over_plain_http(http)
+
+        raise RuntimeError(
+            f"the authorization server never redirected back to the client; "
+            f"stopped at {page.headers.get('location') or page.url}"
+        )
+
+    async def _callback(self) -> AuthorizationCodeResult:
+        """Hand the redirect's parameters back, without checking the `state`.
+
+        Deliberately unchecked here: the package generated that value and
+        compares it itself with a constant-time comparison, and it validates the
+        RFC 9207 `iss` against the issuer it discovered. Re-checking either would
+        be this client marking its own homework. A refusal *is* read, because a
+        redirect carrying `error` and no code has to be reported in the
+        authorization server's own words rather than as a missing code later.
+
+        Raises:
+            RuntimeError: No redirect arrived, or it carried a refusal.
+        """
+        if self._callback_location is None:
+            raise RuntimeError("the authorization server never redirected back to the client")
+
+        refusal = redirect_error(self._callback_location)
+        if refusal is not None:
+            raise RuntimeError(refusal)
+
+        query = parse_qs(urlparse(self._callback_location).query)
+
+        return AuthorizationCodeResult(
+            code=query.get("code", [""])[0],
+            state=query.get("state", [None])[0],
+            iss=query.get("iss", [None])[0],
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Bearer(httpx2.Auth):
+    """A token somebody else already minted, presented as the same kind of object.
+
+    The other half of ADR-0008's *"mint versus earn is a constructor argument"* —
+    and the half that makes the claim falsifiable, because :func:`connect` runs
+    the same protocol conversation against the same server with this in place of
+    :class:`Flow` and nothing else changes.
+    """
+
+    access_token: str
+
+    def auth_flow(self, request: httpx2.Request) -> Generator[httpx2.Request, httpx2.Response]:
+        """Present the token, once, and read no response."""
+        request.headers["authorization"] = f"Bearer {self.access_token}"
+        yield request
+
+
+@asynccontextmanager
+async def connect(auth: httpx2.Auth) -> AsyncIterator[Client]:
+    """The whole client, over Streamable HTTP, authenticated by exactly one object.
+
+    This is the library surface ADR-0008 describes and the runnable entry point
+    below uses unchanged. It takes an `httpx2.Auth` and knows nothing else about
+    it: `mcp` 2.0.0's unified `Client` takes no authentication parameter, so
+    authentication attaches to the HTTP client underneath the transport, and
+    *connect, call, assert* is identical whichever object is attached.
+
+    Args:
+        auth: :class:`Flow` to earn a token through the hosted document, or
+            :class:`Bearer` to present one already minted.
+
+    Yields:
+        A connected client, with the protocol era already negotiated.
+    """
+    async with httpx2.AsyncClient(
+        auth=auth,
+        timeout=TIMEOUT,
+        transport=_reaching_the_issuer(),
+    ) as http:
+        # The transport is handed over unentered: `Client` owns its lifetime, and
+        # entering it here would hand `Client` a pair of streams instead.
+        async with Client(streamable_http_client(SERVER, http_client=http)) as client:
+            yield client
+
+
+def _keep_the_session_over_plain_http(http: httpx2.AsyncClient) -> None:
+    """Clear `Secure` on the session cookies, because this exhibit runs on plain HTTP.
+
+    The measurement, the reasoning and why relaxing the *policy* does not work
+    are all in `tokens.py`'s function of the same name, and are not restated
+    here. What is worth stating is that this is a second copy rather than a
+    shared one: that helper takes an `httpx.Client` and this takes an
+    `httpx2.AsyncClient`, and the two packages are both in this environment
+    deliberately — the 2.x line is what the protocol package carries, and the
+    0.x line belongs to the fixture minter.
+
+    Verified rather than assumed to carry over: `httpx2` rebuilds the jar per
+    request the same way — `Cookies(self.cookies)` copies each cookie into a
+    fresh `CookieJar()` with the default policy — so the flag has to be cleared
+    on the `Cookie` objects, which survive that copy by reference.
+    """
+    for cookie in http.cookies.jar:
+        cookie.secure = False
+
+
+def _reaching_the_issuer() -> Rebased:
+    """The transport both of this module's clients open, built the one way.
+
+    Two clients rather than one is not a choice: the forms need their own cookie
+    jar and their own redirect policy, and the protocol package owns the other.
+    What they must not differ on is *where the authorization server is*, and a
+    pair of constructor calls is a pair of places for that to stop being true.
+    """
+    return Rebased(origin=ISSUER_ORIGIN, onto=KEYCLOAK_BASE_URL)
+
+
+def _action_of(response: httpx2.Response) -> str:
+    """Where a page's form posts to, absolute and reachable.
+
+    The two forms differ, and only one of them says so: the login form's action
+    is absolute and carries the *issuer's* host, while the consent form's is a
+    bare path. Resolving against the page's own URL handles both.
+    """
+    return rebase(urljoin(str(response.url), form_action(response.text)))
+
+
+async def _get(http: httpx2.AsyncClient, url: str) -> httpx2.Response:
+    """One GET, with the authorization server's own words on a failure."""
+    response = await http.get(url)
+    if response.status_code >= httpx2.codes.BAD_REQUEST:
+        raise RuntimeError(f"GET {url} answered {response.status_code}: {response.text}")
+
+    return response
+
+
+async def _post(http: httpx2.AsyncClient, url: str, data: dict[str, str]) -> httpx2.Response:
+    """One form post, raising with the server's own body on a `4xx` or `5xx`.
+
+    A `302` is the expected answer at both posts and is left alone; the redirect
+    *is* the result, and following it would fetch a callback URL nothing serves.
+    """
+    response = await http.post(url, data=data)
+    if response.status_code >= httpx2.codes.BAD_REQUEST:
+        raise RuntimeError(f"POST {url} answered {response.status_code}: {response.text}")
+
+    return response
+
+
+async def _run(username: str) -> int:
+    """Perform the flow, call one tool, and print what the wire said."""
+    flow = Flow(username)
+
+    async with connect(flow) as client:
+        listed = await client.list_tools()
+
+    print(f"client_id   {CLIENT_ID}")
+    print(f"posted      {' then '.join(flow.posted)}")
+    print(f"issuer      {flow.claims.get('iss')}")
+    print(f"subject     {flow.claims.get('sub')}")
+    print(f"audience    {flow.claims.get('aud')}")
+    print(f"authorized  {flow.claims.get('azp')}")
+    print(f"requested   {' '.join(sorted(flow.requested))}")
+    print(f"granted     {' '.join(sorted(flow.granted))}")
+    print(f"reported    {flow.reported!r}")
+    if flow.narrowed:
+        print(f"declined    {' '.join(sorted(flow.narrowed))}")
+    print(f"tools       {' '.join(sorted(tool.name for tool in listed.tools))}")
+
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the preflight, or the whole flow, from a command line.
+
+    Two modes rather than two commands, because they are two halves of one job
+    and the continuous-integration job runs them in this order — the preflight
+    before `docker compose up`, the flow after it::
+
+        uv run python tests/conformance_client.py --preflight
+        uv run python tests/conformance_client.py priya.raman
+    """
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("username", nargs="?", help="the login name, e.g. priya.raman")
+    parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help="only check that the hosted document answers as committed, and stop",
+    )
+    arguments = parser.parse_args(argv)
+
+    if arguments.preflight:
+        print(f"{CLIENT_ID}\n{preflight()}  matches {DOCUMENT.name}")
+        return 0
+
+    if arguments.username is None:
+        parser.error("a username is required unless --preflight is given")
+
+    preflight()
+
+    return asyncio.run(_run(arguments.username))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
