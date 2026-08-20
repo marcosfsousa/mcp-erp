@@ -18,12 +18,16 @@ from __future__ import annotations
 
 import asyncio
 import traceback
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 import pytest
+from mcp.shared.exceptions import MCPError
 from mcp_types import CallToolResult, ListToolsResult
 
+import fixtures
 import rpc
+import transcripts
 from conformance_client import CLIENT_ID, CONSENT, LOGIN, Bearer, Flow, connect, preflight
 from tokens import ISSUER
 from tokens import mint as minted_by_the_helper
@@ -52,6 +56,40 @@ item. This is the Person that item is answered with.
 
 TOOL = "list_requisitions"
 """One call, chosen because every Person in the Cast can make it and see rows."""
+
+DECIDING_TOOL = "approve_requisition"
+"""The tool ADR-0014 calls the exhibit's centrepiece, reached with an earned token.
+
+Every other proof of `-31010` in this repository uses a token we minted for
+ourselves — `tests/matrix/`'s `approve_refused_when_the_scope_carries_no_role`
+and `tests/wire/`'s. This one uses a token a human consented to at a login
+screen, and the duplication is the point: it is the same refusal, arrived at
+through the only path a reader cannot call circular.
+"""
+
+ROLE_MISSING = -31010
+"""The protocol error code a `403` would lie about, per ADR-0002."""
+
+
+@pytest.fixture(scope="module", autouse=True)
+def loaded_fixtures() -> Iterator[None]:
+    """Wipe and reload the fixtures once before this module.
+
+    Nothing here writes, and until #92 nothing here read the rows either — the
+    call this leg makes was chosen because *every Person in the Cast can make it
+    and see rows*, and how many was never the point.
+
+    **It became the point when the call started being captured.** The flow's
+    transcript ends on `list_requisitions`, so its last exchange is a picture of
+    the database at the moment it ran — and the suites that run before this one
+    in a whole-tree collection write to it. Found by reading a committed capture
+    against a second run of it: one showed `req_0001` as `submitted` and the
+    other as `approved`, because `tests/attack_suite` had approved it in the same
+    process. The load is what makes the beat a fact about the seed rather than
+    about collection order.
+    """
+    fixtures.load()
+    yield
 
 
 def audiences(claim: object) -> set[str]:
@@ -114,6 +152,55 @@ async def _perform(username: str) -> Performed:
 
     async with connect(flow) as client:
         return Performed(flow, await client.list_tools(), await client.call_tool(TOOL, {}))
+
+
+_REFUSED: dict[str, MCPError] = {}
+"""The deciding tool's answer to one Person's earned token, cached like the flow itself."""
+
+
+def refused_by_the_deciding_tool(username: str) -> MCPError:
+    """Present this Person's **earned** token to `approve_requisition`, once.
+
+    ADR-0014 §*The gating job performs the centrepiece* extends this leg by
+    exactly one call, and the extension is a second `connect` on the *same*
+    :class:`Flow` rather than a second flow. The wallet already holds the token,
+    so the package attaches it and no `401` arrives — which is what keeps
+    :attr:`Flow.posted` at one login and one consent, and keeps this a statement
+    about the token rather than about earning a second one.
+    """
+    if username not in _REFUSED:
+        _REFUSED[username] = asyncio.run(_refuse(performed(username).flow))
+
+    return _REFUSED[username]
+
+
+async def _refuse(flow: Flow) -> MCPError:
+    """Call the deciding tool with a flow's own token and return what came back.
+
+    **The identifier is the one no row carries, and that is the assertion rather
+    than a shortcut.** ADR-0006 fixes the gate order, and the role step is ahead
+    of anything that reads a row — so a caller holding `erp.decide` and no
+    deciding role is refused before the resource is looked at. Naming a real
+    fixture would make this leg depend on a seeded database that the
+    `Authorization code flow` job does not load; naming the identifier no row
+    carries makes it depend on the order instead, which is the property.
+
+    Raises:
+        AssertionError: The call was answered rather than refused. A tool that
+            let this token through is the whole failure this leg exists to
+            catch, and it has no exception of its own to raise.
+    """
+    async with connect(flow) as client:
+        try:
+            answered = await client.call_tool(
+                DECIDING_TOOL, {"ids": [fixtures.ABSENT_IDENTIFIER], "decision": "approve"}
+            )
+        except MCPError as refusal:
+            return refusal
+
+    raise AssertionError(
+        f"{DECIDING_TOOL} answered an earned token with no deciding role: {answered}"
+    )
 
 
 def test_the_published_document_answers_as_committed() -> None:
@@ -287,3 +374,115 @@ def test_a_password_the_realm_does_not_hold_fails_at_the_login_form() -> None:
 
     reported = "".join(traceback.format_exception(refused.value))
     assert "did not accept 'nobody.here'" in reported, reported
+
+
+def test_an_earned_deciding_scope_still_meets_the_role_gate() -> None:
+    """**The exhibit's centrepiece, performed rather than asserted** — ADR-0014's beat 2.
+
+    Priya Raman holds `approver` in the realm and no role in the ERP. The
+    authorization server therefore grants every capability she asks for, a real
+    consent screen shows her the three of them as a delegation choice, and this
+    server refuses her anyway. ADR-0007 calls that drift *"the walkthrough's most
+    explainable moment"* and the seed authors it deliberately.
+
+    `-31010` and not a `403`, because the token is not what is wrong with the
+    request — ADR-0002: a `403` would tell a caller to go and get a better token,
+    and there is no token that would help. The remedy is an administrator's, and
+    the payload says so.
+
+    The same refusal is proven twice elsewhere on a token we minted for
+    ourselves. What this adds is the only path a reader cannot call circular.
+    """
+    refusal = refused_by_the_deciding_tool(WITH_A_DECIDING_ROLE)
+
+    assert refusal.code == ROLE_MISSING, refusal.error
+    assert refusal.data == {
+        "reason": "role_missing",
+        "remedy": "administrator_grant",
+        "retry_identical_helps": False,
+        "retry_as_other_person_helps": False,
+    }
+
+
+def test_the_run_writes_the_transcripts_the_write_up_includes() -> None:
+    """The three beats whose token was consented to at a login screen, committed.
+
+    **A test because the record is a run's**, and this is the run. Keycloak
+    remembers a grant per Person and client, so a second process performing the
+    same flows would post one form where these posted two — and the transcript
+    would record the difference. The three beats that need no consent screen are
+    written by `tests/capture.py` from a command line, and both writers write
+    into one directory that one check reads.
+
+    **What it asserts is that each beat found its exchanges.** Committing is not
+    an assertion — `keep` rewrites a file only when the mask says something
+    substantive changed, and the verdict is `git status --porcelain --
+    docs/transcripts` in the job that ran this. What could fail silently is a
+    selector below matching nothing, which would commit an empty transcript over
+    a good one, so that is what is checked here.
+    """
+    for name, exchanges in _beats().items():
+        assert exchanges, f"{name}: this run recorded no exchange for the beat"
+        transcripts.keep(name, transcripts.render(name, exchanges))
+
+
+def _beats() -> dict[str, tuple[transcripts.Exchange, ...]]:
+    """Which of the recorded exchanges each earned beat is.
+
+    Selection rather than redaction. Every exchange this run performed is in one
+    of the three or is an answered `tools/list`, which has a file of its own —
+    the listing bodies carry every tool's full input and output schema, and one
+    inside the flow's transcript as well would double the artifact to say nothing
+    new.
+
+    **The flow's own beat is a prefix, not a filter.** The record accumulates
+    across both connections this leg opens, and the second one begins the way
+    every connection does — with a `server/discover`. Ending the beat at the call
+    that lands is what keeps a later connection's opening line out of it, and it
+    is also what the beat claims: the flow completes *when the call lands*.
+    """
+    deciding = performed(WITH_A_DECIDING_ROLE)
+    refused_by_the_deciding_tool(WITH_A_DECIDING_ROLE)
+    narrowed = performed(WITHOUT_A_DECIDING_ROLE)
+
+    earned = tuple(deciding.flow.exchanges)
+    declined = tuple(narrowed.flow.exchanges)
+
+    return {
+        transcripts.FLOW_COMPLETES: tuple(
+            exchange for exchange in _through_the_call_that_lands(earned) if not _listing(exchange)
+        ),
+        transcripts.SCOPE_WITHOUT_ROLE: tuple(
+            exchange for exchange in earned if _deciding_call(exchange)
+        ),
+        transcripts.TOOLS_LIST_FOR_TWO_TOKENS: tuple(
+            exchange for exchange in earned if _listing(exchange)
+        )
+        + tuple(exchange for exchange in declined if _listing(exchange)),
+    }
+
+
+def _through_the_call_that_lands(
+    exchanges: tuple[transcripts.Exchange, ...],
+) -> tuple[transcripts.Exchange, ...]:
+    """Everything up to and including the first `tools/call` the server answered."""
+    for position, exchange in enumerate(exchanges):
+        if transcripts.calls(exchange, "tools/call", TOOL) and exchange.answered:
+            return exchanges[: position + 1]
+
+    return ()
+
+
+def _listing(exchange: transcripts.Exchange) -> bool:
+    """A `tools/list` the server answered — not the one it met with a challenge.
+
+    The flow starts on a `tools/list` that arrives without a credential, and that
+    `401` is the first beat's opening line rather than a listing. Both are the
+    same request; only one of them is an answer.
+    """
+    return transcripts.calls(exchange, "tools/list") and exchange.answered
+
+
+def _deciding_call(exchange: transcripts.Exchange) -> bool:
+    """The one call ADR-0014 adds to this leg."""
+    return transcripts.calls(exchange, "tools/call", DECIDING_TOOL)

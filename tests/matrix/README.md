@@ -127,3 +127,31 @@ three places once.
 matrix third, and cutting it removes this job and `Seed renders clean` together —
 and since #66 the tool listing's scope filter goes with them, because the five
 assertions that filter is exercised through are rows here now.
+
+## `matrix_table.py`, which is the write-up's half of map constraint `4`
+
+Map constraint `4` has said since the charting session that the matrix is *"one
+source rendering into both tests and the write-up"*. This directory is the tests
+half and `mcp_erp.purchase_to_pay.fixtures` is the fixtures half; `matrix_table.py`
+is the third, added by #92 on ADR-0014's decision, and it writes
+[`docs/decision-matrix/matrix.md`](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/decision-matrix/matrix.md).
+
+It runs under `Seed renders clean` rather than here, because it needs no Compose:
+it reads a committed file and writes a committed file, exactly like the seed's
+generators, and that job's diagnosis is already *a rendering diverged from the
+source it is generated from*.
+
+Two of its columns are not literally in the table and both are derived where the
+driver beside it derives them — the fixture identifiers come from the generator,
+so a cell names the row the seeded database holds, and a refusal's wire shape
+comes from the `Reason` record the two layers declare. **Every count is counted
+from the rows**, never copied from `meta`; `test_the_matrix_holds_together.py` is
+what holds `meta` to them, and a rendering that copied it would publish a number
+nothing had checked.
+
+It imports nothing from `tests/`, which is what lets it run as a script from the
+repository root:
+
+```
+uv run python tests/matrix/matrix_table.py
+```

@@ -25,6 +25,13 @@
 #             if and only if their removals are the same deletion.
 #   status    asserted | documented
 #   floor     true = may never be downgraded to `documented`
+#   note      optional; what the row asserts and how it splits from its
+#             neighbours. Renders into the write-up's table.
+#   history   optional; how the row was narrowed or corrected. **Separate from
+#             `note` because it renders separately**: a note recording a
+#             withdrawn claim still contains the claim's words, and a rendered
+#             cell carrying them can be skimmed as an assertion.
+#             row_probe_indistinguishable is the row that found it (#12, #92).
 #
 # Invariants
 #   - Exactly one row may carry `status: documented` while the suite is whole.
@@ -569,19 +576,22 @@ scenarios:
     floor: false
     note: >-
       Read path, NAMED resource. Asserts byte-identical `not_found` for "exists
-      but not yours" and "never existed". Splits from state_handle_hijack, which
-      is the write path; splits from list_partition_scoped, which is the
-      discovered half of the same contract.
+      but not yours" and "never existed". Constant time is not measured here and
+      is not claimed. Splits from state_handle_hijack, which is the write path;
+      splits from list_partition_scoped, which is the discovered half of the same
+      contract.
+    history: >-
       Narrowed 2026-08-18 by #12: this note read "AND indistinguishable timing".
-      Constant time is NOT measured here and is not claimed. Timing
-      indistinguishability is unprovable over HTTP against Compose — container
-      scheduling and garbage collection swamp the signal — and a flaky assertion
-      in a required job gets disabled. What is asserted is byte-identity on the
-      wire; the layer-2 counterpart is a single-return-site property asserted
-      structurally in tests/authorization/. ADR-0002 is narrowed to match. This
-      reverses a project commitment, not a normative clause, so no
+      Timing indistinguishability is unprovable over HTTP against Compose —
+      container scheduling and garbage collection swamp the signal — and a flaky
+      assertion in a required job gets disabled. What is asserted is byte-identity
+      on the wire; the layer-2 counterpart is a single-return-site property
+      asserted structurally in tests/authorization/. ADR-0002 is narrowed to
+      match. This reverses a project commitment, not a normative clause, so no
       normative-register row is owed. See ADR-0013 §Indistinguishability is
-      byte-identity, at two altitudes.
+      byte-identity, at two altitudes. Moved out of `note` 2026-08-20 by #92,
+      which built the renderer: a cell carrying the withdrawn claim's own words
+      can be skimmed as an assertion.
 
   - name: list_partition_scoped
     basis: adr

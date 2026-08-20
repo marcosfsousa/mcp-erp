@@ -1,0 +1,938 @@
+The flow completes
+
+1 of 10
+──────────────────────────────────────────────────────────────────────────────
+
+POST /mcp HTTP/1.1
+accept: application/json, text/event-stream
+accept-encoding: gzip, deflate
+connection: keep-alive
+content-length: 245
+content-type: application/json
+host: localhost:8080
+mcp-method: server/discover
+mcp-protocol-version: 2026-07-28
+user-agent: python-httpx2/2.12.0
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "server/discover",
+  "params": {
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientInfo": {
+        "name": "mcp",
+        "version": "0.1.0"
+      },
+      "io.modelcontextprotocol/clientCapabilities": {}
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+connection: keep-alive
+content-length: 762
+content-type: application/json
+date: Thu, 20 Aug 2026 21:34:54 GMT
+server: nginx/1.29.4
+x-served-by: 172.19.0.5:8080
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "cacheScope": "private",
+    "capabilities": {
+      "tools": {
+        "listChanged": false
+      }
+    },
+    "instructions": "An MCP server exposing a mock enterprise resource planning system as a portfolio exhibit, with OAuth 2.0 as a first-class concern. Access tokens are validated locally and must be audience-bound to this resource. The set of tools returned by tools/list varies with the granted scopes the caller's token carries; a tool the caller may not reach is absent rather than refused. Results are additionally scoped per caller, and what is scoped away is omitted rather than refused.",
+    "resultType": "complete",
+    "supportedVersions": [
+      "2026-07-28"
+    ],
+    "ttlMs": 0,
+    "_meta": {
+      "io.modelcontextprotocol/serverInfo": {
+        "name": "mcp-erp",
+        "title": "mcp-erp",
+        "version": ""
+      }
+    }
+  }
+}
+
+2 of 10
+──────────────────────────────────────────────────────────────────────────────
+
+POST /mcp HTTP/1.1
+accept: application/json, text/event-stream
+accept-encoding: gzip, deflate
+connection: keep-alive
+content-length: 240
+content-type: application/json
+host: localhost:8080
+mcp-method: tools/list
+mcp-protocol-version: 2026-07-28
+user-agent: python-httpx2/2.12.0
+
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/list",
+  "params": {
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientInfo": {
+        "name": "mcp",
+        "version": "0.1.0"
+      },
+      "io.modelcontextprotocol/clientCapabilities": {}
+    }
+  }
+}
+
+HTTP/1.1 401 Unauthorized
+connection: keep-alive
+content-length: 0
+date: Thu, 20 Aug 2026 21:34:55 GMT
+server: nginx/1.29.4
+www-authenticate: Bearer resource_metadata="http://localhost:8080/.well-known/oauth-protected-resource/mcp", scope="erp.decide erp.read erp.write"
+x-served-by: 172.19.0.4:8080
+
+3 of 10
+──────────────────────────────────────────────────────────────────────────────
+
+GET /.well-known/oauth-protected-resource/mcp HTTP/1.1
+host: localhost:8080
+mcp-protocol-version: 2026-07-28
+
+HTTP/1.1 200 OK
+connection: keep-alive
+content-length: 266
+content-type: application/json
+date: Thu, 20 Aug 2026 21:34:55 GMT
+server: nginx/1.29.4
+x-served-by: 172.19.0.5:8080
+
+{
+  "resource": "http://localhost:8080/mcp",
+  "authorization_servers": [
+    "http://keycloak:8081/realms/mcp-erp"
+  ],
+  "scopes_supported": [
+    "erp.decide",
+    "erp.read",
+    "erp.write"
+  ],
+  "bearer_methods_supported": [
+    "header"
+  ],
+  "resource_documentation": "https://github.com/marcosfsousa/mcp-erp"
+}
+
+4 of 10
+──────────────────────────────────────────────────────────────────────────────
+
+GET /.well-known/oauth-authorization-server/realms/mcp-erp HTTP/1.1
+host: keycloak:8081
+mcp-protocol-version: 2026-07-28
+
+HTTP/1.1 200 OK
+cache-control: no-cache, must-revalidate, no-transform, no-store
+content-length: 6605
+content-type: application/json
+referrer-policy: no-referrer
+strict-transport-security: max-age=31536000; includeSubDomains
+x-content-type-options: nosniff
+x-frame-options: SAMEORIGIN
+x-robots-tag: none
+
+{
+  "issuer": "http://keycloak:8081/realms/mcp-erp",
+  "authorization_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/auth",
+  "token_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/token",
+  "introspection_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/token/introspect",
+  "userinfo_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/userinfo",
+  "end_session_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/logout",
+  "frontchannel_logout_session_supported": true,
+  "frontchannel_logout_supported": true,
+  "jwks_uri": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/certs",
+  "check_session_iframe": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/login-status-iframe.html",
+  "grant_types_supported": [
+    "authorization_code",
+    "client_credentials",
+    "implicit",
+    "password",
+    "refresh_token",
+    "urn:ietf:params:oauth:grant-type:device_code",
+    "urn:ietf:params:oauth:grant-type:jwt-bearer",
+    "urn:ietf:params:oauth:grant-type:token-exchange",
+    "urn:ietf:params:oauth:grant-type:uma-ticket",
+    "urn:openid:params:grant-type:ciba"
+  ],
+  "acr_values_supported": [
+    "0",
+    "1"
+  ],
+  "response_types_supported": [
+    "code",
+    "none",
+    "id_token",
+    "token",
+    "id_token token",
+    "code id_token",
+    "code token",
+    "code id_token token"
+  ],
+  "subject_types_supported": [
+    "public",
+    "pairwise"
+  ],
+  "prompt_values_supported": [
+    "none",
+    "login",
+    "consent"
+  ],
+  "id_token_signing_alg_values_supported": [
+    "PS384",
+    "RS384",
+    "EdDSA",
+    "ES384",
+    "HS256",
+    "HS512",
+    "ES256",
+    "RS256",
+    "HS384",
+    "ES512",
+    "PS256",
+    "PS512",
+    "RS512"
+  ],
+  "id_token_encryption_alg_values_supported": [
+    "ECDH-ES+A256KW",
+    "ECDH-ES+A192KW",
+    "ECDH-ES+A128KW",
+    "RSA-OAEP",
+    "RSA-OAEP-256",
+    "RSA1_5",
+    "ECDH-ES"
+  ],
+  "id_token_encryption_enc_values_supported": [
+    "A256GCM",
+    "A192GCM",
+    "A128GCM",
+    "A128CBC-HS256",
+    "A192CBC-HS384",
+    "A256CBC-HS512"
+  ],
+  "userinfo_signing_alg_values_supported": [
+    "PS384",
+    "RS384",
+    "EdDSA",
+    "ES384",
+    "HS256",
+    "HS512",
+    "ES256",
+    "RS256",
+    "HS384",
+    "ES512",
+    "PS256",
+    "PS512",
+    "RS512",
+    "none"
+  ],
+  "userinfo_encryption_alg_values_supported": [
+    "ECDH-ES+A256KW",
+    "ECDH-ES+A192KW",
+    "ECDH-ES+A128KW",
+    "RSA-OAEP",
+    "RSA-OAEP-256",
+    "RSA1_5",
+    "ECDH-ES"
+  ],
+  "userinfo_encryption_enc_values_supported": [
+    "A256GCM",
+    "A192GCM",
+    "A128GCM",
+    "A128CBC-HS256",
+    "A192CBC-HS384",
+    "A256CBC-HS512"
+  ],
+  "request_object_signing_alg_values_supported": [
+    "PS384",
+    "RS384",
+    "EdDSA",
+    "ES384",
+    "HS256",
+    "HS512",
+    "ES256",
+    "RS256",
+    "HS384",
+    "ES512",
+    "PS256",
+    "PS512",
+    "RS512",
+    "none"
+  ],
+  "request_object_encryption_alg_values_supported": [
+    "ECDH-ES+A256KW",
+    "ECDH-ES+A192KW",
+    "ECDH-ES+A128KW",
+    "RSA-OAEP",
+    "RSA-OAEP-256",
+    "RSA1_5",
+    "ECDH-ES"
+  ],
+  "request_object_encryption_enc_values_supported": [
+    "A256GCM",
+    "A192GCM",
+    "A128GCM",
+    "A128CBC-HS256",
+    "A192CBC-HS384",
+    "A256CBC-HS512"
+  ],
+  "response_modes_supported": [
+    "query",
+    "fragment",
+    "form_post",
+    "query.jwt",
+    "fragment.jwt",
+    "form_post.jwt",
+    "jwt"
+  ],
+  "registration_endpoint": "http://keycloak:8081/realms/mcp-erp/clients-registrations/openid-connect",
+  "token_endpoint_auth_methods_supported": [
+    "private_key_jwt",
+    "client_secret_basic",
+    "client_secret_post",
+    "tls_client_auth",
+    "client_secret_jwt",
+    "none"
+  ],
+  "token_endpoint_auth_signing_alg_values_supported": [
+    "PS384",
+    "RS384",
+    "EdDSA",
+    "ES384",
+    "HS256",
+    "HS512",
+    "ES256",
+    "RS256",
+    "HS384",
+    "ES512",
+    "PS256",
+    "PS512",
+    "RS512"
+  ],
+  "introspection_endpoint_auth_methods_supported": [
+    "private_key_jwt",
+    "client_secret_basic",
+    "client_secret_post",
+    "tls_client_auth",
+    "client_secret_jwt",
+    "none"
+  ],
+  "introspection_endpoint_auth_signing_alg_values_supported": [
+    "PS384",
+    "RS384",
+    "EdDSA",
+    "ES384",
+    "HS256",
+    "HS512",
+    "ES256",
+    "RS256",
+    "HS384",
+    "ES512",
+    "PS256",
+    "PS512",
+    "RS512"
+  ],
+  "authorization_signing_alg_values_supported": [
+    "PS384",
+    "RS384",
+    "EdDSA",
+    "ES384",
+    "HS256",
+    "HS512",
+    "ES256",
+    "RS256",
+    "HS384",
+    "ES512",
+    "PS256",
+    "PS512",
+    "RS512"
+  ],
+  "authorization_encryption_alg_values_supported": [
+    "ECDH-ES+A256KW",
+    "ECDH-ES+A192KW",
+    "ECDH-ES+A128KW",
+    "RSA-OAEP",
+    "RSA-OAEP-256",
+    "RSA1_5",
+    "ECDH-ES"
+  ],
+  "authorization_encryption_enc_values_supported": [
+    "A256GCM",
+    "A192GCM",
+    "A128GCM",
+    "A128CBC-HS256",
+    "A192CBC-HS384",
+    "A256CBC-HS512"
+  ],
+  "claims_supported": [
+    "iss",
+    "sub",
+    "aud",
+    "exp",
+    "iat",
+    "auth_time",
+    "name",
+    "given_name",
+    "family_name",
+    "preferred_username",
+    "email",
+    "acr",
+    "azp",
+    "nonce"
+  ],
+  "claim_types_supported": [
+    "normal"
+  ],
+  "claims_parameter_supported": true,
+  "scopes_supported": [
+    "openid",
+    "ERP.READ",
+    "erp.read",
+    "hr.read",
+    "erp.write",
+    "hr-audience",
+    "offline_access",
+    "basic",
+    "erp.decide",
+    "mcp-erp-audience"
+  ],
+  "request_parameter_supported": true,
+  "request_uri_parameter_supported": true,
+  "require_request_uri_registration": true,
+  "code_challenge_methods_supported": [
+    "plain",
+    "S256"
+  ],
+  "tls_client_certificate_bound_access_tokens": true,
+  "dpop_signing_alg_values_supported": [
+    "PS384",
+    "RS384",
+    "EdDSA",
+    "ES384",
+    "ES256",
+    "RS256",
+    "ES512",
+    "PS256",
+    "PS512",
+    "RS512"
+  ],
+  "revocation_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/revoke",
+  "revocation_endpoint_auth_methods_supported": [
+    "private_key_jwt",
+    "client_secret_basic",
+    "client_secret_post",
+    "tls_client_auth",
+    "client_secret_jwt",
+    "none"
+  ],
+  "revocation_endpoint_auth_signing_alg_values_supported": [
+    "PS384",
+    "RS384",
+    "EdDSA",
+    "ES384",
+    "HS256",
+    "HS512",
+    "ES256",
+    "RS256",
+    "HS384",
+    "ES512",
+    "PS256",
+    "PS512",
+    "RS512"
+  ],
+  "backchannel_logout_supported": true,
+  "backchannel_logout_session_supported": true,
+  "device_authorization_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/auth/device",
+  "backchannel_token_delivery_modes_supported": [
+    "poll",
+    "ping"
+  ],
+  "backchannel_authentication_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/ext/ciba/auth",
+  "backchannel_authentication_request_signing_alg_values_supported": [
+    "PS384",
+    "RS384",
+    "EdDSA",
+    "ES384",
+    "ES256",
+    "RS256",
+    "ES512",
+    "PS256",
+    "PS512",
+    "RS512"
+  ],
+  "require_pushed_authorization_requests": false,
+  "pushed_authorization_request_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/ext/par/request",
+  "mtls_endpoint_aliases": {
+    "token_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/token",
+    "revocation_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/revoke",
+    "introspection_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/token/introspect",
+    "device_authorization_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/auth/device",
+    "registration_endpoint": "http://keycloak:8081/realms/mcp-erp/clients-registrations/openid-connect",
+    "userinfo_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/userinfo",
+    "pushed_authorization_request_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/ext/par/request",
+    "backchannel_authentication_endpoint": "http://keycloak:8081/realms/mcp-erp/protocol/openid-connect/ext/ciba/auth"
+  },
+  "authorization_response_iss_parameter_supported": true,
+  "client_id_metadata_document_supported": true
+}
+
+5 of 10
+──────────────────────────────────────────────────────────────────────────────
+
+GET /realms/mcp-erp/protocol/openid-connect/auth?response_type=code&client_id=https%3A%2F%2Fmarcosfsousa.github.io%2Fmcp-erp%2Fclients%2Fconformance%2F1.json&redirect_uri=http%3A%2F%2F127.0.0.1%3A8085%2Fcallback&state=0oo6wESfu_p-OtkGPlEWv5bRyqVa1XdaT5VOIfirYCg&code_challenge=hWV89lPCj_8nNQ3e6OmWLyDTnOQkdB1n7TKa_CEz26Q&code_challenge_method=S256&resource=http%3A%2F%2Flocalhost%3A8080%2Fmcp&scope=erp.decide+erp.read+erp.write HTTP/1.1
+accept: */*
+accept-encoding: gzip, deflate
+connection: keep-alive
+host: keycloak:8081
+user-agent: python-httpx2/2.12.0
+
+HTTP/1.1 200 OK
+cache-control: no-store, must-revalidate, max-age=0
+content-language: en
+content-length: 7023
+content-security-policy: frame-src 'self'; frame-ancestors 'self'; object-src 'none';
+content-type: text/html;charset=utf-8
+referrer-policy: no-referrer
+set-cookie: AUTH_SESSION_ID=RnpZLXFBcER3eEluaGtBdUdKRHowVDRuLlJfYXFYajJmY3V0enllMGFTTXRtcjdHUE5PVXJHWDVaZ2R4VXpJRTVPSktFX1Y5a1QwVTVSaWhEN05FeGVaV2VrekFxQXhqX0dTRVBERlNhR2MzZEJR.7353e7dfee5e-14033;Version=1;Path=/realms/mcp-erp/;HttpOnly;SameSite=Lax, KC_AUTH_SESSION_HASH=ahK50sGII6FQOGUGpdYyK24iXb5rxJtrGmPXfkH2ZogLsfWNWYfLvrlvrAOIepFu;Version=1;Path=/realms/mcp-erp/;Max-Age=60;SameSite=Lax, KC_RESTART=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIiwia2lkIjoiZTNlOWNlYzQtOGZkMy00NTQwLWIyZDItNjUxOGQ1ODQzNTQyIn0..xV2MCA00wp0NZjBC.833tUTq4O4QUaS4OlPhjwl4nc1xLRAWga_NAzQ_odxuZ4kAs5uKmmmcLsMKFyEIdFdRhCgUcZJvAMH43wAariTtmJ_DHscsIH-uoqtL7XNjwcrOWr4ZzWTGVjK0F3Bv8JIuwJrvreqD-Ella_S10TJAEK-0RG9jKK9e3cA41dk9B-G1ZCKy7TWodDzIACnxQwwnKl4DYQMwFmIqsRLpK7ovtGbMNe8jLi2gi1sfnt8qrBi8UJZYeytD2X7xTRfRKPjjE51GSmIU6b4m53EPFRMaQrnsfq4biTowBu46HcpTCmGYvhNe9ListPgtdphSO2Tsm02lW2fzT4zCO_-hLFoP9ogrQGd47nr3UKeQjXkYLH4CYbVwt3Yv4FwJC1jHLd-R8nR3VbIqZu_tqsxQ4wQ5z-iY68RxkDhhddo2Js0IwEIU4LAcSDGxJ2FuivQE7M7qp61FMO658IgK9DucXQYsNjQ2TlEV5E6FXtHR8-gBikhH0X3yny8PmclY31wDm44gWFaUs6-nRKx_c9Xb6nCS_fQHGthc8EXVc0pGCKrmv9bP_lAQ05_i787ojJ-LA6ges9TOBi0XldyjeZ-MuvmzcZ2DwbsqK-8-hS2aegdniUsOWQepngBCtAzFOM1Y-duQOOXlZrsZa55b5y89N0mbtvF4y8OWw--53nNIhjDGHp2sIwVgH8Sx3aK2f0eTPjJaql_uSLGQr191M5HnC6SCSr7U7Y6EkvMd_zE7Smd-LF5mrtdUr-_GKg7xXGNVKvt7IIGAZR2zFvUFDpRWwnmIpb_bCYYlw8vB6iRCRnBgPH4JlVgkBkeXbioNDLasf6rAuMUSvHKquZUmVPmraLVvQ4rm1QOH6T9EUQq-nekU154edo26OBAZSvudrVCQcp2_RlbcH_UwUZNLXNXZMGk_4PV88hDmmTv6SVcEVNF7OQKb8NwYOmQ6uZtjElbaWZgnz-JBAaCm6R2qEubyOiZ6idHNTqL08iZjczxzNEX7a3cLadlNVuaZrhTK2VBZjOPrsk26JdEC_1U11CHLI_QVYq288edDIjZkipdxnavWSh1WE5q2Trl7_od6Rx6HI1BgUY32vs9eT2hX4voPHQoVcD7PfB5DrJ55AUFrgTk3XoHmSpaMKYQT-9iXNI0pljGBjW6_HiwM.wLFDD5oilC0tLCJWZj6mDg;Version=1;Path=/realms/mcp-erp/;HttpOnly;SameSite=Lax
+strict-transport-security: max-age=31536000; includeSubDomains
+x-content-type-options: nosniff
+x-frame-options: SAMEORIGIN
+x-robots-tag: none
+
+[text/html;charset=utf-8]
+
+6 of 10
+──────────────────────────────────────────────────────────────────────────────
+
+POST /realms/mcp-erp/login-actions/authenticate?session_code=trvQgWzn8X5yy4AfZRYV8jRCtIBfIdKQR8EtaEDM5W4&execution=3c41f453-5527-4434-8610-c0c6992b65c3&client_id=https%3A%2F%2Fmarcosfsousa.github.io%2Fmcp-erp%2Fclients%2Fconformance%2F1.json&tab_id=ZnOrgUVODIg&client_data=eyJydSI6Imh0dHA6Ly8xMjcuMC4wLjE6ODA4NS9jYWxsYmFjayIsInJ0IjoiY29kZSIsInN0IjoiMG9vNndFU2Z1X3AtT3RrR1BsRVd2NWJSeXFWYTFYZGFUNVZPSWZpcllDZyJ9 HTTP/1.1
+accept: */*
+accept-encoding: gzip, deflate
+connection: keep-alive
+content-length: 70
+content-type: application/x-www-form-urlencoded
+cookie: AUTH_SESSION_ID=RnpZLXFBcER3eEluaGtBdUdKRHowVDRuLlJfYXFYajJmY3V0enllMGFTTXRtcjdHUE5PVXJHWDVaZ2R4VXpJRTVPSktFX1Y5a1QwVTVSaWhEN05FeGVaV2VrekFxQXhqX0dTRVBERlNhR2MzZEJR.7353e7dfee5e-14033; KC_AUTH_SESSION_HASH=ahK50sGII6FQOGUGpdYyK24iXb5rxJtrGmPXfkH2ZogLsfWNWYfLvrlvrAOIepFu; KC_RESTART=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIiwia2lkIjoiZTNlOWNlYzQtOGZkMy00NTQwLWIyZDItNjUxOGQ1ODQzNTQyIn0..xV2MCA00wp0NZjBC.833tUTq4O4QUaS4OlPhjwl4nc1xLRAWga_NAzQ_odxuZ4kAs5uKmmmcLsMKFyEIdFdRhCgUcZJvAMH43wAariTtmJ_DHscsIH-uoqtL7XNjwcrOWr4ZzWTGVjK0F3Bv8JIuwJrvreqD-Ella_S10TJAEK-0RG9jKK9e3cA41dk9B-G1ZCKy7TWodDzIACnxQwwnKl4DYQMwFmIqsRLpK7ovtGbMNe8jLi2gi1sfnt8qrBi8UJZYeytD2X7xTRfRKPjjE51GSmIU6b4m53EPFRMaQrnsfq4biTowBu46HcpTCmGYvhNe9ListPgtdphSO2Tsm02lW2fzT4zCO_-hLFoP9ogrQGd47nr3UKeQjXkYLH4CYbVwt3Yv4FwJC1jHLd-R8nR3VbIqZu_tqsxQ4wQ5z-iY68RxkDhhddo2Js0IwEIU4LAcSDGxJ2FuivQE7M7qp61FMO658IgK9DucXQYsNjQ2TlEV5E6FXtHR8-gBikhH0X3yny8PmclY31wDm44gWFaUs6-nRKx_c9Xb6nCS_fQHGthc8EXVc0pGCKrmv9bP_lAQ05_i787ojJ-LA6ges9TOBi0XldyjeZ-MuvmzcZ2DwbsqK-8-hS2aegdniUsOWQepngBCtAzFOM1Y-duQOOXlZrsZa55b5y89N0mbtvF4y8OWw--53nNIhjDGHp2sIwVgH8Sx3aK2f0eTPjJaql_uSLGQr191M5HnC6SCSr7U7Y6EkvMd_zE7Smd-LF5mrtdUr-_GKg7xXGNVKvt7IIGAZR2zFvUFDpRWwnmIpb_bCYYlw8vB6iRCRnBgPH4JlVgkBkeXbioNDLasf6rAuMUSvHKquZUmVPmraLVvQ4rm1QOH6T9EUQq-nekU154edo26OBAZSvudrVCQcp2_RlbcH_UwUZNLXNXZMGk_4PV88hDmmTv6SVcEVNF7OQKb8NwYOmQ6uZtjElbaWZgnz-JBAaCm6R2qEubyOiZ6idHNTqL08iZjczxzNEX7a3cLadlNVuaZrhTK2VBZjOPrsk26JdEC_1U11CHLI_QVYq288edDIjZkipdxnavWSh1WE5q2Trl7_od6Rx6HI1BgUY32vs9eT2hX4voPHQoVcD7PfB5DrJ55AUFrgTk3XoHmSpaMKYQT-9iXNI0pljGBjW6_HiwM.wLFDD5oilC0tLCJWZj6mDg
+host: keycloak:8081
+user-agent: python-httpx2/2.12.0
+
+username=priya.raman&password=not-a-secret-demo-password&credentialId=
+
+HTTP/1.1 302 Found
+cache-control: no-store, must-revalidate, max-age=0
+content-length: 0
+content-security-policy: frame-src 'self'; frame-ancestors 'self'; object-src 'none';
+location: http://keycloak:8081/realms/mcp-erp/login-actions/required-action?execution=OAUTH_GRANT&client_id=https%3A%2F%2Fmarcosfsousa.github.io%2Fmcp-erp%2Fclients%2Fconformance%2F1.json&tab_id=ZnOrgUVODIg&client_data=eyJydSI6Imh0dHA6Ly8xMjcuMC4wLjE6ODA4NS9jYWxsYmFjayIsInJ0IjoiY29kZSIsInN0IjoiMG9vNndFU2Z1X3AtT3RrR1BsRVd2NWJSeXFWYTFYZGFUNVZPSWZpcllDZyJ9
+referrer-policy: no-referrer
+strict-transport-security: max-age=31536000; includeSubDomains
+x-content-type-options: nosniff
+x-frame-options: SAMEORIGIN
+x-robots-tag: none
+
+7 of 10
+──────────────────────────────────────────────────────────────────────────────
+
+GET /realms/mcp-erp/login-actions/required-action?execution=OAUTH_GRANT&client_id=https%3A%2F%2Fmarcosfsousa.github.io%2Fmcp-erp%2Fclients%2Fconformance%2F1.json&tab_id=ZnOrgUVODIg&client_data=eyJydSI6Imh0dHA6Ly8xMjcuMC4wLjE6ODA4NS9jYWxsYmFjayIsInJ0IjoiY29kZSIsInN0IjoiMG9vNndFU2Z1X3AtT3RrR1BsRVd2NWJSeXFWYTFYZGFUNVZPSWZpcllDZyJ9 HTTP/1.1
+accept: */*
+accept-encoding: gzip, deflate
+connection: keep-alive
+cookie: AUTH_SESSION_ID=RnpZLXFBcER3eEluaGtBdUdKRHowVDRuLlJfYXFYajJmY3V0enllMGFTTXRtcjdHUE5PVXJHWDVaZ2R4VXpJRTVPSktFX1Y5a1QwVTVSaWhEN05FeGVaV2VrekFxQXhqX0dTRVBERlNhR2MzZEJR.7353e7dfee5e-14033; KC_AUTH_SESSION_HASH=ahK50sGII6FQOGUGpdYyK24iXb5rxJtrGmPXfkH2ZogLsfWNWYfLvrlvrAOIepFu; KC_RESTART=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIiwia2lkIjoiZTNlOWNlYzQtOGZkMy00NTQwLWIyZDItNjUxOGQ1ODQzNTQyIn0..xV2MCA00wp0NZjBC.833tUTq4O4QUaS4OlPhjwl4nc1xLRAWga_NAzQ_odxuZ4kAs5uKmmmcLsMKFyEIdFdRhCgUcZJvAMH43wAariTtmJ_DHscsIH-uoqtL7XNjwcrOWr4ZzWTGVjK0F3Bv8JIuwJrvreqD-Ella_S10TJAEK-0RG9jKK9e3cA41dk9B-G1ZCKy7TWodDzIACnxQwwnKl4DYQMwFmIqsRLpK7ovtGbMNe8jLi2gi1sfnt8qrBi8UJZYeytD2X7xTRfRKPjjE51GSmIU6b4m53EPFRMaQrnsfq4biTowBu46HcpTCmGYvhNe9ListPgtdphSO2Tsm02lW2fzT4zCO_-hLFoP9ogrQGd47nr3UKeQjXkYLH4CYbVwt3Yv4FwJC1jHLd-R8nR3VbIqZu_tqsxQ4wQ5z-iY68RxkDhhddo2Js0IwEIU4LAcSDGxJ2FuivQE7M7qp61FMO658IgK9DucXQYsNjQ2TlEV5E6FXtHR8-gBikhH0X3yny8PmclY31wDm44gWFaUs6-nRKx_c9Xb6nCS_fQHGthc8EXVc0pGCKrmv9bP_lAQ05_i787ojJ-LA6ges9TOBi0XldyjeZ-MuvmzcZ2DwbsqK-8-hS2aegdniUsOWQepngBCtAzFOM1Y-duQOOXlZrsZa55b5y89N0mbtvF4y8OWw--53nNIhjDGHp2sIwVgH8Sx3aK2f0eTPjJaql_uSLGQr191M5HnC6SCSr7U7Y6EkvMd_zE7Smd-LF5mrtdUr-_GKg7xXGNVKvt7IIGAZR2zFvUFDpRWwnmIpb_bCYYlw8vB6iRCRnBgPH4JlVgkBkeXbioNDLasf6rAuMUSvHKquZUmVPmraLVvQ4rm1QOH6T9EUQq-nekU154edo26OBAZSvudrVCQcp2_RlbcH_UwUZNLXNXZMGk_4PV88hDmmTv6SVcEVNF7OQKb8NwYOmQ6uZtjElbaWZgnz-JBAaCm6R2qEubyOiZ6idHNTqL08iZjczxzNEX7a3cLadlNVuaZrhTK2VBZjOPrsk26JdEC_1U11CHLI_QVYq288edDIjZkipdxnavWSh1WE5q2Trl7_od6Rx6HI1BgUY32vs9eT2hX4voPHQoVcD7PfB5DrJ55AUFrgTk3XoHmSpaMKYQT-9iXNI0pljGBjW6_HiwM.wLFDD5oilC0tLCJWZj6mDg
+host: keycloak:8081
+user-agent: python-httpx2/2.12.0
+
+HTTP/1.1 200 OK
+cache-control: no-store, must-revalidate, max-age=0
+content-language: en
+content-length: 6006
+content-security-policy: frame-src 'self'; frame-ancestors 'self'; object-src 'none';
+content-type: text/html;charset=utf-8
+referrer-policy: no-referrer
+strict-transport-security: max-age=31536000; includeSubDomains
+x-content-type-options: nosniff
+x-frame-options: SAMEORIGIN
+x-robots-tag: none
+
+[text/html;charset=utf-8]
+
+8 of 10
+──────────────────────────────────────────────────────────────────────────────
+
+POST /realms/mcp-erp/login-actions/consent?client_id=https%3A%2F%2Fmarcosfsousa.github.io%2Fmcp-erp%2Fclients%2Fconformance%2F1.json&tab_id=ZnOrgUVODIg&client_data=eyJydSI6Imh0dHA6Ly8xMjcuMC4wLjE6ODA4NS9jYWxsYmFjayIsInJ0IjoiY29kZSIsInN0IjoiMG9vNndFU2Z1X3AtT3RrR1BsRVd2NWJSeXFWYTFYZGFUNVZPSWZpcllDZyJ9 HTTP/1.1
+accept: */*
+accept-encoding: gzip, deflate
+connection: keep-alive
+content-length: 10
+content-type: application/x-www-form-urlencoded
+cookie: AUTH_SESSION_ID=RnpZLXFBcER3eEluaGtBdUdKRHowVDRuLlJfYXFYajJmY3V0enllMGFTTXRtcjdHUE5PVXJHWDVaZ2R4VXpJRTVPSktFX1Y5a1QwVTVSaWhEN05FeGVaV2VrekFxQXhqX0dTRVBERlNhR2MzZEJR.7353e7dfee5e-14033; KC_AUTH_SESSION_HASH=ahK50sGII6FQOGUGpdYyK24iXb5rxJtrGmPXfkH2ZogLsfWNWYfLvrlvrAOIepFu; KC_RESTART=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIiwia2lkIjoiZTNlOWNlYzQtOGZkMy00NTQwLWIyZDItNjUxOGQ1ODQzNTQyIn0..xV2MCA00wp0NZjBC.833tUTq4O4QUaS4OlPhjwl4nc1xLRAWga_NAzQ_odxuZ4kAs5uKmmmcLsMKFyEIdFdRhCgUcZJvAMH43wAariTtmJ_DHscsIH-uoqtL7XNjwcrOWr4ZzWTGVjK0F3Bv8JIuwJrvreqD-Ella_S10TJAEK-0RG9jKK9e3cA41dk9B-G1ZCKy7TWodDzIACnxQwwnKl4DYQMwFmIqsRLpK7ovtGbMNe8jLi2gi1sfnt8qrBi8UJZYeytD2X7xTRfRKPjjE51GSmIU6b4m53EPFRMaQrnsfq4biTowBu46HcpTCmGYvhNe9ListPgtdphSO2Tsm02lW2fzT4zCO_-hLFoP9ogrQGd47nr3UKeQjXkYLH4CYbVwt3Yv4FwJC1jHLd-R8nR3VbIqZu_tqsxQ4wQ5z-iY68RxkDhhddo2Js0IwEIU4LAcSDGxJ2FuivQE7M7qp61FMO658IgK9DucXQYsNjQ2TlEV5E6FXtHR8-gBikhH0X3yny8PmclY31wDm44gWFaUs6-nRKx_c9Xb6nCS_fQHGthc8EXVc0pGCKrmv9bP_lAQ05_i787ojJ-LA6ges9TOBi0XldyjeZ-MuvmzcZ2DwbsqK-8-hS2aegdniUsOWQepngBCtAzFOM1Y-duQOOXlZrsZa55b5y89N0mbtvF4y8OWw--53nNIhjDGHp2sIwVgH8Sx3aK2f0eTPjJaql_uSLGQr191M5HnC6SCSr7U7Y6EkvMd_zE7Smd-LF5mrtdUr-_GKg7xXGNVKvt7IIGAZR2zFvUFDpRWwnmIpb_bCYYlw8vB6iRCRnBgPH4JlVgkBkeXbioNDLasf6rAuMUSvHKquZUmVPmraLVvQ4rm1QOH6T9EUQq-nekU154edo26OBAZSvudrVCQcp2_RlbcH_UwUZNLXNXZMGk_4PV88hDmmTv6SVcEVNF7OQKb8NwYOmQ6uZtjElbaWZgnz-JBAaCm6R2qEubyOiZ6idHNTqL08iZjczxzNEX7a3cLadlNVuaZrhTK2VBZjOPrsk26JdEC_1U11CHLI_QVYq288edDIjZkipdxnavWSh1WE5q2Trl7_od6Rx6HI1BgUY32vs9eT2hX4voPHQoVcD7PfB5DrJ55AUFrgTk3XoHmSpaMKYQT-9iXNI0pljGBjW6_HiwM.wLFDD5oilC0tLCJWZj6mDg
+host: keycloak:8081
+user-agent: python-httpx2/2.12.0
+
+accept=Yes
+
+HTTP/1.1 302 Found
+cache-control: no-store, must-revalidate, max-age=0
+content-length: 0
+content-security-policy: frame-src 'self'; frame-ancestors 'self'; object-src 'none';
+location: http://127.0.0.1:8085/callback?state=0oo6wESfu_p-OtkGPlEWv5bRyqVa1XdaT5VOIfirYCg&session_state=FzY-qApDwxInhkAuGJDz0T4n&iss=http%3A%2F%2Fkeycloak%3A8081%2Frealms%2Fmcp-erp&code=3e24f36c-8455-4cd3-9cad-df73c9f7826f.FzY-qApDwxInhkAuGJDz0T4n.2a0e2c1c-5d17-4da4-81a5-7585290b7041
+referrer-policy: no-referrer
+set-cookie: KC_RESTART=;Version=1;Path=/realms/mcp-erp/;Max-Age=0, KEYCLOAK_IDENTITY=eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJmYjFmMzkzOC1jMzgxLTQ3MjMtOTA3MC1iZTMyMjFkYjI2ZDEifQ.eyJleHAiOjE3ODcyOTc2OTUsImlhdCI6MTc4NzI2MTY5NSwianRpIjoiMzJkNDVlNjctZWYxNS0wMDI0LWMwYzUtNTFhM2MwYTY5MjEwIiwiaXNzIjoiaHR0cDovL2tleWNsb2FrOjgwODEvcmVhbG1zL21jcC1lcnAiLCJzdWIiOiJwcml5YS1yYW1hbiIsInR5cCI6IlNlcmlhbGl6ZWQtSUQiLCJzaWQiOiJGelktcUFwRHd4SW5oa0F1R0pEejBUNG4iLCJzdGF0ZV9jaGVja2VyIjoiUUxhQmtoQ2Z4OUtma0c1THRoOXRxZXQtVnJPbHNkUmpnU3RVNzFWNmoydyJ9.Pc_G-c1pxqmBudDdevXTb6W1YrlpkcdCAJj7oJ0qMQ4rrKN8-G7yNoXTv4Oz_S4PBghop8xGJV0PM8BH30WacQ;Version=1;Path=/realms/mcp-erp/;HttpOnly;SameSite=Lax, KEYCLOAK_SESSION=ahK50sGII6FQOGUGpdYyK24iXb5rxJtrGmPXfkH2ZogLsfWNWYfLvrlvrAOIepFu;Version=1;Path=/realms/mcp-erp/;Max-Age=36000;SameSite=Lax
+strict-transport-security: max-age=31536000; includeSubDomains
+x-content-type-options: nosniff
+x-frame-options: SAMEORIGIN
+x-robots-tag: none
+
+9 of 10
+──────────────────────────────────────────────────────────────────────────────
+
+POST /realms/mcp-erp/protocol/openid-connect/token HTTP/1.1
+content-length: 465
+content-type: application/x-www-form-urlencoded
+host: keycloak:8081
+
+grant_type=authorization_code&code=3e24f36c-8455-4cd3-9cad-df73c9f7826f.FzY-qApDwxInhkAuGJDz0T4n.2a0e2c1c-5d17-4da4-81a5-7585290b7041&redirect_uri=http%3A%2F%2F127.0.0.1%3A8085%2Fcallback&client_id=https%3A%2F%2Fmarcosfsousa.github.io%2Fmcp-erp%2Fclients%2Fconformance%2F1.json&code_verifier=7nHnwQrfJcIMnOoDaat~Mo.TfaYsA~8xstFQZ_cTD8AZvETxDE4Gqe9T~mFo2i-uoOwnurf7_T~qb6DF2eDZ3goJHgqRGeD8uL.pj3ym-QJUELsBpWkT27H0NSJic5Op&resource=http%3A%2F%2Flocalhost%3A8080%2Fmcp
+
+HTTP/1.1 200 OK
+cache-control: no-store
+content-length: 1952
+content-type: application/json
+pragma: no-cache
+referrer-policy: no-referrer
+strict-transport-security: max-age=31536000; includeSubDomains
+x-content-type-options: nosniff
+x-frame-options: SAMEORIGIN
+x-robots-tag: none
+
+{
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJWRE93Q29LeG1CWC1fNDFTU0QyUVJ6N0NiakNidUlNa0VSTXc2WU0wREVBIn0.eyJleHAiOjE3ODcyNjE5OTUsImlhdCI6MTc4NzI2MTY5NSwianRpIjoib25ydGFjOmNiYWU2ODY2LTZiMDktYTQ3My00NGIxLTkxM2NmZTg3NmVkNCIsImlzcyI6Imh0dHA6Ly9rZXljbG9hazo4MDgxL3JlYWxtcy9tY3AtZXJwIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwL21jcCIsInN1YiI6InByaXlhLXJhbWFuIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoiaHR0cHM6Ly9tYXJjb3Nmc291c2EuZ2l0aHViLmlvL21jcC1lcnAvY2xpZW50cy9jb25mb3JtYW5jZS8xLmpzb24iLCJzaWQiOiJGelktcUFwRHd4SW5oa0F1R0pEejBUNG4iLCJzY29wZSI6ImVycC5yZWFkIGVycC53cml0ZSBlcnAuZGVjaWRlIn0.lsYQUNyR82lJaDDa9xIWtrDB8-dNeK52PmcWXba3Nlo9uTvPIEDRLjGuBKTOPUu0ya0OA68HKN-meniIKgbtZnNiASNX9T_2Xz245A47IrZ5RKYlvYtaEnaTVvDNGXyG93NhRBZIJ_5lroLUWWDYNrYP99bOvE2C5iMf1f9ILkJgGWPM66yIziz2BQhZJ8nystfLauAjQfY_qwuv7y38Y1b7fCasgaYjykDgXRXyGHrK03c0gWl7qmJVr4rXMJIcPaXH5nn5HS_R6JVW5RaRFUiINqe56K5_QgIcF-xIpoxCfvIjQFSC_ycTpS4anQc65i4xJeF0iigYfXmiyFZVjg",
+  "expires_in": 300,
+  "refresh_expires_in": 1800,
+  "refresh_token": "eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJmYjFmMzkzOC1jMzgxLTQ3MjMtOTA3MC1iZTMyMjFkYjI2ZDEifQ.eyJleHAiOjE3ODcyNjM0OTUsImlhdCI6MTc4NzI2MTY5NSwianRpIjoiNDE3N2RiY2UtMDMyNS1lYWQ2LTE3YTMtYTUyMjA4MmEzMTI0IiwiaXNzIjoiaHR0cDovL2tleWNsb2FrOjgwODEvcmVhbG1zL21jcC1lcnAiLCJhdWQiOiJodHRwOi8va2V5Y2xvYWs6ODA4MS9yZWFsbXMvbWNwLWVycCIsInN1YiI6InByaXlhLXJhbWFuIiwidHlwIjoiUmVmcmVzaCIsImF6cCI6Imh0dHBzOi8vbWFyY29zZnNvdXNhLmdpdGh1Yi5pby9tY3AtZXJwL2NsaWVudHMvY29uZm9ybWFuY2UvMS5qc29uIiwic2lkIjoiRnpZLXFBcER3eEluaGtBdUdKRHowVDRuIiwic2NvcGUiOiJlcnAucmVhZCBlcnAud3JpdGUgZXJwLmRlY2lkZSBiYXNpYyBtY3AtZXJwLWF1ZGllbmNlIiwiYXVkX3giOiJodHRwOi8vbG9jYWxob3N0OjgwODAvbWNwIiwicHJvdiI6ImRlZmF1bHQiLCJyZXVzZV9pZCI6Ijc0MzVlNzc0LTk3MjEtNDEzNC05ZTFmLTI2YjdiODVkOTMzYSJ9.vJpzzdausf57JGx7S6-iGD27eHWC29r_h88pcVFfTlDBbTSZqCR2WK452ZrBozrUjRPZ4uO7TJxha4RUXWQ1mA",
+  "token_type": "Bearer",
+  "not-before-policy": 0,
+  "session_state": "FzY-qApDwxInhkAuGJDz0T4n",
+  "scope": "erp.read erp.write erp.decide"
+}
+
+10 of 10
+──────────────────────────────────────────────────────────────────────────────
+
+POST /mcp HTTP/1.1
+accept: application/json, text/event-stream
+accept-encoding: gzip, deflate
+authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJWRE93Q29LeG1CWC1fNDFTU0QyUVJ6N0NiakNidUlNa0VSTXc2WU0wREVBIn0.eyJleHAiOjE3ODcyNjE5OTUsImlhdCI6MTc4NzI2MTY5NSwianRpIjoib25ydGFjOmNiYWU2ODY2LTZiMDktYTQ3My00NGIxLTkxM2NmZTg3NmVkNCIsImlzcyI6Imh0dHA6Ly9rZXljbG9hazo4MDgxL3JlYWxtcy9tY3AtZXJwIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwL21jcCIsInN1YiI6InByaXlhLXJhbWFuIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoiaHR0cHM6Ly9tYXJjb3Nmc291c2EuZ2l0aHViLmlvL21jcC1lcnAvY2xpZW50cy9jb25mb3JtYW5jZS8xLmpzb24iLCJzaWQiOiJGelktcUFwRHd4SW5oa0F1R0pEejBUNG4iLCJzY29wZSI6ImVycC5yZWFkIGVycC53cml0ZSBlcnAuZGVjaWRlIn0.lsYQUNyR82lJaDDa9xIWtrDB8-dNeK52PmcWXba3Nlo9uTvPIEDRLjGuBKTOPUu0ya0OA68HKN-meniIKgbtZnNiASNX9T_2Xz245A47IrZ5RKYlvYtaEnaTVvDNGXyG93NhRBZIJ_5lroLUWWDYNrYP99bOvE2C5iMf1f9ILkJgGWPM66yIziz2BQhZJ8nystfLauAjQfY_qwuv7y38Y1b7fCasgaYjykDgXRXyGHrK03c0gWl7qmJVr4rXMJIcPaXH5nn5HS_R6JVW5RaRFUiINqe56K5_QgIcF-xIpoxCfvIjQFSC_ycTpS4anQc65i4xJeF0iigYfXmiyFZVjg
+connection: keep-alive
+content-length: 282
+content-type: application/json
+host: localhost:8080
+mcp-method: tools/call
+mcp-name: list_requisitions
+mcp-protocol-version: 2026-07-28
+user-agent: python-httpx2/2.12.0
+
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "list_requisitions",
+    "arguments": {},
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientInfo": {
+        "name": "mcp",
+        "version": "0.1.0"
+      },
+      "io.modelcontextprotocol/clientCapabilities": {}
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+connection: keep-alive
+content-length: 10798
+content-type: application/json
+date: Thu, 20 Aug 2026 21:34:55 GMT
+server: nginx/1.29.4
+x-served-by: 172.19.0.5:8080
+
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "content": [
+      {
+        "text": "{\n  \"requisitions\": [\n    {\n      \"amount\": \"1200.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"40 ergonomic desk chairs\",\n      \"id\": \"req_0001\",\n      \"status\": \"submitted\",\n      \"submitted_by\": {\n        \"id\": \"priya-raman\",\n        \"label\": \"Priya Raman\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0001\",\n        \"label\": \"Nordwind Office Supplies\"\n      }\n    },\n    {\n      \"amount\": \"480.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Quarterly window cleaning\",\n      \"id\": \"req_0002\",\n      \"status\": \"submitted\",\n      \"submitted_by\": {\n        \"id\": \"priya-raman\",\n        \"label\": \"Priya Raman\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0003\",\n        \"label\": \"Bauer Facility Services\"\n      }\n    },\n    {\n      \"amount\": \"1450.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Desk risers, twelve\",\n      \"id\": \"req_0004\",\n      \"status\": \"submitted\",\n      \"submitted_by\": {\n        \"id\": \"priya-raman\",\n        \"label\": \"Priya Raman\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0002\",\n        \"label\": \"Meridian Cloud Services\"\n      }\n    },\n    {\n      \"amount\": \"620.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Monitor arms, eight\",\n      \"id\": \"req_0005\",\n      \"status\": \"submitted\",\n      \"submitted_by\": {\n        \"id\": \"tomas-weber\",\n        \"label\": \"Tomas Weber\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0001\",\n        \"label\": \"Nordwind Office Supplies\"\n      }\n    },\n    {\n      \"amount\": \"300.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Entrance matting, quarterly\",\n      \"id\": \"req_0006\",\n      \"status\": \"submitted\",\n      \"submitted_by\": {\n        \"id\": \"priya-raman\",\n        \"label\": \"Priya Raman\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0003\",\n        \"label\": \"Bauer Facility Services\"\n      }\n    },\n    {\n      \"amount\": \"740.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Standing desk, one\",\n      \"id\": \"req_0007\",\n      \"status\": \"submitted\",\n      \"submitted_by\": {\n        \"id\": \"tomas-weber\",\n        \"label\": \"Tomas Weber\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0001\",\n        \"label\": \"Nordwind Office Supplies\"\n      }\n    },\n    {\n      \"amount\": \"7500.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Managed Kubernetes, annual\",\n      \"id\": \"req_0008\",\n      \"status\": \"submitted\",\n      \"submitted_by\": {\n        \"id\": \"priya-raman\",\n        \"label\": \"Priya Raman\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0002\",\n        \"label\": \"Meridian Cloud Services\"\n      }\n    },\n    {\n      \"amount\": \"5000.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Build agents, annual\",\n      \"id\": \"req_0009\",\n      \"status\": \"submitted\",\n      \"submitted_by\": {\n        \"id\": \"priya-raman\",\n        \"label\": \"Priya Raman\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0002\",\n        \"label\": \"Meridian Cloud Services\"\n      }\n    },\n    {\n      \"amount\": \"9200.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Object storage, annual\",\n      \"id\": \"req_0010\",\n      \"status\": \"submitted\",\n      \"submitted_by\": {\n        \"id\": \"priya-raman\",\n        \"label\": \"Priya Raman\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0002\",\n        \"label\": \"Meridian Cloud Services\"\n      }\n    },\n    {\n      \"amount\": \"900.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Bin collection, quarterly\",\n      \"id\": \"req_0011\",\n      \"status\": \"approved\",\n      \"submitted_by\": {\n        \"id\": \"priya-raman\",\n        \"label\": \"Priya Raman\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0003\",\n        \"label\": \"Bauer Facility Services\"\n      }\n    },\n    {\n      \"amount\": \"1100.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Task chairs, ten\",\n      \"id\": \"req_0013\",\n      \"status\": \"approved\",\n      \"submitted_by\": {\n        \"id\": \"priya-raman\",\n        \"label\": \"Priya Raman\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0001\",\n        \"label\": \"Nordwind Office Supplies\"\n      }\n    },\n    {\n      \"amount\": \"260.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Whiteboards, four\",\n      \"id\": \"req_0014\",\n      \"status\": \"approved\",\n      \"submitted_by\": {\n        \"id\": \"rafael-costa\",\n        \"label\": \"Rafael Costa\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0001\",\n        \"label\": \"Nordwind Office Supplies\"\n      }\n    },\n    {\n      \"amount\": \"6400.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Log retention, annual\",\n      \"id\": \"req_0015\",\n      \"status\": \"approved\",\n      \"submitted_by\": {\n        \"id\": \"priya-raman\",\n        \"label\": \"Priya Raman\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0002\",\n        \"label\": \"Meridian Cloud Services\"\n      }\n    },\n    {\n      \"amount\": \"6800.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Incident tooling, annual\",\n      \"id\": \"req_0016\",\n      \"status\": \"approved\",\n      \"submitted_by\": {\n        \"id\": \"priya-raman\",\n        \"label\": \"Priya Raman\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0002\",\n        \"label\": \"Meridian Cloud Services\"\n      }\n    },\n    {\n      \"amount\": \"380.00\",\n      \"cost_centre\": \"CC-4100\",\n      \"currency\": \"EUR\",\n      \"description\": \"Lobby signage, replacement\",\n      \"id\": \"req_0017\",\n      \"status\": \"approved\",\n      \"submitted_by\": {\n        \"id\": \"priya-raman\",\n        \"label\": \"Priya Raman\"\n      },\n      \"vendor\": {\n        \"id\": \"ven_0004\",\n        \"label\": \"Talbot Print and Signage\"\n      }\n    }\n  ]\n}",
+        "type": "text"
+      }
+    ],
+    "isError": false,
+    "resultType": "complete",
+    "structuredContent": {
+      "requisitions": [
+        {
+          "id": "req_0001",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0001",
+            "label": "Nordwind Office Supplies"
+          },
+          "amount": "1200.00",
+          "currency": "EUR",
+          "description": "40 ergonomic desk chairs",
+          "submitted_by": {
+            "id": "priya-raman",
+            "label": "Priya Raman"
+          },
+          "status": "submitted"
+        },
+        {
+          "id": "req_0002",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0003",
+            "label": "Bauer Facility Services"
+          },
+          "amount": "480.00",
+          "currency": "EUR",
+          "description": "Quarterly window cleaning",
+          "submitted_by": {
+            "id": "priya-raman",
+            "label": "Priya Raman"
+          },
+          "status": "submitted"
+        },
+        {
+          "id": "req_0004",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0002",
+            "label": "Meridian Cloud Services"
+          },
+          "amount": "1450.00",
+          "currency": "EUR",
+          "description": "Desk risers, twelve",
+          "submitted_by": {
+            "id": "priya-raman",
+            "label": "Priya Raman"
+          },
+          "status": "submitted"
+        },
+        {
+          "id": "req_0005",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0001",
+            "label": "Nordwind Office Supplies"
+          },
+          "amount": "620.00",
+          "currency": "EUR",
+          "description": "Monitor arms, eight",
+          "submitted_by": {
+            "id": "tomas-weber",
+            "label": "Tomas Weber"
+          },
+          "status": "submitted"
+        },
+        {
+          "id": "req_0006",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0003",
+            "label": "Bauer Facility Services"
+          },
+          "amount": "300.00",
+          "currency": "EUR",
+          "description": "Entrance matting, quarterly",
+          "submitted_by": {
+            "id": "priya-raman",
+            "label": "Priya Raman"
+          },
+          "status": "submitted"
+        },
+        {
+          "id": "req_0007",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0001",
+            "label": "Nordwind Office Supplies"
+          },
+          "amount": "740.00",
+          "currency": "EUR",
+          "description": "Standing desk, one",
+          "submitted_by": {
+            "id": "tomas-weber",
+            "label": "Tomas Weber"
+          },
+          "status": "submitted"
+        },
+        {
+          "id": "req_0008",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0002",
+            "label": "Meridian Cloud Services"
+          },
+          "amount": "7500.00",
+          "currency": "EUR",
+          "description": "Managed Kubernetes, annual",
+          "submitted_by": {
+            "id": "priya-raman",
+            "label": "Priya Raman"
+          },
+          "status": "submitted"
+        },
+        {
+          "id": "req_0009",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0002",
+            "label": "Meridian Cloud Services"
+          },
+          "amount": "5000.00",
+          "currency": "EUR",
+          "description": "Build agents, annual",
+          "submitted_by": {
+            "id": "priya-raman",
+            "label": "Priya Raman"
+          },
+          "status": "submitted"
+        },
+        {
+          "id": "req_0010",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0002",
+            "label": "Meridian Cloud Services"
+          },
+          "amount": "9200.00",
+          "currency": "EUR",
+          "description": "Object storage, annual",
+          "submitted_by": {
+            "id": "priya-raman",
+            "label": "Priya Raman"
+          },
+          "status": "submitted"
+        },
+        {
+          "id": "req_0011",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0003",
+            "label": "Bauer Facility Services"
+          },
+          "amount": "900.00",
+          "currency": "EUR",
+          "description": "Bin collection, quarterly",
+          "submitted_by": {
+            "id": "priya-raman",
+            "label": "Priya Raman"
+          },
+          "status": "approved"
+        },
+        {
+          "id": "req_0013",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0001",
+            "label": "Nordwind Office Supplies"
+          },
+          "amount": "1100.00",
+          "currency": "EUR",
+          "description": "Task chairs, ten",
+          "submitted_by": {
+            "id": "priya-raman",
+            "label": "Priya Raman"
+          },
+          "status": "approved"
+        },
+        {
+          "id": "req_0014",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0001",
+            "label": "Nordwind Office Supplies"
+          },
+          "amount": "260.00",
+          "currency": "EUR",
+          "description": "Whiteboards, four",
+          "submitted_by": {
+            "id": "rafael-costa",
+            "label": "Rafael Costa"
+          },
+          "status": "approved"
+        },
+        {
+          "id": "req_0015",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0002",
+            "label": "Meridian Cloud Services"
+          },
+          "amount": "6400.00",
+          "currency": "EUR",
+          "description": "Log retention, annual",
+          "submitted_by": {
+            "id": "priya-raman",
+            "label": "Priya Raman"
+          },
+          "status": "approved"
+        },
+        {
+          "id": "req_0016",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0002",
+            "label": "Meridian Cloud Services"
+          },
+          "amount": "6800.00",
+          "currency": "EUR",
+          "description": "Incident tooling, annual",
+          "submitted_by": {
+            "id": "priya-raman",
+            "label": "Priya Raman"
+          },
+          "status": "approved"
+        },
+        {
+          "id": "req_0017",
+          "cost_centre": "CC-4100",
+          "vendor": {
+            "id": "ven_0004",
+            "label": "Talbot Print and Signage"
+          },
+          "amount": "380.00",
+          "currency": "EUR",
+          "description": "Lobby signage, replacement",
+          "submitted_by": {
+            "id": "priya-raman",
+            "label": "Priya Raman"
+          },
+          "status": "approved"
+        }
+      ]
+    },
+    "_meta": {
+      "io.modelcontextprotocol/serverInfo": {
+        "name": "mcp-erp",
+        "title": "mcp-erp",
+        "version": ""
+      }
+    }
+  }
+}

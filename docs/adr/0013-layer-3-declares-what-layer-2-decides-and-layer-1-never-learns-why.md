@@ -17,6 +17,7 @@
 - **Amended:** 2026-08-20 — additive, by [#43](https://github.com/marcosfsousa/mcp-erp/issues/43), which built the decision matrix. `docs/decision-matrix/matrix.yaml` **exists**, the fixture generator is built, and the fixtures are the seed's **fourth rendering** — so `Seed renders clean` re-renders four and its diagnosis widens from *the seed* to *the source*. The listing's filter left `tests/wire/` for `tests/matrix/`, and this document's five-assertion handoff is discharged. See *Both generators, split by the vocabulary each speaks*, *Test directories, named for artifacts* and *Continuous-integration jobs, one per seam*. No decision here is reversed.
 - **Amended:** 2026-08-20 — additive, by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46), which built the authorization code flow and the job that gates it. **Two of the three imagined Compose consumers are real**, so the count the *not factored yet* argument turned on is spent: *Decision matrix (wire)* repeats the pattern step for step and *Authorization code flow* differs where the `yes + network` row predicted. The pattern stays unfactored, #44 is what would settle its shape, and the argument now lives in exactly one place after drifting in three. See *Continuous-integration jobs, one per seam*. No decision here is reversed.
 - **Amended:** 2026-08-20 — additive, by [#47](https://github.com/marcosfsousa/mcp-erp/issues/47), which built the last job and then the ruleset, in that order. The **tenth job, *Required checks match the ruleset***, exists, and with it `tests/test_required_checks.py`: the set equality this document requires is now asserted **three ways** — the table here, the workflow, and the live `main` ruleset — rather than held by hand. Every context in the table is **required on `main`**, and **the force-push block that same ruleset already carried is now asserted rather than assumed** — it is what closes the gap *Published documents are immutable* leaves open by construction, and it had been closed since the ruleset was created without anybody having checked. See *Continuous-integration jobs, one per seam*. No decision here is reversed.
+- **Amended:** 2026-08-20 — additive, by [#92](https://github.com/marcosfsousa/mcp-erp/issues/92), which built ADR-0014's machinery. **Two rows widen and no row is added.** *Seed renders clean* re-renders **seven** artifacts rather than four — the two canonical tables now render into the write-up's half of map constraint `4`, and the root README's one embedded proof renders out of a committed transcript — and *Authorization code flow* additionally **writes** the captured transcripts and refuses a diff on them, because three of the six beats need a token a Person consented to at a login screen and Keycloak remembers a grant per Person and client, so no second process can earn them again. Both are steps inside jobs that already run, which changes no context and needs no ruleset edit — this document's own rule, applied. See *Continuous-integration jobs, one per seam*. No decision here is reversed.
 
 ## Question
 
@@ -391,17 +392,23 @@ Because `app.py` sits at the package root rather than inside any sub-package, th
 | Lint and types | ordinary Python defect | no |
 | Layer boundaries | someone crossed a layer boundary | no |
 | Layer 2 ejects clean | layer 2 no longer stands alone | no |
-| Seed renders clean | a rendering diverged from the seed or the matrix | no |
+| Seed renders clean | a rendering diverged from the source it is generated from | no |
 | Required checks match the ruleset | the workflow and the ruleset disagree | no |
 | Published documents are immutable | someone rewrote or removed a published client identity | no |
 | Server posture | the server exposes, declares or deploys something other than what it should, with no caller's authorization involved | yes |
 | Decision matrix (wire) | an authorization expectation is wrong | yes |
 | Attack suite (wire) | a defence regressed | yes |
-| Authorization code flow | the flow broke (preflight names external causes first) | yes + network |
+| Authorization code flow | the flow broke, or what it says on the wire changed (preflight names external causes first) | yes + network |
 
 **~~All eight~~ Every context gates `main`.** Set equality holds in both directions, there is no exemption list to justify, and ADR-0008's *"a check that can never block becomes noise"* applies uniformly. ADR-0008 already committed the conformance job as the repository's first required status check.
 
 *Seed renders clean* is the widened form of what was scoped as matrix-fixture drift: it now covers seed-to-directory and seed-to-realm as well, including the realm-versus-directory subject-set equality above. All three break for one reason — a rendering changed without the seed — so it is one seam and one diagnosis.
+
+*Amended 2026-08-20 by [#92](https://github.com/marcosfsousa/mcp-erp/issues/92).* **Two rows widen and no row is added.** *Seed renders clean* re-renders **seven** artifacts: the seed's four, the two canonical tables rendering into the write-up's half of map constraint `4`, and the root README's one embedded proof, which renders out of a committed transcript. Its diagnosis is unchanged in kind and is stated at the altitude it now holds — *a rendering diverged from the source it is generated from*.
+
+*Authorization code flow* gains the other half. It **writes** the captured transcripts ADR-0014 commits and then refuses a diff on them, because three of the six beats need a token a Person consented to at a login screen and Keycloak remembers a grant per Person and client — a second process performing the same flows would post one form where the first posted two, so the run that earns the tokens is the only one that can record them. That is why the row reads *the flow broke, or what it says on the wire changed*: both are statements about one conversation, and the committed capture is what the write-up quotes it from.
+
+Both are **steps inside jobs that already run**, which is this document's own rule rather than a convenience: job `name:` values and the ruleset's required contexts are held equal in both directions, so a step changes no context and needs no ruleset edit.
 
 *Required checks match the ruleset* holds job names and required contexts equal in both directions. It is its own job because it must not sit on a cut path: cutting the decision matrix, third on cut order `#9`, removes *Decision matrix (wire)* and *Seed renders clean* together, and a name-contract test inside either would be cut in silence, taking the argument for required checks with it. *Lint and types* would hold it uncuttably but would then mean two unrelated things, against this table's own rule.
 

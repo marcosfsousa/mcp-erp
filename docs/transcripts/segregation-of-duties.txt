@@ -1,0 +1,76 @@
+Segregation of duties: a domain rejection, not an authorization error
+
+1 of 1
+──────────────────────────────────────────────────────────────────────────────
+
+POST /mcp HTTP/1.1
+accept: application/json, text/event-stream
+accept-encoding: gzip, deflate
+authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJiT0tKbXFqWUZlcVBFOFFjaXBPMjlRWGFhenloMHZrQ29lYU9XWS1RT3U4In0.eyJleHAiOjE3ODcyNjA3OTgsImlhdCI6MTc4NzI2MDQ5OCwianRpIjoib25ydGFjOjUxNjIxNTkyLTNlYjktOGYwNy03OWVkLTc1M2Y3ZjQ1ZDg1NCIsImlzcyI6Imh0dHA6Ly9rZXljbG9hazo4MDgxL3JlYWxtcy9tY3AtZXJwIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwL21jcCIsInN1YiI6InRvbWFzLXdlYmVyIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoibWNwLWNvbmZvcm1hbmNlIiwic2lkIjoiWC0yQ0dUbExmV1ZwVEphbTZRUEFCMDhHIiwic2NvcGUiOiJvcGVuaWQgZXJwLmRlY2lkZSJ9.GKTSxZ5WQmTc4ACLjE_agDBVV99_ChTM8ZI-3jqsOWqgJkRtiBF8HCx0HL2krhQyNY8mvtgyE3VRBJKJSDl9VVKJ9upcI0fi1D4zlZ1rx6xVpLub7mYpdIkO7H9YdQdKTLfgOHIL0Jds4-3lF8hRi7dwShbNJsWfvynYsSxZn70Kca-B5BIL99y09w5qpqNktcSXfVyT5jIwZ6qL9VUzTnSF1dufURKL8fBk1djjZcDMRmZjdMgkmAVvSrryfrfwDSiOVTlEMLutV9XOt_o5B4L7spMv4sSnwXyjiF4NEmqXF6tWnDT4gKyxSRg1nxvuP_qS6l8zc1icDyZUcZoSQg
+connection: keep-alive
+content-length: 329
+content-type: application/json
+host: localhost:8080
+mcp-method: tools/call
+mcp-name: approve_requisition
+mcp-protocol-version: 2026-07-28
+user-agent: python-httpx2/2.12.0
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "approve_requisition",
+    "arguments": {
+      "ids": [
+        "req_0007"
+      ],
+      "decision": "approve"
+    },
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientCapabilities": {},
+      "io.modelcontextprotocol/clientInfo": {
+        "name": "mcp-erp-suite",
+        "version": "0"
+      }
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+connection: keep-alive
+content-length: 518
+content-type: application/json
+date: Thu, 20 Aug 2026 21:14:58 GMT
+server: nginx/1.29.4
+x-served-by: 172.19.0.5:8080
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "text": "{\n  \"reason\": \"segregation_of_duties\",\n  \"remedy\": \"different_person\",\n  \"retry_as_other_person_helps\": true,\n  \"retry_identical_helps\": false\n}",
+        "type": "text"
+      }
+    ],
+    "isError": true,
+    "resultType": "complete",
+    "structuredContent": {
+      "reason": "segregation_of_duties",
+      "remedy": "different_person",
+      "retry_identical_helps": false,
+      "retry_as_other_person_helps": true
+    },
+    "_meta": {
+      "io.modelcontextprotocol/serverInfo": {
+        "name": "mcp-erp",
+        "title": "mcp-erp",
+        "version": ""
+      }
+    }
+  }
+}
