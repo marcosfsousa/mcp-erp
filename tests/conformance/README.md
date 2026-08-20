@@ -42,7 +42,7 @@ assertion rather than a diagram.
 ## The half of the client this suite cannot prove
 
 `tests/test_conformance_client.py`, beside `tests/test_tokens.py` and Docker-free
-for the same reason, carried by the same `Lint and types` step.
+for the same reason, carried by the same `Lint and types` job.
 
 It holds the waits. Every request this suite makes is bounded by
 `conformance_client.TIMEOUT`, and a long-lived `GET` stream underneath it is
@@ -50,11 +50,11 @@ deliberately **not** — a stream that is quiet is idle rather than stuck, and
 [#86](https://github.com/marcosfsousa/mcp-erp/issues/86) was that distinction
 being missing.
 
-A flow cannot assert it in either direction, and against this server it is not
-even reached: the era negotiated here opens no server-initiated stream, so what
-#86 fixed is a constant whose docstring had stopped describing everything it
-governed. So the assertion is made against a socket that answers with an open
-event stream and then says nothing, which is the state no clock can name.
+A flow cannot assert it in either direction, and against this server it is never
+even reached — that constant's own docstring records which era is negotiated
+here and why nothing opens such a stream under it. So the assertion is made
+against a socket that answers with an open event stream and then says nothing,
+which is the state no clock can name.
 
 ## The second module, and why a client-side clause is asserted here
 

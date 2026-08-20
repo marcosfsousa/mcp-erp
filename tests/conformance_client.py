@@ -197,15 +197,20 @@ the client would have moved the tool call's read wait along with the stream's,
 and the tool call is one of the three this number is *for*.
 
 **Whether that stream is opened at all is the server's to decide, and against
-this one it currently is not.** The package starts it on the `initialized`
-notification and abandons it immediately without a session identifier; this
-server negotiates the era that sends neither — `server/discover`, and no
-`Mcp-Session-Id` on any response — so no run here has yet reached the exempt
-wait. That is a fact about today's negotiation rather than a property of either
-constant, and it is the whole reason this was found by reading:
-[#86](https://github.com/marcosfsousa/mcp-erp/issues/86) is a number that
-governed a wait its own argument did not cover, and a green flow says nothing
-about it in either direction.
+this one it is not.** `get_stream_removed` is this repository's own name for
+why — the modern leg answers a version-bearing `GET` with `405`, and the stream
+that row keeps out of the modern era is the legacy leg's. This client negotiates
+the modern one, so the package never starts the stream: it starts on the
+`initialized` notification and abandons it without an `Mcp-Session-Id`, and
+`server/discover` sends the first no more than this server sends the second.
+**Every site that repeats this points here rather than restating it**, because
+one server upgrade would falsify it everywhere at once.
+
+That is a fact about which era is negotiated rather than a property of either
+constant, and it is why
+[#86](https://github.com/marcosfsousa/mcp-erp/issues/86) was found by reading. A
+green flow says nothing about this number in either direction; what was wrong
+with it was that it enumerated three things and governed four.
 """
 
 CONSENT = "consent"
@@ -364,18 +369,23 @@ class Unhurried(httpx2.AsyncBaseTransport):
     unbounded read cannot become a run that hangs.
 
     **It is a rule with nothing to apply to today**, and deliberately kept
-    anyway. :data:`TIMEOUT` records why: this server negotiates the era that
-    opens no such stream, so every request that currently passes through here is
-    left exactly as it was. What the rule buys is that the constant beside it is
-    true — the alternative to a rule nothing reaches is a number whose docstring
-    quietly stops describing it the day a server issues a session identifier.
+    anyway. :data:`TIMEOUT` records which era this server negotiates and why no
+    such stream is opened under it, so every request that currently passes
+    through here is left exactly as it was. What the rule buys is that the
+    constant beside it is true, rather than a number whose docstring stops
+    describing it on the day something opens one.
 
     **The stream is recognised by what the request declares it will read.** A
     `GET` whose `accept` names `text/event-stream` is opening one; discovery
-    `GET`s carry a protocol version and no `accept` at all, and the `POST`s are
+    `GET`s carry a protocol version and no such `accept`, and the `POST`s are
     requests whatever they are answered with. That is the same structural gate
     :meth:`Flow._record` uses on the way back, and for the same reason: it does
     not require this client to know which request the package was making.
+
+    So it covers the resumption `GET` as well as the long-lived one, which is
+    right rather than incidental: a resumed stream is the same wait, quiet for
+    the same reasons, and a rule that had excluded it would have been a rule
+    about an address instead.
     """
 
     def __init__(self, inner: httpx2.AsyncBaseTransport) -> None:
@@ -401,7 +411,7 @@ class Unhurried(httpx2.AsyncBaseTransport):
 
 
 def _opens_a_stream(request: httpx2.Request) -> bool:
-    """Whether this is the long-lived `GET` rather than one of the requests around it."""
+    """Whether this request opens a stream rather than being one of the requests around it."""
     accept = request.headers.get("accept", "")
 
     return request.method == "GET" and EVENT_STREAM_MEDIA_TYPE in accept
@@ -777,14 +787,14 @@ async def connect(auth: httpx2.Auth) -> AsyncIterator[Client]:
     Yields:
         A connected client, with the protocol era already negotiated.
     """
-    async with _protocol_client(auth) as http:
+    async with protocol_client(auth) as http:
         # The transport is handed over unentered: `Client` owns its lifetime, and
         # entering it here would hand `Client` a pair of streams instead.
         async with Client(streamable_http_client(SERVER, http_client=http)) as client:
             yield client
 
 
-def _protocol_client(auth: httpx2.Auth, *, timeout: float = TIMEOUT) -> httpx2.AsyncClient:
+def protocol_client(auth: httpx2.Auth, *, timeout: float = TIMEOUT) -> httpx2.AsyncClient:
     """The HTTP client the protocol package is handed, and the waits it carries.
 
     A function rather than four lines inside :func:`connect`, because the waits
@@ -793,6 +803,11 @@ def _protocol_client(auth: httpx2.Auth, *, timeout: float = TIMEOUT) -> httpx2.A
     both end in a run that passes. `tests/test_conformance_client.py` builds this
     same client with a small `timeout` and drives it against a socket, which is
     what makes *the stream is exempt and the requests are not* an assertion.
+
+    Public for that module, which is the shape sharing takes here when it can be
+    taken, and it does not make :func:`connect` any less the surface ADR-0008
+    describes: this returns the client rather than a connected one, and nothing
+    that speaks the protocol comes out of it.
 
     Args:
         auth: What authenticates every request the package makes.

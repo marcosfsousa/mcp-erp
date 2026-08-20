@@ -5,38 +5,38 @@ server and GitHub Pages to say anything at all. This file proves the one thing
 that suite cannot: that the read wait is lifted off a long-lived `GET` stream
 and left on everything else.
 
-**A run cannot say it in either direction.** This server negotiates the era that
-opens no server-initiated stream — `server/discover`, and no session identifier
-on any response — so the flow reaches the exempt wait exactly never, and reached
-it exactly never before the fix either. Even against a server that did open one,
-the read timeout closing a quiet stream is answered by the package's own
-reconnect loop and the run still passes.
-[#86](https://github.com/marcosfsousa/mcp-erp/issues/86) is therefore a rule to
-assert directly or not at all.
+**A run cannot say it in either direction.** `conformance_client.TIMEOUT` records
+why no stream is opened against this server at all; and even against one that
+opened a stream, a read timeout closing a quiet stream is answered by the
+protocol package's own reconnect loop and the flow still completes. So
+[#86](https://github.com/marcosfsousa/mcp-erp/issues/86) is a rule to assert
+directly or not at all.
 
 **The assertions are made against a socket, not against the server.** The fake
 below answers every request with event-stream headers and then says nothing,
 which is a stream that is *healthy and quiet* — the one case a read wait cannot
-tell from a stuck one. The client is the one :func:`connect` builds, with a
-small `timeout` in place of the module's, so the difference shows in two seconds
-rather than in thirty.
+tell from a stuck one. The client is the one :func:`conformance_client.connect`
+builds, with a small `timeout` in place of the module's, so the difference shows
+in two seconds rather than in thirty.
 
-Docker-free like `tests/test_tokens.py`, and carried by the same job step for
-the same reason: a wait applied to the wrong request is an ordinary Python
-defect, and a suite that needs Compose to notice one would report it as the
-authorization server being slow.
+Docker-free like `tests/test_tokens.py`, and carried by the same `Lint and
+types` job for the same reason: a wait applied to the wrong request is an
+ordinary Python defect, and a suite that needs Compose to notice one would
+report it as the authorization server being slow.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from typing import Final
 
 import httpx2
+from mcp.shared.inbound import MCP_PROTOCOL_VERSION_HEADER
+from mcp_types.version import LATEST_PROTOCOL_VERSION
 
-from conformance_client import Bearer, _protocol_client
+from conformance_client import Bearer, protocol_client
 
 WAIT: Final = 0.5
 """The whole-request wait these tests bound everything with.
@@ -69,11 +69,14 @@ and it is **the same on the `POST`s as on the stream**. A test that sent a
 tidier one would be proving a rule this client does not have.
 """
 
-AS_DISCOVERY_ASKS: Final = {"mcp-protocol-version": "2025-06-18"}
+AS_DISCOVERY_ASKS: Final = {MCP_PROTOCOL_VERSION_HEADER: LATEST_PROTOCOL_VERSION}
 """What a metadata `GET` carries, which is a protocol version and no `accept`.
 
-`mcp.client.auth.utils` builds every discovery request this way. It is the other
-`GET` on this client, and the one that must keep its read wait.
+`mcp.client.auth.utils` builds every discovery request as exactly this header
+and nothing else, so it is read from the package rather than written out here —
+a literal would be a second copy of an era, and this file's whole subject is
+which era is being spoken. It is the other `GET` on this client, and the one
+that must keep its read wait.
 """
 
 TOKEN: Final = Bearer("not a token, and never presented to anything that reads one")
@@ -123,7 +126,7 @@ def test_a_stream_that_is_merely_quiet_is_not_closed_by_the_request_wait() -> No
     """
 
     async def watch() -> str:
-        async with _serving() as url, _protocol_client(TOKEN, timeout=WAIT) as http:
+        async with _serving() as url, protocol_client(TOKEN, timeout=WAIT) as http:
             try:
                 async with http.sse(url, headers=AS_THE_PACKAGE_ASKS) as events:
                     async with asyncio.timeout(BUDGET):
@@ -139,6 +142,25 @@ def test_a_stream_that_is_merely_quiet_is_not_closed_by_the_request_wait() -> No
     assert asyncio.run(watch()) == "still open"
 
 
+async def _sending(
+    method: str, headers: Mapping[str, str], json: Mapping[str, str] | None = None
+) -> str:
+    """Whether the read wait still ends one request the fake will never answer.
+
+    The two assertions below differ by a request line and a set of headers and
+    by nothing else, which is what the rule they check is about: it reads the
+    request rather than the address, so what a test has to vary is exactly what
+    it declares.
+    """
+    async with _serving() as url, protocol_client(TOKEN, timeout=WAIT) as http:
+        try:
+            await http.request(method, url, headers=headers, json=json)
+        except httpx2.ReadTimeout:
+            return "bounded"
+
+    return "unbounded"
+
+
 def test_a_post_keeps_the_read_wait_a_tool_call_needs() -> None:
     """The other half, and the reason the rule is not a second number on the client.
 
@@ -148,17 +170,7 @@ def test_a_post_keeps_the_read_wait_a_tool_call_needs() -> None:
     lifted client-wide would take this with it, and a server that stopped
     answering mid-call would hang the run instead of failing it.
     """
-
-    async def call() -> str:
-        async with _serving() as url, _protocol_client(TOKEN, timeout=WAIT) as http:
-            try:
-                await http.post(url, json={"jsonrpc": "2.0"}, headers=AS_THE_PACKAGE_ASKS)
-            except httpx2.ReadTimeout:
-                return "bounded"
-
-        return "unbounded"
-
-    assert asyncio.run(call()) == "bounded"
+    assert asyncio.run(_sending("POST", AS_THE_PACKAGE_ASKS, {"jsonrpc": "2.0"})) == "bounded"
 
 
 def test_a_discovery_get_keeps_the_read_wait_it_had() -> None:
@@ -170,14 +182,4 @@ def test_a_discovery_get_keeps_the_read_wait_it_had() -> None:
     rule that had keyed on `GET` alone would have left the whole discovery chain
     unbounded and this is what says so.
     """
-
-    async def discover() -> str:
-        async with _serving() as url, _protocol_client(TOKEN, timeout=WAIT) as http:
-            try:
-                await http.get(url, headers=AS_DISCOVERY_ASKS)
-            except httpx2.ReadTimeout:
-                return "bounded"
-
-        return "unbounded"
-
-    assert asyncio.run(discover()) == "bounded"
+    assert asyncio.run(_sending("GET", AS_DISCOVERY_ASKS)) == "bounded"

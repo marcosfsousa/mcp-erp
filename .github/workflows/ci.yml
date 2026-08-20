@@ -186,11 +186,10 @@ jobs:
       # diagnosis on the wrong job.
       #
       # `Authorization code flow` cannot hold the second one at all, rather than
-      # merely holding it badly: the era this server negotiates opens no
-      # server-initiated stream, so a flow reaches the wait in question never,
-      # before the fix as much as after it. The files are named rather than
-      # collected, because `testpaths` is the whole of `tests/` and most of it
-      # needs Compose.
+      # merely holding it badly — `conformance_client.TIMEOUT`'s own docstring
+      # records why a flow never reaches the wait it asserts on. The files are
+      # named rather than collected, because `testpaths` is the whole of
+      # `tests/` and most of it needs Compose.
       - name: The flow drivers' Docker-free halves
         run: uv run pytest tests/test_tokens.py tests/test_conformance_client.py
 
