@@ -29,28 +29,41 @@ from mcp_erp.purchase_to_pay import (
     approve_requisition,
     get_requisition,
     handlers,
+    invoice,
     list_requisitions,
     purchase_order,
     reasons,
+    record_invoice,
     requisition,
     submit_requisition,
     vendors,
 )
+from mcp_erp.purchase_to_pay.invoice import Invoice
 from mcp_erp.purchase_to_pay.purchase_order import PurchaseOrder
-from mcp_erp.purchase_to_pay.repository import PostgresRequisitions, Requisitions
+from mcp_erp.purchase_to_pay.repository import (
+    PostgresPurchaseOrders,
+    PostgresRequisitions,
+    PurchaseOrders,
+    Requisitions,
+)
 from mcp_erp.purchase_to_pay.requisition import Requisition
 
 __all__ = [
+    "Invoice",
+    "PostgresPurchaseOrders",
     "PostgresRequisitions",
     "PurchaseOrder",
+    "PurchaseOrders",
     "Requisition",
     "Requisitions",
     "approve_requisition",
     "get_requisition",
     "handlers",
+    "invoice",
     "list_requisitions",
     "purchase_order",
     "reasons",
+    "record_invoice",
     "requisition",
     "submit_requisition",
     "vendors",

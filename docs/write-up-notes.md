@@ -286,6 +286,51 @@ rediscover.
   a divergence between two stores of the same truth, engineered on purpose, doing
   the work it was engineered for. — #40, ADR-0007, ADR-0002
 
+- **A scope that cannot be gated is what makes the intersection visible.**
+  `erp.write` carries no role mapping at the authorization server, and that is
+  forced rather than chosen: submitting is gated by scope alone, so a mapping
+  there would lock every submitter out of a scope they are entitled to. The
+  consequence is the exhibit's clearest picture of *granted scope intersected
+  with role permission* — one coarse scope reaches both writes, Priya Raman
+  holds it, submits with it, and is refused on `record_invoice` by the role gate.
+  A resource-shaped scope would have hidden the whole thing behind an absence in
+  `tools/list`. — #42, ADR-0012, ADR-0007
+
+- **The second separation edge is what stops the smallest tool from being
+  decoration.** ADR-0003 says so outright — with one edge, `record_invoice`
+  *"stops earning its place"* — and the tool that resulted takes one argument,
+  declares one rule and writes a three-column row. The write-up's lesson is the
+  ordering: the edge was decided first and the entity fell out of it, which is
+  why `Invoice` carries a reference and an identity and nothing a reader would
+  expect an invoice to carry. — #42, ADR-0003
+
+- **The same refusal on two rules, deliberately, because a remedy is not a
+  rule name.** Both separation edges answer `segregation_of_duties`: one is
+  tested against `Requisition.submitted_by` and the other against
+  `PurchaseOrder.approved_by`, and a caller cannot tell them apart. That is the
+  vocabulary working as designed — a reason names what would fix it, and *a
+  different person acts* is the fix for both. The tempting version invents
+  `approved_this_order` and starts describing the implementation to the
+  client. — #42, ADR-0002
+
+- **A field that changes an authorization decision and appears on no wire.** The
+  purchase order stores no cost centre — ADR-0003 corrected ADR-0002 on that, the
+  centre being a join away — and row scoping on `record_invoice` still needs a
+  partition. So the entity carries the requisition's centre, read through the
+  join at hydration, and the schema does not: the governing rule is about what
+  changes a decision, not about what a caller is shown, and the two questions
+  came apart here for the first time. — #42, ADR-0003, ADR-0013
+
+- **The parameter kept for a future ticket was right, and not for the stated
+  reason.** #40 kept `action` on the hydration step because *"the resource an
+  action is decided against is a property of the action"* and predicted #42 would
+  make it select an entity. It does — through the type. `load` is parameterised
+  on the entity its store answers with, so passing the wrong action is a red
+  types job; nothing reads the action's value, and a run-time branch on it would
+  have put a table of tools inside the layer whose point is that a tool's
+  identity is its module. Worth telling because the prediction and the resolution
+  differ in exactly the way a design note usually hides. — #42, ADR-0013
+
 ---
 
 ## Findings

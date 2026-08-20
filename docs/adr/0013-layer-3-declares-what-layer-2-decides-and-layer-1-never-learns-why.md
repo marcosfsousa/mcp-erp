@@ -12,6 +12,7 @@
 - **Amended:** 2026-08-19 — additive, by [#39](https://github.com/marcosfsousa/mcp-erp/issues/39), which built the second and third tools. A handler's third answer — **an argument its own declaration forbids** — is signalled with `ValueError` and rendered as `-32602`, and is deliberately **not** a fourth denial class. And a tool's declaration is **one module per tool** inside layer 3. See *Handlers in layer 3, adapters in layer 1* and *Three sibling packages, one composition root*. No decision here is reversed.
 - **Amended:** 2026-08-19 — additive, by [#40](https://github.com/marcosfsousa/mcp-erp/issues/40), which built the first hydrated resource. `load` is built as a **factory binding the store**, so the step's own signature is this document's two parameters and nothing is injected into the chain. And a handler has a **domain precondition** to answer as well as a decision — it constructs a refused `Decision` layer 2 never produced, *after* the chain permits and *at* the write. See *Resource hydration is a named layer-3 step* and *Handlers in layer 3, adapters in layer 1*. No decision here is reversed.
 - **Amended:** 2026-08-20 — additive, by [#41](https://github.com/marcosfsousa/mcp-erp/issues/41), which built the first batch. **The fold is implemented**, which settles the two things this document deliberately left open — what holds the N answers, and what `isError` means when some items refused — and surfaces one obligation nothing had stated: a handler deciding more than one item **must settle the call before its first item**, because a caller-level refusal has no rendering inside a result body. `tests/wire/` additionally holds **one assertion that is not over HTTP**. See *Streaming, restated portably* and *Four test directories, named for artifacts*. No decision here is reversed.
+- **Amended:** 2026-08-20 — additive, by [#42](https://github.com/marcosfsousa/mcp-erp/issues/42), which built the last of the five tools. `load` is **parameterised on the entity it hydrates**, so the `action` parameter this document kept for #42 selects a resource *through the type* and is still never read; layer 3 holds **one store per entity a tool is decided against**, over one pool. See *Resource hydration is a named layer-3 step*. No decision here is reversed.
 
 ## Question
 
@@ -122,6 +123,14 @@ The signature above is the step's, not the function that builds it: `load(requis
 `get_requisition` and `approve_requisition` call the same one. Two copies of *load by identifier and hand the answer through untouched* would be two places for a handler to start looking at what it got, and the convergence claim is that neither can tell an absent row from a foreign one.
 
 **`action` is not read yet and is kept anyway.** The resource an action is decided against is a property of the action: both callers today name a `Requisition` by identifier, and `record_invoice` is decided against a `PurchaseOrder`, which is the call that makes the parameter select an entity. A narrower signature would be a second shape for a step this document already fixed, and would have to grow the parameter back at #42.
+
+*Amended 2026-08-20 by [#42](https://github.com/marcosfsousa/mcp-erp/issues/42), which built the tool the paragraph above predicted.* **The parameter selects the entity through the type, and it is still not read.**
+
+`load` is parameterised on the resource its store answers with — `load(store: ByIdentifier[R]) -> Load[R]`, where `Load[R]` is this document's `(action, arguments)` with `R` fixed. So `hydrate(ACTION, arguments)` type-checks only when the action was declared against the entity the bound store returns, and hydrating a requisition for an action decided against a purchase order is a red types job rather than a refusal nobody sees. The prediction was that #42 would make the parameter *select an entity*; what it selects with is `R`, and no branch anywhere reads the action's value.
+
+The alternative — one step that inspects the action at run time and picks a store — was rejected for the reason one module per tool exists: it would put a table of tools inside the layer whose whole point is that a tool's identity is its module.
+
+The stores split with it. Layer 3 holds two, one per entity a tool is decided against, over one pool: a handler is written against what it uses, and `record_invoice` uses no requisition. `ByIdentifier[R]` is narrower than either — the one method hydration calls — which is what lets a single `load` serve both without learning that either store exists.
 
 ### The principal directory
 

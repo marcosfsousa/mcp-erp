@@ -65,12 +65,15 @@ def create_app(configuration: transport.Configuration | None = None) -> FastAPI:
         settings.database_url, open=False
     )
 
-    # One store, shared by every handler. It holds nothing about who called — the
-    # pool is a connection cache — so a second instance would buy a second pool
-    # and no isolation whatsoever.
+    # Two stores over one pool, split by the entity each answers with rather
+    # than by anything about a caller: neither holds request state — the pool is
+    # a connection cache — so the split costs no isolation and buys handlers
+    # written against what they use. A second *pool* would buy a second set of
+    # connection limits and no isolation whatsoever.
     store = purchase_to_pay.PostgresRequisitions(pool)
+    orders = purchase_to_pay.PostgresPurchaseOrders(pool)
 
-    # Four registrations, and the pairing is the whole of what this file does:
+    # Five registrations, and the pairing is the whole of what this file does:
     # the declaration comes from layer 3's module of that name, the handler from
     # layer 3's `handlers`, and the shape they are poured into is layer 1's.
     #
@@ -116,6 +119,18 @@ def create_app(configuration: transport.Configuration | None = None) -> FastAPI:
                 output_schema=purchase_to_pay.approve_requisition.OUTPUT_SCHEMA,
                 action=purchase_to_pay.approve_requisition.ACTION,
                 handler=purchase_to_pay.handlers.approve_requisition(store),
+            ),
+            transport.ToolRegistration(
+                name=purchase_to_pay.record_invoice.NAME,
+                title=purchase_to_pay.record_invoice.TITLE,
+                description=purchase_to_pay.record_invoice.DESCRIPTION,
+                input_schema=purchase_to_pay.record_invoice.INPUT_SCHEMA,
+                output_schema=purchase_to_pay.record_invoice.OUTPUT_SCHEMA,
+                action=purchase_to_pay.record_invoice.ACTION,
+                # The one handler built over the other store, which is what
+                # *the resource is the thing acted against* looks like at the
+                # composition root.
+                handler=purchase_to_pay.handlers.record_invoice(orders),
             ),
         ]
     )

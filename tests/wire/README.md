@@ -4,10 +4,11 @@ The assertions that belong to no proof artifact: the endpoints that answer and
 the ones that do not, the tool listing's filter and its freshness hint, two
 replicas behind no sticky routing, what `submit_requisition` charges, how the
 named-versus-discovered contract behaves across the live tools, everything
-`approve_requisition` decides since #40, and — since #41 — the fold.
+`approve_requisition` decides since #40, the fold since #41, and — since #42 —
+everything `record_invoice` records.
 
 Needs Compose, with one exception named below. Landed with #37; #39 added two,
-#40 a third, #41 a fourth.
+#40 a third, #41 a fourth, #42 a fifth.
 
 ## Why there is a fifth directory
 
@@ -46,6 +47,20 @@ places these three.
   tool returning several rows is still *one* outcome, which is a claim about
   what an outcome is rather than about who may see what; and the one below,
   which has no altitude at all.
+- **Everything `record_invoice` records** (#42) is the same case once more, and
+  the smallest of them: the second separation edge, a terminal state, and the
+  role gate on a scope that reaches two tools — every one of which is a
+  `(principal × tool × resource → expected)` row waiting for a file to be
+  generated from. Two of its assertions are *not* matrix rows. That an approver
+  who holds `invoice_clerk` is refused on the order she approved and permitted on
+  the one she did not is a statement about a **position versus a role**, which
+  needs both calls to say anything and would be two rows expecting two answers
+  with the connection between them lost. And what the suite deliberately does
+  **not** assert is `partition_bypass`: nobody in the cast holds `auditor`
+  together with `invoice_clerk`, row scoping runs after the role gate, so a
+  declaration that wrongly granted breadth on this write would ship green — which
+  ADR-0013 names as the mistake a reader makes on this tool by name. Review is
+  the guard, and the reasoning is in the declaration.
 - **The named-versus-discovered contract across all three tools** (#39) is the
   seam between two attack-suite rows rather than a third one. Each of
   `row_probe_indistinguishable` and `list_partition_scoped` asserts its own half

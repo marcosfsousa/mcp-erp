@@ -24,22 +24,38 @@ Handler                  Entry point           Why it stops there
 ``get_requisition``      ``decide_item``       one named row, hydrated before deciding
 ``submit_requisition``   ``decide_call``       no resource at all; the partition is ours
 ``approve_requisition``  both                  a call gate, then a decision per named row
+``record_invoice``       ``decide_item``       one named row, of the other entity
 =======================  ====================  =========================================
 
-*Amended 2026-08-20 by #41, which made the last of those a batch.* It stopped at
-``decide_item`` while it decided one row, and a batch cannot: ``role_missing`` is
-a ``-31010``, a JSON-RPC error is the *response* rather than a line inside one,
-and a handler reaching that refusal once per item would hand layer 1 N answers it
-has no way to render. So the call gate runs once, ahead of the items — which is
-ADR-0002's *caller-level refusals are whole-call; item-level refusals are
-per-item*, arriving as a structural obligation rather than as tidiness.
+*Amended 2026-08-20 by #41, which made ``approve_requisition`` a batch.* It
+stopped at ``decide_item`` while it decided one row, and a batch cannot:
+``role_missing`` is a ``-31010``, a JSON-RPC error is the *response* rather than a
+line inside one, and a handler reaching that refusal once per item would hand
+layer 1 N answers it has no way to render. So the call gate runs once, ahead of
+the items — which is ADR-0002's *caller-level refusals are whole-call; item-level
+refusals are per-item*, arriving as a structural obligation rather than as
+tidiness.
+
+*Extended 2026-08-20 by #42, which added the last row.* ``record_invoice`` stops
+at ``decide_item``, and that is the obligation above holding rather than being
+skipped: it is not a batch, because ADR-0002's *Five tools* gives the list to
+``approve_requisition`` alone. One item is one outcome, so the gate that has to
+run once and the chain that has to run per item are the same call — which is the
+degenerate case ADR-0002 says a single-item call is, not an exception to it.
 
 **Hydration is a named step and it is shared.** :func:`load` is ADR-0013's
-``load(action, arguments) -> Resource | None``, called by the two handlers that
+``load(action, arguments) -> Resource | None``, called by the three handlers that
 decide against a named row and by nothing else. It is a step rather than a
 collaborator of the policy function, which takes none — and it is one function
-rather than two identical pairs of lines, so *the handler passes the store's
+rather than three identical pairs of lines, so *the handler passes the store's
 answer straight through* is a property of one place.
+
+**The step selects an entity, and the type checker is what enforces the choice.**
+``load`` is parameterised on the resource its store answers with, so
+``hydrate(ACTION, arguments)`` type-checks only when the action was declared
+against that same entity — hydrating a requisition for an action decided against
+a purchase order is a red types job rather than a refusal nobody sees. That is
+what ADR-0013 kept the ``action`` parameter for, and #42 is the call it named.
 
 **An argument a schema forbade raises ``ValueError``.** That is not a refusal:
 nothing was authorized or denied, and giving it a ``Reason`` would amend a closed
@@ -52,17 +68,24 @@ handler signals it without importing anything layer 1 owns.
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from decimal import Decimal
-from typing import Any
+from typing import Any, Protocol
 
-from mcp_erp.authorization import Action, Decision, Principal, decide_call, decide_item
+from mcp_erp.authorization import (
+    Action,
+    Decision,
+    Principal,
+    Resource,
+    decide_call,
+    decide_item,
+)
 from mcp_erp.purchase_to_pay import vendors
 from mcp_erp.purchase_to_pay.approve_requisition import ACTION as APPROVE_REQUISITION
 from mcp_erp.purchase_to_pay.approve_requisition import APPROVE, DECISIONS, MAXIMUM_BATCH
 from mcp_erp.purchase_to_pay.get_requisition import ACTION as GET_REQUISITION
 from mcp_erp.purchase_to_pay.list_requisitions import ACTION as LIST_REQUISITIONS
-from mcp_erp.purchase_to_pay.reasons import ALREADY_DECIDED
-from mcp_erp.purchase_to_pay.repository import Requisitions
-from mcp_erp.purchase_to_pay.requisition import Requisition
+from mcp_erp.purchase_to_pay.reasons import ALREADY_DECIDED, ALREADY_INVOICED
+from mcp_erp.purchase_to_pay.record_invoice import ACTION as RECORD_INVOICE
+from mcp_erp.purchase_to_pay.repository import PurchaseOrders, Requisitions
 from mcp_erp.purchase_to_pay.submit_requisition import ACTION as SUBMIT_REQUISITION
 from mcp_erp.purchase_to_pay.submit_requisition import AMOUNT_PATTERN, CURRENCY
 
@@ -76,35 +99,49 @@ The composition root is where the two spellings meet, and a disagreement between
 them fails the types job there.
 """
 
-Load = Callable[[Action[Requisition], Mapping[str, Any]], Awaitable[Requisition | None]]
+
+class ByIdentifier[R: Resource](Protocol):
+    """The half of a store hydration uses: one row by identifier, or nothing.
+
+    Narrower than either store protocol on purpose. :func:`load` is written
+    against what it uses, and what it uses is one method — which is also what
+    lets one function serve two entities without knowing that either exists.
+    """
+
+    async def by_id(self, identifier: str) -> R | None:
+        """The row with this identifier, whoever it belongs to, or ``None``."""
+
+
+type Load[R: Resource] = Callable[[Action[R], Mapping[str, Any]], Awaitable[R | None]]
 """ADR-0013's hydration step: ``load(action, arguments) -> Resource | None``.
 
 The parameters are the ADR's, and the store is bound by the factory below rather
 than passed — which is what makes this a *step* rather than a collaborator. The
 policy function takes none, so a resource cannot arrive any way but pre-loaded.
 
-``action`` is not read yet, and it is here rather than dropped because the
-resource an action is decided against is a property of the action: today both
-callers name a requisition by identifier, and ``record_invoice`` (#42) is decided
-against a ``PurchaseOrder``, which is the call that makes this parameter select
-an entity. A signature that dropped it would have to grow it back, and the
-narrower one would be a second shape for a step ADR-0013 already fixed.
+**``action`` selects the entity, through the type rather than through a branch.**
+It is still not *read*, and #40 said it was kept because *"the resource an action
+is decided against is a property of the action"*. #42 is the call that made that
+concrete: ``R`` is fixed by the store the factory binds, so passing an
+``Action[Requisition]`` to a step built over the purchase orders does not
+type-check. The alternative — one step that inspects the action at run time and
+picks a store — would put a table of tools inside the layer whose whole point is
+that a tool's identity is its module.
 """
 
 
-def load(requisitions: Requisitions) -> Load:
+def load[R: Resource](store: ByIdentifier[R]) -> Load[R]:
     """Build the hydration step over a store.
 
     A factory for the same reason the handlers are: the store is the composition
     root's to own, and hydration is a layer-3 step that reaches a database.
 
     Returns:
-        The step, in ADR-0013's shape.
+        The step, in ADR-0013's shape, hydrating whichever entity this store
+        answers with.
     """
 
-    async def loaded(
-        action: Action[Requisition], arguments: Mapping[str, Any]
-    ) -> Requisition | None:
+    async def loaded(action: Action[R], arguments: Mapping[str, Any]) -> R | None:
         """The row this action is decided against, or nothing at all.
 
         **Loaded by identifier alone, whoever it belongs to.** The partition is
@@ -127,7 +164,7 @@ def load(requisitions: Requisitions) -> Load:
         if not isinstance(identifier, str):
             raise ValueError("'id' must be a string")
 
-        return await requisitions.by_id(identifier)
+        return await store.by_id(identifier)
 
     return loaded
 
@@ -398,6 +435,78 @@ def _identifiers(arguments: Mapping[str, Any]) -> tuple[str, ...]:
     if len(value) > MAXIMUM_BATCH:
         raise ValueError(f"'ids' names more than {MAXIMUM_BATCH} requisitions: {len(value)}")
     return tuple(value)
+
+
+def record_invoice(orders: PurchaseOrders) -> Handler:
+    """Build the ``record_invoice`` handler over a store.
+
+    Returns:
+        The handler, in the shape layer 1's registry declares.
+    """
+    hydrate = load(orders)
+
+    async def handler(
+        principal: Principal, arguments: Mapping[str, Any]
+    ) -> AsyncIterator[Mapping[str, Any] | Decision]:
+        """Bill one purchase order, and write the invoice that bills it.
+
+        **The resource is the order, and it is the first that is not a
+        requisition.** The invoice does not exist yet and the chain never sees
+        one — *the thing acted against, never the thing created*. The step that
+        hydrates the order is the same :func:`load` the two requisition handlers
+        call, parameterised on the entity this one's store answers with.
+
+        The hydration step's answer goes straight to
+        :func:`~mcp_erp.authorization.policy.decide_item`, ``None`` included, so
+        an order in another partition and an order that was never there converge
+        on layer 2's single return site exactly as a requisition does. The
+        partition is one link up the chain — an order has no centre of its own —
+        which changes where the value is read and nothing about the comparison.
+
+        **Authorization first, then the row's own state**, on the same two
+        orderings ``approve_requisition`` keeps. ``already_invoiced`` is answered
+        only after the chain permits, so a caller who may not bill this order
+        learns nothing about whether it has been billed; and the terminal check
+        is the write itself rather than a test against the row loaded a moment
+        ago, because a check that is not the write is a race two callers both
+        pass.
+
+        **Yields exactly one outcome, and is not a batch.** ADR-0002's *Five
+        tools* gives the list to ``approve_requisition`` alone, so this is one
+        item by declaration rather than by deferral — the fold #41 built is
+        untouched, and layer 1 renders one outcome directly because it folds on
+        cardinality and never learns which tool produced it. Stopping at
+        ``decide_item`` is therefore the neighbour's obligation holding rather
+        than being skipped: with one item, running the call gate once and running
+        the chain per item are the same call.
+
+        Raises:
+            ValueError: No ``id`` was named, or it was not a string. Raised by
+                the hydration step, and distinct from ``not_found`` on purpose.
+        """
+        resource = await hydrate(RECORD_INVOICE, arguments)
+
+        decision = decide_item(principal, RECORD_INVOICE, resource)
+        if decision.reason is not None:
+            yield decision
+            return
+
+        # Reachable only on a permit, and a permit means the chain saw a row.
+        assert resource is not None
+        written = await orders.bill(
+            resource.id,
+            # The principal's, never the caller's: no argument names a recorder,
+            # which is what makes the second separation edge a check against a
+            # position occupied on this chain.
+            recorded_by=principal.subject,
+        )
+        if written is None:
+            yield Decision(reason=ALREADY_INVOICED)
+            return
+
+        yield written.as_row()
+
+    return handler
 
 
 def _decision(arguments: Mapping[str, Any]) -> str:
