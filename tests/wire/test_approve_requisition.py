@@ -3,9 +3,9 @@
 **A batch, since #41.** The tool takes a list of identifiers and one decision,
 and answers for every item the list names — permit or refusal, never a silent
 drop. The rule layer 1 renders that with is asserted in `test_the_fold.py`
-beside this; what is asserted here is what a *decision* does with it: mixed
-verdicts in one body, a caller-level refusal replacing the whole response
-instead of riding in it, and an item named twice answered twice.
+beside this; what is asserted here is what a *decision* does with it: items
+permitted and items refused in one body, a caller-level refusal replacing the
+whole response instead of riding in it, and an item named twice answered twice.
 
 Six things arrive here that no earlier tool could reach.
 
@@ -55,16 +55,14 @@ from typing import Any
 import httpx2
 import pytest
 
+import requisitions as raising
 import rpc
 import seeded_requisitions
+from requisitions import raised_by
 from tokens import mint
 
 TOOL = "approve_requisition"
 GET = "get_requisition"
-SUBMIT = "submit_requisition"
-
-VENDOR = "Meridian Cloud Services"
-"""One of the four names `submit_requisition` enumerates. Nothing here turns on which."""
 
 THRESHOLD = "5000.00"
 """ADR-0003's €5,000, at the boundary: *at or below*, `approver` suffices."""
@@ -111,31 +109,6 @@ def requisitions() -> Iterator[None]:
     """
     seeded_requisitions.load()
     yield
-
-
-def _raise(username: str, amount: str) -> str:
-    """Raise one requisition as this Person, against their own centre, and name it.
-
-    Their own centre because there is no other kind: `submit_requisition` takes
-    no cost centre, so who raises the row is what decides which centre it lands
-    in — which is how a CC-4300 row above the threshold gets written at all.
-    """
-    result = rpc.result(
-        rpc.call_tool(
-            SUBMIT,
-            {
-                "vendor": VENDOR,
-                "amount": amount,
-                "currency": "EUR",
-                "description": "Managed Kubernetes, annual",
-            },
-            token=mint(username, ["erp.write"]).access_token,
-        )
-    )
-
-    assert result["isError"] is False, result
-    identifier: str = result["structuredContent"]["requisition"]["id"]
-    return identifier
 
 
 def _decide(username: str, identifier: str, decision: str = "approve") -> httpx2.Response:
@@ -283,7 +256,7 @@ def test_an_approval_emits_a_purchase_order_carrying_the_approver() -> None:
     #42. The requisition comes back too, so the caller sees the state their own
     call produced rather than having to read it back.
     """
-    identifier = _raise(SUBMITTER, THRESHOLD)
+    identifier = raised_by(SUBMITTER, THRESHOLD)
 
     decided = _permitted(APPROVER, identifier)
 
@@ -291,7 +264,9 @@ def test_an_approval_emits_a_purchase_order_carrying_the_approver() -> None:
     assert decided["requisition"]["status"] == "approved"
     order = decided["purchase_order"]
     assert order["id"].startswith("po_")
-    assert order["requisition"] == {"id": identifier, "label": "Managed Kubernetes, annual"}
+    # The label is the description the row was raised with, read from the same
+    # constant that supplied it rather than written out again here.
+    assert order["requisition"] == {"id": identifier, "label": raising.DESCRIPTION}
     assert order["approved_by"] == {"id": "tomas-weber", "label": "Tomas Weber"}
     assert order["status"] == "open"
 
@@ -304,7 +279,7 @@ def test_the_purchase_order_carries_no_copy_of_the_cost_centre() -> None:
     that can disagree with the first. The row it points at carries the centre,
     and it carries it once.
     """
-    identifier = _raise(SUBMITTER, THRESHOLD)
+    identifier = raised_by(SUBMITTER, THRESHOLD)
 
     decided = _permitted(APPROVER, identifier)
 
@@ -319,7 +294,7 @@ def test_the_role_at_the_threshold_decides_at_the_threshold() -> None:
     *below* differ on precisely one value and a test that never names it cannot
     tell the two rules apart.
     """
-    identifier = _raise(SUBMITTER, THRESHOLD)
+    identifier = raised_by(SUBMITTER, THRESHOLD)
 
     assert _permitted(APPROVER, identifier)["requisition"]["status"] == "approved"
 
@@ -332,7 +307,7 @@ def test_the_role_at_the_threshold_is_refused_one_cent_above_it() -> None:
     unlimited role can decide this row — which the test below acts on rather
     than asserting.
     """
-    identifier = _raise(SUBMITTER, ABOVE_THRESHOLD)
+    identifier = raised_by(SUBMITTER, ABOVE_THRESHOLD)
 
     assert _refused(APPROVER, identifier) == {
         "reason": "over_threshold",
@@ -350,7 +325,7 @@ def test_the_role_with_no_upper_limit_reaches_the_branch_the_other_cannot() -> N
     One identifier, two callers, two answers — which is what makes the threshold
     a decision about the principal rather than a property of the row.
     """
-    identifier = _raise(SUBMITTER, WELL_ABOVE)
+    identifier = raised_by(SUBMITTER, WELL_ABOVE)
 
     assert _refused(APPROVER, identifier)["reason"] == "over_threshold"
     assert _permitted(UNLIMITED, identifier)["requisition"]["status"] == "approved"
@@ -362,7 +337,7 @@ def test_the_role_with_no_upper_limit_has_no_lower_bound_either() -> None:
     That is the whole of why `senior_approver` was renamed: the old name needed
     a gloss every time it appeared, and this is the branch the gloss described.
     """
-    identifier = _raise(SUBMITTER, "480.00")
+    identifier = raised_by(SUBMITTER, "480.00")
 
     assert _permitted(UNLIMITED, identifier)["requisition"]["status"] == "approved"
 
@@ -374,7 +349,7 @@ def test_the_submitter_cannot_approve_their_own_requisition() -> None:
     below holds `approver` and is refused on exactly one row — the one he
     raised.
     """
-    identifier = _raise(APPROVER, "1200.00")
+    identifier = raised_by(APPROVER, "1200.00")
 
     assert _refused(APPROVER, identifier) == {
         "reason": "segregation_of_duties",
@@ -396,7 +371,7 @@ def test_the_threshold_is_declared_before_the_submitter_edge() -> None:
     threshold, refuses on both counts. The test below is why the order is this
     way round rather than the other.
     """
-    identifier = _raise(APPROVER, WELL_ABOVE)
+    identifier = raised_by(APPROVER, WELL_ABOVE)
 
     assert _refused(APPROVER, identifier)["reason"] == "over_threshold"
 
@@ -420,7 +395,7 @@ def test_marketing_has_nobody_who_can_approve_above_the_threshold() -> None:
     unreachable — a hole made invisible by the order rules happen to be written
     in.
     """
-    identifier = _raise(MARKETING, WELL_ABOVE)
+    identifier = raised_by(MARKETING, WELL_ABOVE)
 
     refused = _refused(MARKETING, identifier)
     assert refused["reason"] == "over_threshold"
@@ -441,7 +416,7 @@ def test_a_second_decision_on_a_decided_requisition_is_refused() -> None:
     order. The remedy is `none` and both retry booleans are false, because there
     is no person and no token that makes a decided row decidable again.
     """
-    identifier = _raise(SUBMITTER, "480.00")
+    identifier = raised_by(SUBMITTER, "480.00")
     first = _permitted(APPROVER, identifier)
 
     assert _refused(APPROVER, identifier) == {
@@ -464,7 +439,7 @@ def test_a_rejection_is_equally_terminal_and_emits_no_purchase_order() -> None:
     `purchase_order` being absent rather than `null` says: the record does not
     exist, rather than existing empty.
     """
-    identifier = _raise(SUBMITTER, "480.00")
+    identifier = raised_by(SUBMITTER, "480.00")
 
     decided = _permitted(APPROVER, identifier, "reject")
 
@@ -485,7 +460,7 @@ def test_a_foreign_row_and_a_row_that_never_existed_answer_byte_identically() ->
     The request identifier is the same on both, so the two envelopes differ in
     the `id` argument alone.
     """
-    identifier = _raise(SUBMITTER, "480.00")
+    identifier = raised_by(SUBMITTER, "480.00")
 
     foreign = _decide(OUTSIDER, identifier)
     absent = _decide(OUTSIDER, seeded_requisitions.ABSENT_IDENTIFIER)
@@ -504,7 +479,7 @@ def test_a_token_without_the_deciding_scope_is_refused_before_the_handler_runs()
     is derived from the capability the tool declares, so what the challenge names
     and what `scopes_supported` publishes cannot drift.
     """
-    identifier = _raise(SUBMITTER, "480.00")
+    identifier = raised_by(SUBMITTER, "480.00")
 
     response = rpc.call_tool(
         TOOL,
@@ -537,7 +512,7 @@ def test_the_scope_present_and_the_role_absent_is_a_protocol_error() -> None:
     no ERP role: the realm will issue her `erp.decide`, and the server will not
     stand behind it.
     """
-    identifier = _raise(SUBMITTER, "480.00")
+    identifier = raised_by(SUBMITTER, "480.00")
 
     error = rpc.error(_decide(SUBMITTER, identifier))
 
@@ -558,7 +533,7 @@ def test_a_decision_the_enum_forbids_is_a_protocol_error_and_not_a_refusal() -> 
     about them, so it answers `-32602` and carries no `reason` — giving it one
     would amend a closed vocabulary for a spelling mistake.
     """
-    identifier = _raise(SUBMITTER, "480.00")
+    identifier = raised_by(SUBMITTER, "480.00")
 
     assert rpc.error(_decide(APPROVER, identifier, "maybe"))["code"] == -32602
     assert _status(SUBMITTER, identifier) == "submitted"
@@ -573,13 +548,13 @@ def test_a_refused_caller_is_answered_before_their_other_arguments_are_read() ->
     then the arguments — and the identifier is the one exception, because
     hydration cannot happen without one.
     """
-    identifier = _raise(SUBMITTER, "480.00")
+    identifier = raised_by(SUBMITTER, "480.00")
 
     assert _refused(OUTSIDER, identifier, "maybe")["reason"] == "not_found"
     assert rpc.error(_decide(SUBMITTER, identifier, "maybe"))["code"] == -31010
 
 
-def test_mixed_verdicts_arrive_in_one_result_body() -> None:
+def test_permitted_and_refused_items_arrive_in_one_result_body() -> None:
     """Some items permitted, some refused, in one answer — and one wire shape.
 
     ADR-0002 earned a streamed response mode on exactly this call and then cut
@@ -593,8 +568,8 @@ def test_mixed_verdicts_arrive_in_one_result_body() -> None:
     than one item on it: a model is told there is something here to act on, and
     per-item idempotency is what makes the retry it invites harmless.
     """
-    decided = _raise(SUBMITTER, "480.00")
-    refused = _raise(SUBMITTER, WELL_ABOVE)
+    decided = raised_by(SUBMITTER, "480.00")
+    refused = raised_by(SUBMITTER, WELL_ABOVE)
 
     answers, marked = _answers(APPROVER, [decided, refused, seeded_requisitions.ABSENT_IDENTIFIER])
 
@@ -603,6 +578,17 @@ def test_mixed_verdicts_arrive_in_one_result_body() -> None:
     assert answers[0]["requisition"]["status"] == "approved"
     assert answers[1]["reason"] == "over_threshold"
     assert answers[2]["reason"] == "not_found"
+    # A refused answer carries the refusal and nothing else — no identifier, in
+    # a body where the answer beside it has one. That is what keeps `not_found`
+    # on a foreign row indistinguishable from `not_found` on a row that never
+    # existed once both are folded: position is the caller's to keep, not the
+    # server's to disclose.
+    assert set(answers[2]) == {
+        "reason",
+        "remedy",
+        "retry_identical_helps",
+        "retry_as_other_person_helps",
+    }
     # A refused item decides nothing, and a permitted one beside it is decided
     # anyway: the items are independent, which is what makes them N outcomes.
     assert _status(SUBMITTER, refused) == "submitted"
@@ -617,7 +603,7 @@ def test_an_item_named_twice_is_answered_twice() -> None:
     answer twice as far as the count goes and once as far as the caller's second
     item goes.
     """
-    identifier = _raise(SUBMITTER, "480.00")
+    identifier = raised_by(SUBMITTER, "480.00")
 
     answers, marked = _answers(APPROVER, [identifier, identifier])
 
@@ -644,8 +630,8 @@ def test_a_caller_level_refusal_replaces_the_whole_response() -> None:
     `approver` and the server gives her no ERP role, so she carries `erp.decide`
     to a role gate that refuses her.
     """
-    first = _raise(SUBMITTER, "480.00")
-    second = _raise(SUBMITTER, "480.00")
+    first = raised_by(SUBMITTER, "480.00")
+    second = raised_by(SUBMITTER, "480.00")
 
     error = rpc.error(_decide_all(SUBMITTER, [first, second]))
 
@@ -670,7 +656,7 @@ def test_a_list_the_schema_forbids_is_a_protocol_error_and_not_a_refusal() -> No
     published `inputSchema`, so a rule a model reads and a rule the server keeps
     are two rules unless one of them is written twice.
     """
-    identifier = _raise(SUBMITTER, "480.00")
+    identifier = raised_by(SUBMITTER, "480.00")
 
     assert rpc.error(_decide_all(APPROVER, []))["code"] == -32602
     assert rpc.error(_decide_all(APPROVER, [identifier] * 21))["code"] == -32602
@@ -691,7 +677,7 @@ def test_a_single_item_decision_answers_application_json() -> None:
     The request asks for both, as a faithful client does, which is what makes the
     answer a decision rather than the only thing that would parse.
     """
-    identifier = _raise(SUBMITTER, "480.00")
+    identifier = raised_by(SUBMITTER, "480.00")
 
     response = _decide(APPROVER, identifier)
 

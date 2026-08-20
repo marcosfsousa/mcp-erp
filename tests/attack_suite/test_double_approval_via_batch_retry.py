@@ -37,6 +37,7 @@ import pytest
 
 import rpc
 import seeded_requisitions
+from requisitions import raised_by
 from tokens import mint
 
 APPROVE = "approve_requisition"
@@ -47,8 +48,6 @@ APPROVER = "tomas.weber"
 
 SUBMITTER = "priya.raman"
 """CC-4100, no ERP role. Raises the rows, so the submitter edge refuses nobody here."""
-
-VENDOR = "Meridian Cloud Services"
 
 AMOUNT = "480.00"
 """Below the threshold, so nothing but the retry can be what refuses the second call.
@@ -63,26 +62,6 @@ def requisitions() -> Iterator[None]:
     """Wipe and reload, so this module's orders are the only ones in the table."""
     seeded_requisitions.load()
     yield
-
-
-def _raise(username: str) -> str:
-    """Raise one requisition as this Person, against their own centre."""
-    result = rpc.result(
-        rpc.call_tool(
-            "submit_requisition",
-            {
-                "vendor": VENDOR,
-                "amount": AMOUNT,
-                "currency": "EUR",
-                "description": "Quarterly window cleaning",
-            },
-            token=mint(username, ["erp.write"]).access_token,
-        )
-    )
-
-    assert result["isError"] is False, result
-    identifier: str = result["structuredContent"]["requisition"]["id"]
-    return identifier
 
 
 def _decide(username: str, identifiers: list[str]) -> dict[str, Any]:
@@ -115,7 +94,7 @@ def test_the_batch_is_two_rows_this_approver_may_decide() -> None:
     asserts nothing. So: two rows, both submitted, both in the approver's own
     centre, both below the threshold, and neither raised by him.
     """
-    batch = [_raise(SUBMITTER), _raise(SUBMITTER)]
+    batch = [raised_by(SUBMITTER, AMOUNT), raised_by(SUBMITTER, AMOUNT)]
 
     for identifier in batch:
         assert _status(APPROVER, identifier) == "submitted"
@@ -134,7 +113,7 @@ def test_a_retried_batch_answers_already_decided_for_every_item_and_mints_nothin
     The count afterwards is the assertion the wire cannot make: two orders, one
     per requisition, unchanged by the retry.
     """
-    batch = [_raise(SUBMITTER), _raise(SUBMITTER)]
+    batch = [raised_by(SUBMITTER, AMOUNT), raised_by(SUBMITTER, AMOUNT)]
 
     first = _decide(APPROVER, batch)
     retried = _decide(APPROVER, batch)
@@ -177,7 +156,7 @@ def test_a_partly_decided_batch_retries_into_one_answer_per_item() -> None:
     refused for them, and nothing about the retry made it decidable or made the
     others decidable again.
     """
-    decidable = _raise(SUBMITTER)
+    decidable = raised_by(SUBMITTER, AMOUNT)
     foreign = seeded_requisitions.identifiers_in("CC-4200")
 
     batch = [decidable, *sorted(foreign)]

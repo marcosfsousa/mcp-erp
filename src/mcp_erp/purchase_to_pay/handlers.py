@@ -321,6 +321,14 @@ def approve_requisition(requisitions: Requisitions) -> Handler:
         after that item's own permit, so the ordering holds per item as well as
         per call.
 
+        **The consequence is that a call with nothing decidable in it never reads
+        ``decision`` at all**, so an unknown value there answers with the
+        refusals rather than with ``-32602``. That is the ordering rule doing
+        exactly what it says rather than a hole in the enum: the alternative is
+        validating the argument first, which would tell a caller the chain
+        refuses that their *other* argument was wrong — and a refusal that
+        varies with a typo is a refusal that discloses.
+
         Raises:
             ValueError: An argument the input schema forbade — a list that is not
                 one of strings, is empty, or is longer than the declared ceiling;

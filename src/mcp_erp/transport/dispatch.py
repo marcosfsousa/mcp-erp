@@ -71,8 +71,10 @@ breaking.
 **Layer 3 spells it a second time**, beside the schema that declares the folded
 body, for the reason ``Handler`` is spelled twice: the two packages import
 nothing from each other, and a constant they shared would have to live in layer
-2 — which would then hold a value describing how layer 1 renders. The two
-spellings meet at the wire, in ``tests/wire/test_the_fold.py``.
+2 — which would then hold a value describing how layer 1 renders. Nothing on
+either side can catch the two drifting apart, so the equality is asserted at the
+one altitude that sees both:
+``tests/wire/test_the_fold.py::test_the_declared_key_and_the_rendered_one_are_one_key``.
 """
 
 MAXIMUM_LISTING_TTL_MS: Final = 300_000
@@ -219,7 +221,7 @@ def _render(outcome: Outcome) -> types.CallToolResult:
     if not isinstance(outcome, Decision):
         return _result(outcome, is_error=False)
 
-    reason = _refused_on(outcome)
+    reason = _stated_reason(outcome)
     payload = refusals.refusal_payload(reason)
     if reason.denial_class is DenialClass.PROTOCOL_ERROR:
         raise MCPError(refusals.ROLE_DENIED_CODE, reason.value, data=payload)
@@ -235,12 +237,15 @@ def _render(outcome: Outcome) -> types.CallToolResult:
 def _fold(outcomes: Sequence[Outcome]) -> types.CallToolResult:
     """N outcomes as one result body, one answer per item the request named.
 
-    **In the order the handler yielded them, and carrying no identifier.** A
-    caller maps answers to items by position, which is what they have and layer 1
-    does not: an answer that named the row it was about would make ``not_found``
-    on a foreign row distinguishable from ``not_found`` on a row that never
-    existed, which is the existence oracle ADR-0002 declined to ship. Position
-    costs the caller nothing — they wrote the list.
+    **In the order the handler yielded them, and this adds no identifier of its
+    own.** A caller maps answers to items by position, which is what they have
+    and layer 1 does not — it never sees the request's items at all. A permitted
+    answer does carry a row, because the row *is* the answer and the handler put
+    it there; a **refusal** carries none, and that is the half that matters: a
+    refusal that named the row it was about would make ``not_found`` on a foreign
+    row distinguishable from ``not_found`` on a row that never existed, which is
+    the existence oracle ADR-0002 declined to ship. Position costs the caller
+    nothing — they wrote the list.
 
     **Marked in error when any one item was refused.** That is the same reading a
     single-item refusal has, applied to a call with more than one item on it: the
@@ -253,11 +258,14 @@ def _fold(outcomes: Sequence[Outcome]) -> types.CallToolResult:
         MCPError: A permitted ``Decision`` was yielded as an outcome, or an
             answer's denial class is one no result body can carry.
     """
-    answers = [_answer(outcome) for outcome in outcomes]
-    return _result(
-        {FOLD_KEY: [payload for payload, _ in answers]},
-        is_error=any(refused for _, refused in answers),
-    )
+    answers: list[Mapping[str, Any]] = []
+    refused = False
+    for outcome in outcomes:
+        payload, is_refusal = _answer(outcome)
+        answers.append(payload)
+        refused = refused or is_refusal
+
+    return _result({FOLD_KEY: answers}, is_error=refused)
 
 
 def _answer(outcome: Outcome) -> tuple[Mapping[str, Any], bool]:
@@ -275,7 +283,7 @@ def _answer(outcome: Outcome) -> tuple[Mapping[str, Any], bool]:
     if not isinstance(outcome, Decision):
         return outcome, False
 
-    reason = _refused_on(outcome)
+    reason = _stated_reason(outcome)
     if reason.denial_class is not DenialClass.TOOL_RESULT:
         raise MCPError(
             INTERNAL_ERROR,
@@ -284,7 +292,7 @@ def _answer(outcome: Outcome) -> tuple[Mapping[str, Any], bool]:
     return refusals.refusal_payload(reason), True
 
 
-def _refused_on(decision: Decision) -> Reason:
+def _stated_reason(decision: Decision) -> Reason:
     """The reason a refused outcome carries.
 
     Raises:

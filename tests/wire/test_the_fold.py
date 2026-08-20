@@ -43,18 +43,20 @@ import pytest
 import rpc
 import seeded_requisitions
 from mcp_erp import transport
+from requisitions import raised_by
 from tokens import mint
 
 APPROVE = "approve_requisition"
 LIST = "list_requisitions"
-SUBMIT = "submit_requisition"
 
 FOLD_KEY = "outcomes"
 """What layer 1 calls the list of answers, spelled here a third time.
 
 `mcp_erp.transport.dispatch` holds one spelling and layer 3's declared
 `outputSchema` holds the other; the two packages import nothing from each other,
-so this file is where they are held equal.
+so nothing on either side can notice them disagreeing. A caller would, and
+`test_the_declared_key_and_the_rendered_one_are_one_key` is where the three
+spellings are held equal.
 """
 
 APPROVER = "tomas.weber"
@@ -63,7 +65,6 @@ APPROVER = "tomas.weber"
 SUBMITTER = "priya.raman"
 """CC-4100, no ERP role at all. Raises the rows the approver decides."""
 
-VENDOR = "Meridian Cloud Services"
 AMOUNT = "480.00"
 """Below the threshold, so nothing but the fold is under test here."""
 
@@ -77,26 +78,6 @@ def requisitions() -> Iterator[None]:
     """
     seeded_requisitions.load()
     yield
-
-
-def _raise(username: str, amount: str = AMOUNT) -> str:
-    """Raise one requisition as this Person, against their own centre."""
-    result = rpc.result(
-        rpc.call_tool(
-            SUBMIT,
-            {
-                "vendor": VENDOR,
-                "amount": amount,
-                "currency": "EUR",
-                "description": "Quarterly window cleaning",
-            },
-            token=mint(username, ["erp.write"]).access_token,
-        )
-    )
-
-    assert result["isError"] is False, result
-    identifier: str = result["structuredContent"]["requisition"]["id"]
-    return identifier
 
 
 def _decide(username: str, identifiers: list[str]) -> dict[str, Any]:
@@ -121,16 +102,52 @@ def test_a_batch_of_n_items_answers_with_exactly_n_answers() -> None:
     of the invariant: a batch that quietly answered for two of three items would
     pass any assertion phrased against the data.
     """
-    requested = [_raise(SUBMITTER), _raise(SUBMITTER), _raise(SUBMITTER)]
+    requested = [
+        raised_by(SUBMITTER, AMOUNT),
+        raised_by(SUBMITTER, AMOUNT),
+        raised_by(SUBMITTER, AMOUNT),
+    ]
 
     decided = _decide(APPROVER, requested)
 
     assert len(decided[FOLD_KEY]) == len(requested)
     # And in the order they were named, which is how a caller tells which answer
-    # belongs to which item: no answer carries the identifier it was asked
-    # about, because a refusal that named its row would make `not_found`
-    # distinguishable from a row in another partition.
+    # belongs to which item. These three are permitted, so each carries the row
+    # it decided — a refusal carries none, and that is the half the rule is
+    # about: one that named its row would make `not_found` on a foreign row
+    # distinguishable from `not_found` on a row that never existed.
     assert [answer["requisition"]["id"] for answer in decided[FOLD_KEY]] == requested
+
+
+def test_the_declared_key_and_the_rendered_one_are_one_key() -> None:
+    """The key layer 1 renders under, and the key layer 3 declares, are the same word.
+
+    It is written twice in `src/` because the two packages import nothing from
+    each other and a constant they shared would have to live in layer 2 — which
+    would then hold a value describing how layer 1 renders. Nothing on either
+    side can catch them drifting apart: layer 3 would publish an `outputSchema`
+    describing a body no call produces, and every existing assertion would still
+    pass. So the equality is asserted at the one altitude that sees both.
+    """
+    requested = [raised_by(SUBMITTER, AMOUNT), raised_by(SUBMITTER, AMOUNT)]
+
+    rendered = _decide(APPROVER, requested)
+    declared = _declaration()["outputSchema"]
+
+    # The folded body carries the answers and nothing else, so its one key is
+    # the key — read off the response rather than assumed from the constant.
+    (key,) = rendered
+    assert key == FOLD_KEY
+    assert key in declared["properties"]
+    assert {"required": [key]} in declared["oneOf"]
+
+
+def _declaration() -> dict[str, Any]:
+    """`approve_requisition` as `tools/list` publishes it."""
+    tools = rpc.result(rpc.post("tools/list", token=mint(APPROVER, ["erp.decide"]).access_token))
+    (declared,) = [entry for entry in tools["tools"] if entry["name"] == APPROVE]
+    published: dict[str, Any] = declared
+    return published
 
 
 def test_a_single_item_call_renders_its_outcome_directly() -> None:
@@ -141,7 +158,7 @@ def test_a_single_item_call_renders_its_outcome_directly() -> None:
     `get_requisition` call are the same shape of thing to it. The price is
     visible in this tool's `outputSchema`, which declares both bodies.
     """
-    identifier = _raise(SUBMITTER)
+    identifier = raised_by(SUBMITTER, AMOUNT)
 
     decided = _decide(APPROVER, [identifier])
 
@@ -188,7 +205,10 @@ def test_layer_1_names_no_tool_and_no_batch_argument() -> None:
         "ids",
     }
 
-    for module in sorted(Path(transport.__file__).parent.glob("*.py")):
+    # `rglob`, so the guarantee survives layer 1 growing a sub-package. It is
+    # flat today, and a check that held only while it stayed flat would be one
+    # directory away from asserting nothing.
+    for module in sorted(Path(transport.__file__).parent.rglob("*.py")):
         assert _vocabulary(module) & forbidden == set(), module.name
 
 
