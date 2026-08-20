@@ -9,13 +9,24 @@ collaborators, so the row cannot arrive any other way (ADR-0013).
 what approval *emits*; it does not exist when the decision is taken, and *the
 resource is the thing acted against, never the thing created*.
 
-**Single item, and the batch is #41's.** ADR-0002 specified this tool as taking a
-list and is amended to defer it: the fold that turns N outcomes into one result
-body is unbuilt, and dispatch refuses a cardinality above one rather than
-rendering the first answer and dropping the rest. A list schema shipped ahead of
-the fold would publish an argument whose second element is a loud internal error.
-The batch is postponed rather than cut, and the deferral is recorded in the trail
-rather than only here.
+**The batch, restored at #41.** ADR-0002 specified this tool as taking a list and
+#40 deferred it until layer 1 could render more than one answer; the fold landed
+with this, so the list is back. It is the only tool of the five that is a batch,
+which is ADR-0002's reading of what a batch *is* — a call that yields N
+independent outcomes — rather than a convenience: every other tool answers one
+question, and a list of them would be one outcome carrying rows.
+
+**One decision for the whole list.** The decision is what the caller intends and
+the list is the set of rows they intend it for; a list of ``{id, decision}``
+pairs would be a second way to spell the same call, buying no authorization
+behaviour and doubling what a model has to get right.
+
+**And both entry points, because of the batch.** ``decide_call`` runs once ahead
+of the items and ``decide_item`` once per item. That is ADR-0002's *caller-level
+refusals are whole-call; item-level refusals are per-item*, and with more than
+one item on the call it is mechanical rather than stylistic: ``role_missing`` is
+a ``-31010``, a JSON-RPC error is the response rather than a line inside one, and
+a batch that reached it per item would produce N answers layer 1 cannot render.
 
 **Rejection is the same authorization decision as approval**, so it is a
 ``decision`` argument rather than a second tool: a separate one would add a
@@ -27,7 +38,7 @@ from decimal import Decimal
 from typing import Any, Final
 
 from mcp_erp.authorization import Action, Capability, Principal, Reason
-from mcp_erp.purchase_to_pay.purchase_order import DECISION_SCHEMA
+from mcp_erp.purchase_to_pay.purchase_order import DECISIONS_SCHEMA
 from mcp_erp.purchase_to_pay.reasons import OVER_THRESHOLD, SEGREGATION_OF_DUTIES
 from mcp_erp.purchase_to_pay.requisition import Requisition
 
@@ -37,19 +48,20 @@ NAME: Final = "approve_requisition"
 TITLE: Final = "Approve requisition"
 
 DESCRIPTION: Final = (
-    "Approve or reject one purchase requisition. "
+    "Approve or reject one or more purchase requisitions, each decided on its own. "
     "Deciding requires a role the server resolves for itself, the amount decides "
     "which role suffices, and nobody may decide a requisition they raised. "
     "A decision is final: a requisition that has been decided cannot be decided again."
 )
 """What a model reads before calling.
 
-Three sentences of authorization behaviour, because all three are things a model
-will otherwise discover by retrying. Naming *a role the server resolves* is what
-stops a client treating the missing-role refusal as a scope problem; naming the
-submitter rule is what makes *route to a different person* the obvious move
-rather than a discovery; and naming finality is what stops a retry loop against a
-decided row.
+Four sentences of authorization behaviour, because all four are things a model
+will otherwise discover by retrying. Naming *each decided on its own* is what
+stops a client reading a result marked in error as a call that did nothing;
+naming *a role the server resolves* is what stops it treating the missing-role
+refusal as a scope problem; naming the submitter rule is what makes *route to a
+different person* the obvious move rather than a discovery; and naming finality
+is what stops a retry loop against a decided row.
 
 It describes the shape of the API and not the contents of the database: no
 threshold value, no centre, no names.
@@ -79,13 +91,36 @@ is ADR-0003's wording rather than an interpretation of it, and one cent is the
 whole of what separates the two roles.
 """
 
+MAXIMUM_BATCH: Final = 20
+"""The most rows one call may name, and the one constraint here ADR-0002 did not set.
+
+A batch is N writes inside one request, and a declared list with no upper bound
+is a request whose cost the caller chooses. The ceiling is not a capacity claim —
+it is a bound, stated where the rule that generates rows is stated, and it is
+generous enough that nothing this exhibit demonstrates comes near it: the whole
+seeded organisation holds four requisitions.
+
+Declared in the schema *and* enforced by the handler, because nothing on this
+stack validates arguments against a published ``inputSchema`` — the same reason
+:data:`DECISIONS` is a tuple the handler matches against rather than two literals
+in a document.
+"""
+
 INPUT_SCHEMA: Final[dict[str, Any]] = {
     "type": "object",
-    "properties": {"id": {"type": "string"}, "decision": {"enum": list(DECISIONS)}},
-    "required": ["id", "decision"],
+    "properties": {
+        "ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "maxItems": MAXIMUM_BATCH,
+        },
+        "decision": {"enum": list(DECISIONS)},
+    },
+    "required": ["ids", "decision"],
     "additionalProperties": False,
 }
-"""Which row, and which way. Nothing else, and the absences are the design.
+"""Which rows, and which way. Nothing else, and the absences are the design.
 
 No ``amount``: it is a fact about the row the server already holds, and a caller
 who could restate it could restate it wrongly — the threshold would then be
@@ -94,14 +129,18 @@ the reason every schema here omits one: the partition is server-derived, and no
 schema anywhere enumerates the organisation's centres. No approver identity: it
 is the token's subject, which is what makes the submitter rule a check against a
 position on the chain rather than against something the caller supplied.
+
+And no per-item ``decision``: see the module docstring. One decision for the
+whole list is what makes this one call rather than N calls posted together.
 """
 
-OUTPUT_SCHEMA: Final[dict[str, Any]] = DECISION_SCHEMA
-"""The row as decided, and the purchase order if the decision emitted one.
+OUTPUT_SCHEMA: Final[dict[str, Any]] = DECISIONS_SCHEMA
+"""The rows as decided, and the purchase orders the approvals emitted.
 
 Declared beside the entity it renders rather than here, so the tool that changes
 a requisition's status describes that row with the same document the three tools
-that read one use.
+that read one use — and so that the two bodies a call can answer with are
+declared once, from the same description of one decision.
 """
 
 

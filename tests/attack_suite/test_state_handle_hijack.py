@@ -102,11 +102,16 @@ def _guessed_identifier() -> str:
 
 
 def _decide(username: str, identifier: str) -> dict[str, Any]:
-    """One `approve_requisition` call, as a JSON-RPC result."""
+    """One `approve_requisition` call naming one item, as a JSON-RPC result.
+
+    A one-item batch, which layer 1 renders directly rather than folding — so
+    what this scenario reads back is the answer itself, exactly as it was before
+    the list arrived at #41.
+    """
     return rpc.result(
         rpc.call_tool(
             APPROVE,
-            {"id": identifier, "decision": "approve"},
+            {"ids": [identifier], "decision": "approve"},
             token=mint(username, ["erp.decide"]).access_token,
         )
     )

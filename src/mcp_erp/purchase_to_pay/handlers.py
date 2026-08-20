@@ -23,8 +23,16 @@ Handler                  Entry point           Why it stops there
 ``list_requisitions``    both                  a call gate, then a decision per row
 ``get_requisition``      ``decide_item``       one named row, hydrated before deciding
 ``submit_requisition``   ``decide_call``       no resource at all; the partition is ours
-``approve_requisition``  ``decide_item``       one named row, and the rules read it
+``approve_requisition``  both                  a call gate, then a decision per named row
 =======================  ====================  =========================================
+
+*Amended 2026-08-20 by #41, which made the last of those a batch.* It stopped at
+``decide_item`` while it decided one row, and a batch cannot: ``role_missing`` is
+a ``-31010``, a JSON-RPC error is the *response* rather than a line inside one,
+and a handler reaching that refusal once per item would hand layer 1 N answers it
+has no way to render. So the call gate runs once, ahead of the items — which is
+ADR-0002's *caller-level refusals are whole-call; item-level refusals are
+per-item*, arriving as a structural obligation rather than as tidiness.
 
 **Hydration is a named step and it is shared.** :func:`load` is ADR-0013's
 ``load(action, arguments) -> Resource | None``, called by the two handlers that
@@ -49,7 +57,7 @@ from typing import Any
 from mcp_erp.authorization import Action, Decision, Principal, decide_call, decide_item
 from mcp_erp.purchase_to_pay import vendors
 from mcp_erp.purchase_to_pay.approve_requisition import ACTION as APPROVE_REQUISITION
-from mcp_erp.purchase_to_pay.approve_requisition import APPROVE, DECISIONS
+from mcp_erp.purchase_to_pay.approve_requisition import APPROVE, DECISIONS, MAXIMUM_BATCH
 from mcp_erp.purchase_to_pay.get_requisition import ACTION as GET_REQUISITION
 from mcp_erp.purchase_to_pay.list_requisitions import ACTION as LIST_REQUISITIONS
 from mcp_erp.purchase_to_pay.reasons import ALREADY_DECIDED
@@ -273,63 +281,115 @@ def approve_requisition(requisitions: Requisitions) -> Handler:
     async def handler(
         principal: Principal, arguments: Mapping[str, Any]
     ) -> AsyncIterator[Mapping[str, Any] | Decision]:
-        """Decide one requisition, and emit the order an approval produces.
+        """Decide every requisition the call names, and emit the orders approvals produce.
 
-        **The resource is hydrated and it is the requisition** — the thing acted
-        against. The purchase order does not exist yet, and the chain never sees
-        one.
+        **One outcome per item named in the request** — permit or refusal, never
+        a silent drop. That is the invariant layer 1's fold rests on, and it is a
+        property of this loop: the items come from the caller's list, every one
+        of them is answered, and nothing is filtered out on the way.
 
-        The hydration step's answer goes straight to
+        **The call gate runs once, ahead of the items.** A refusal that depends
+        on the caller replaces the whole response, so it is answered before the
+        first row is looked at — and it *must* be, because ``role_missing`` is a
+        JSON-RPC error and there is no rendering for one inside a result body
+        (ADR-0002). Then the whole chain runs per item, which re-runs the two
+        caller-level steps: the deliberate N+1 layer 2 documents, and what keeps
+        the fixed order in one implementation.
+
+        **The resource is hydrated per item and it is the requisition** — the
+        thing acted against. The purchase order does not exist yet, and the chain
+        never sees one. The hydration step's answer goes straight to
         :func:`~mcp_erp.authorization.policy.decide_item`, ``None`` included, so
         a row in another partition and a row that was never there converge on
-        layer 2's single return site here exactly as they do on the read path.
+        layer 2's single return site exactly as they do on the read path.
 
         **Authorization first, then the row's own state.** ``already_decided`` is
         answered only after the chain permits, which is what stops it being an
         existence oracle: a caller who may not decide this row learns nothing
         about whether it has been decided. And the terminal check is the write
         itself rather than a test against the row loaded a moment ago, because a
-        check that is not the write is a race two callers both pass.
-
-        Yields exactly one outcome, for one item. The batch and the fold that
-        turns N outcomes into one result body are #41's.
+        check that is not the write is a race two callers both pass — which is
+        also what makes an item named twice in one list answer once and refuse
+        once, rather than being de-duplicated by anything here.
 
         **The chain runs before the rest of the arguments are read**, which is
         the order ``submit_requisition`` already keeps: a caller the chain
         refuses is answered without their other arguments being looked at, and a
         refused call cannot be told apart from a refused call that also had a
-        typo in it. The identifier is the exception and has to be, because
-        hydration cannot happen without one.
+        typo in it. The identifiers are the exception and have to be, because
+        hydration cannot happen without them — and ``decision`` is read per item,
+        after that item's own permit, so the ordering holds per item as well as
+        per call.
 
         Raises:
-            ValueError: An argument the input schema forbade — no identifier, or
-                a ``decision`` that is not one of the two declared values.
+            ValueError: An argument the input schema forbade — a list that is not
+                one of strings, is empty, or is longer than the declared ceiling;
+                or a ``decision`` that is not one of the two declared values.
         """
-        resource = await hydrate(APPROVE_REQUISITION, arguments)
-
-        decision = decide_item(principal, APPROVE_REQUISITION, resource)
-        if decision.reason is not None:
-            yield decision
+        call = decide_call(principal, APPROVE_REQUISITION)
+        if call.reason is not None:
+            yield Decision(reason=call.reason)
             return
 
-        # Reachable only on a permit, and a permit means the chain saw a row.
-        assert resource is not None
-        requested = _decision(arguments)
-        written = await requisitions.decide(
-            resource.id,
-            approve=requested == APPROVE,
-            # The principal's, never the caller's: no argument names an approver,
-            # which is what makes the submitter rule a check against a position
-            # occupied on this chain.
-            approved_by=principal.subject,
-        )
-        if written is None:
-            yield Decision(reason=ALREADY_DECIDED)
-            return
+        for identifier in _identifiers(arguments):
+            # One item's arguments, which is what the single-item call handed
+            # the hydration step whole. The step's parameters are ADR-0013's and
+            # the batch does not change them; what changes is that the handler
+            # names the item rather than passing the call's own mapping along.
+            resource = await hydrate(APPROVE_REQUISITION, {"id": identifier})
 
-        yield written.as_row()
+            decision = decide_item(principal, APPROVE_REQUISITION, resource)
+            if decision.reason is not None:
+                yield decision
+                continue
+
+            # Reachable only on a permit, and a permit means the chain saw a row.
+            assert resource is not None
+            written = await requisitions.decide(
+                resource.id,
+                approve=_decision(arguments) == APPROVE,
+                # The principal's, never the caller's: no argument names an
+                # approver, which is what makes the submitter rule a check
+                # against a position occupied on this chain.
+                approved_by=principal.subject,
+            )
+            yield Decision(reason=ALREADY_DECIDED) if written is None else written.as_row()
 
     return handler
+
+
+def _identifiers(arguments: Mapping[str, Any]) -> tuple[str, ...]:
+    """The rows this call names, in the order it named them.
+
+    **In order and with repetitions kept.** The order is what a caller maps
+    answers back onto — a folded result carries no identifiers, because an answer
+    that named its row would make a refusal on a foreign row distinguishable from
+    one on a row that never existed — and a repetition is an item the caller
+    asked about, so it is answered rather than collapsed. *Outcomes equal items
+    requested* is a rule about the request, and de-duplicating here would quietly
+    make it a rule about the rows.
+
+    The ceiling is checked rather than only declared, for the reason
+    :func:`_amount` matches a pattern rather than trusting :class:`Decimal`:
+    nothing on this stack validates arguments against a published
+    ``inputSchema``, so a rule a model reads and a rule the server keeps are two
+    rules unless one of them is written twice.
+
+    Raises:
+        ValueError: It is absent, is not a list of strings, is empty, or names
+            more rows than the declaration permits. The empty list is refused
+            rather than answered with nothing: a call that named no item and got
+            no answer is indistinguishable from a batch that dropped every item
+            it was given.
+    """
+    value = arguments.get("ids")
+    if not isinstance(value, list) or not all(isinstance(entry, str) for entry in value):
+        raise ValueError("'ids' must be an array of strings")
+    if not value:
+        raise ValueError("'ids' must name at least one requisition")
+    if len(value) > MAXIMUM_BATCH:
+        raise ValueError(f"'ids' names more than {MAXIMUM_BATCH} requisitions: {len(value)}")
+    return tuple(value)
 
 
 def _decision(arguments: Mapping[str, Any]) -> str:

@@ -1,10 +1,13 @@
-"""`approve_requisition` — the first role-gated tool, and the first hydrated resource.
+"""`approve_requisition` — the first role-gated tool, and the first batch.
 
-**Single-item only.** The batch and the fold that folds N answers into one result
-body are #41's; what this asserts is one call, one item, one answer, and
-`application/json` like every other POST.
+**A batch, since #41.** The tool takes a list of identifiers and one decision,
+and answers for every item the list names — permit or refusal, never a silent
+drop. The rule layer 1 renders that with is asserted in `test_the_fold.py`
+beside this; what is asserted here is what a *decision* does with it: mixed
+verdicts in one body, a caller-level refusal replacing the whole response
+instead of riding in it, and an item named twice answered twice.
 
-Four things arrive here that no earlier tool could reach.
+Six things arrive here that no earlier tool could reach.
 
 - **A resource is hydrated by a named step and handed to the chain.** The
   resource is the `Requisition` — *the thing acted against, never the thing
@@ -22,6 +25,17 @@ Four things arrive here that no earlier tool could reach.
   _threshold` is what makes it matter.
 - **A terminal state.** A second decision on a decided requisition answers
   `already_decided` and mints nothing.
+- **Both entry points, and the batch is what makes that structural.**
+  `decide_call` runs once ahead of the items and `decide_item` runs per item.
+  Not tidiness: a caller-level refusal is a `-31010` protocol error, which
+  cannot ride inside a result body, so a batch that reached it per item would
+  produce N answers layer 1 could not render. ADR-0002's *caller-level refusals
+  are whole-call; item-level refusals are per-item* is the axis, and this is the
+  first call with more than one item on it.
+- **Per-item idempotency, per item of a real batch.** A blind retry of a whole
+  batch answers `already_decided` for each item and mints nothing; the scenario
+  that owns that assertion is `double_approval_via_batch_retry`, in the attack
+  suite.
 
 **Every row this suite decides on is one it raised.** Approval is terminal, so a
 row shared between two tests would hand the second one `already_decided` — and
@@ -125,17 +139,46 @@ def _raise(username: str, amount: str) -> str:
 
 
 def _decide(username: str, identifier: str, decision: str = "approve") -> httpx2.Response:
-    """One `approve_requisition` call, raw.
+    """One `approve_requisition` call naming one item, raw.
 
     The response rather than a parsed result, because half the assertions below
     are about what shape the answer took — a tool result, a JSON-RPC error, or a
     `403` that never reaches the handler at all.
+
+    A one-item batch, which layer 1 renders directly rather than folding, so
+    every single-item assertion below reads exactly as it did before the list
+    arrived. That the two cardinalities differ at all is `test_the_fold.py`'s
+    subject.
+    """
+    return _decide_all(username, [identifier], decision)
+
+
+def _decide_all(
+    username: str, identifiers: list[str], decision: str = "approve"
+) -> httpx2.Response:
+    """One `approve_requisition` call over however many items are named, raw.
+
+    One `decision` for the whole list, which is ADR-0002's shape: the decision is
+    what the caller intends, and the list is the set of rows they intend it for.
+    A list of `{id, decision}` pairs would be a second way to spell the same call
+    and would add no authorization behaviour.
     """
     return rpc.call_tool(
         TOOL,
-        {"id": identifier, "decision": decision},
+        {"ids": identifiers, "decision": decision},
         token=mint(username, ["erp.decide"]).access_token,
     )
+
+
+def _answers(
+    username: str, identifiers: list[str], decision: str = "approve"
+) -> tuple[list[dict[str, Any]], bool]:
+    """The N answers a folded body carries, and whether the result is marked in error."""
+    result = rpc.result(_decide_all(username, identifiers, decision))
+
+    answers: list[dict[str, Any]] = result["structuredContent"]["outcomes"]
+    marked: bool = result["isError"]
+    return answers, marked
 
 
 def _permitted(username: str, identifier: str, decision: str = "approve") -> dict[str, Any]:
@@ -177,23 +220,59 @@ def _status(username: str, identifier: str) -> str:
     return status
 
 
-def test_the_declaration_names_a_row_and_a_decision_and_nothing_else() -> None:
-    """Two arguments: which row, and which way.
+def test_the_declaration_names_a_list_of_rows_and_one_decision() -> None:
+    """Two arguments: which rows, and which way.
 
     `decision` is an enum of two rather than a second tool, because rejecting is
     the same authorization decision as approving — a separate tool would add a
     `tools/list` row and no authorization behaviour. And there is no `amount`
-    and no `cost_centre`: both are facts about the row the server already holds,
+    and no `cost_centre`: both are facts about the rows the server already holds,
     and a caller who could restate either could restate them wrongly.
+
+    **The list carries a ceiling**, which is the one constraint here that is not
+    ADR-0002's. A batch is N writes inside one request, and a declared list with
+    no upper bound is a request whose cost the caller chooses.
     """
     tools = rpc.result(rpc.post("tools/list", token=mint(APPROVER, ["erp.decide"]).access_token))
     (tool,) = [entry for entry in tools["tools"] if entry["name"] == TOOL]
 
-    assert set(tool["inputSchema"]["properties"]) == {"id", "decision"}
-    assert tool["inputSchema"]["required"] == ["id", "decision"]
-    assert tool["inputSchema"]["properties"]["decision"]["enum"] == ["approve", "reject"]
-    assert tool["inputSchema"]["additionalProperties"] is False
-    assert tool["outputSchema"]["required"] == ["requisition"]
+    declared = tool["inputSchema"]
+    assert set(declared["properties"]) == {"ids", "decision"}
+    assert declared["required"] == ["ids", "decision"]
+    assert declared["properties"]["ids"] == {
+        "type": "array",
+        "items": {"type": "string"},
+        "minItems": 1,
+        "maxItems": 20,
+    }
+    assert declared["properties"]["decision"]["enum"] == ["approve", "reject"]
+    assert declared["additionalProperties"] is False
+
+
+def test_the_declaration_publishes_both_bodies_the_cardinality_can_produce() -> None:
+    """One `outputSchema`, two bodies, and exactly one of them per call.
+
+    Layer 1 folds on cardinality alone, because cardinality is the only thing it
+    is allowed to know — so a one-item call answers with the decision itself and
+    a two-item call answers with a list of them. The tool that can be called
+    either way declares both, and the `oneOf` is what stops the pair being read
+    as one body with optional halves.
+
+    It describes the **permitted** body, which is what an `outputSchema` has
+    described here since the first refusal shipped: a refused item is a result
+    marked in error, and layer 3 declaring the refusal's shape would be layer 3
+    describing how layer 1 renders.
+    """
+    tools = rpc.result(rpc.post("tools/list", token=mint(APPROVER, ["erp.decide"]).access_token))
+    (tool,) = [entry for entry in tools["tools"] if entry["name"] == TOOL]
+
+    declared = tool["outputSchema"]
+    assert set(declared["properties"]) == {"requisition", "purchase_order", "outcomes"}
+    assert declared["oneOf"] == [{"required": ["requisition"]}, {"required": ["outcomes"]}]
+    assert declared["additionalProperties"] is False
+    # The list's items are the one-item body, so the two cannot describe the
+    # same row differently.
+    assert declared["properties"]["outcomes"]["items"]["required"] == ["requisition"]
 
 
 def test_an_approval_emits_a_purchase_order_carrying_the_approver() -> None:
@@ -498,6 +577,104 @@ def test_a_refused_caller_is_answered_before_their_other_arguments_are_read() ->
 
     assert _refused(OUTSIDER, identifier, "maybe")["reason"] == "not_found"
     assert rpc.error(_decide(SUBMITTER, identifier, "maybe"))["code"] == -31010
+
+
+def test_mixed_verdicts_arrive_in_one_result_body() -> None:
+    """Some items permitted, some refused, in one answer — and one wire shape.
+
+    ADR-0002 earned a streamed response mode on exactly this call and then cut
+    it; what the mixed batch demonstrates now is the fold. Three items, three
+    answers, in the order they were named: one decided, one refused by a rule
+    that reads the row, and one refused for a row that — as far as this caller
+    can tell — is not there.
+
+    **The result is marked in error because one of the three was refused.** That
+    is the reading a single-item refusal already has, applied to a call with more
+    than one item on it: a model is told there is something here to act on, and
+    per-item idempotency is what makes the retry it invites harmless.
+    """
+    decided = _raise(SUBMITTER, "480.00")
+    refused = _raise(SUBMITTER, WELL_ABOVE)
+
+    answers, marked = _answers(APPROVER, [decided, refused, seeded_requisitions.ABSENT_IDENTIFIER])
+
+    assert marked is True
+    assert answers[0]["requisition"]["id"] == decided
+    assert answers[0]["requisition"]["status"] == "approved"
+    assert answers[1]["reason"] == "over_threshold"
+    assert answers[2]["reason"] == "not_found"
+    # A refused item decides nothing, and a permitted one beside it is decided
+    # anyway: the items are independent, which is what makes them N outcomes.
+    assert _status(SUBMITTER, refused) == "submitted"
+
+
+def test_an_item_named_twice_is_answered_twice() -> None:
+    """*Outcomes equal items requested* holds against the caller's own repetition.
+
+    The second answer is `already_decided`, because the first has already
+    happened — per-item idempotency inside one call rather than between two. The
+    failure this forbids is a batch that de-duplicated its own list, which would
+    answer twice as far as the count goes and once as far as the caller's second
+    item goes.
+    """
+    identifier = _raise(SUBMITTER, "480.00")
+
+    answers, marked = _answers(APPROVER, [identifier, identifier])
+
+    assert marked is True
+    assert answers[0]["requisition"]["status"] == "approved"
+    assert answers[1] == {
+        "reason": "already_decided",
+        "remedy": "none",
+        "retry_identical_helps": False,
+        "retry_as_other_person_helps": False,
+    }
+
+
+def test_a_caller_level_refusal_replaces_the_whole_response() -> None:
+    """The axis ADR-0002 drew, with more than one item on the call for the first time.
+
+    A refusal that depends on the caller cannot ride in a result body: it is a
+    `-31010`, and a JSON-RPC error is the response rather than something inside
+    one. So the batch answers once, not once per item — and the reason it must is
+    mechanical rather than stylistic, since a protocol-error denial class has no
+    rendering inside a folded body at all.
+
+    Priya Raman is the one Person who can reach it: the realm gives her
+    `approver` and the server gives her no ERP role, so she carries `erp.decide`
+    to a role gate that refuses her.
+    """
+    first = _raise(SUBMITTER, "480.00")
+    second = _raise(SUBMITTER, "480.00")
+
+    error = rpc.error(_decide_all(SUBMITTER, [first, second]))
+
+    assert error["code"] == -31010
+    assert error["data"]["reason"] == "role_missing"
+    # Whole-call, so neither item was looked at, let alone decided.
+    assert _status(SUBMITTER, first) == "submitted"
+    assert _status(SUBMITTER, second) == "submitted"
+
+
+def test_a_list_the_schema_forbids_is_a_protocol_error_and_not_a_refusal() -> None:
+    """An empty batch and an oversized one, both invalid params.
+
+    Neither is a decision about the caller, so neither carries a `reason`. The
+    empty list is refused rather than answered with nothing, because a call that
+    named no item and got no answer is indistinguishable from a batch that
+    dropped every item it was given — and *outcomes equal items requested* is the
+    invariant that distinction is the whole of.
+
+    The ceiling is enforced here rather than only declared, for the reason every
+    other argument on this stack is: nothing validates arguments against a
+    published `inputSchema`, so a rule a model reads and a rule the server keeps
+    are two rules unless one of them is written twice.
+    """
+    identifier = _raise(SUBMITTER, "480.00")
+
+    assert rpc.error(_decide_all(APPROVER, []))["code"] == -32602
+    assert rpc.error(_decide_all(APPROVER, [identifier] * 21))["code"] == -32602
+    assert _status(SUBMITTER, identifier) == "submitted"
 
 
 def test_a_single_item_decision_answers_application_json() -> None:

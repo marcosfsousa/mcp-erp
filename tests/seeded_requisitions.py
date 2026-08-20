@@ -140,6 +140,32 @@ def load() -> None:
         connection.commit()
 
 
+def purchase_orders_for(*identifiers: str) -> int:
+    """How many purchase orders exist against these requisitions.
+
+    The one question about a decision's effect that no tool answers: an order is
+    emitted by approval and there is no tool that lists one, by ADR-0002's count
+    of five. `double_approval_via_batch_retry` asserts that a retried batch
+    *minted nothing*, and this is the only place that fact is readable — a
+    refusal carries no order, so the wire cannot tell "no second order" from
+    "a second order that was not shown".
+
+    Here rather than in that suite for the reason this module exists at all: it
+    is where a test-side database credential lives, and a second one is a second
+    place for the address and the connection handling to come apart.
+    """
+    with psycopg.connect(DATABASE_URL) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT count(*) FROM purchase_order WHERE requisition_id = ANY(%s)",
+            (list(identifiers),),
+        )
+        row = cursor.fetchone()
+
+    assert row is not None
+    count: int = row[0]
+    return count
+
+
 def identifiers_in(*cost_centres: str) -> set[str]:
     """The identifiers of the seeded rows charged to these cost centres.
 

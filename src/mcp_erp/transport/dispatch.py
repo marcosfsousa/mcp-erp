@@ -16,11 +16,20 @@ ADR-0002 cut the SSE response mode, so nothing here chooses a mode. What
 cardinality still decides is the *body*: one outcome renders directly, and N
 outcomes **fold** into one result carrying N answers.
 
-**The fold is specified and not implemented.** No tool yields more than one
-outcome yet, so a cardinality above one is refused loudly rather than folded,
-and the refusal names the ticket that lands it. That is stated here and in
-ADR-0013 §Streaming, restated portably, rather than left as a difference between
-a document and this module.
+**The fold is here, and cardinality is the only thing it keys on.** One answer
+per outcome, in the order the handler yielded them, under one key this module
+owns — see :data:`FOLD_KEY`. A handler that yields nothing is refused loudly
+rather than answered with an empty list, because *outcomes equal items
+requested* is the invariant the fold rests on and a call answered with nothing
+is what a silently dropped batch looks like.
+
+**A folded answer is always a tool result.** A refusal that depends on the
+*caller* is whole-call — a ``-31010`` is the response rather than something
+inside one — so a denial class other than ``tool_result`` cannot ride in a fold,
+and one arriving here is a handler that reached the item chain without settling
+the call first (ADR-0002). It fails loudly for the same reason the challenge
+class does below: rendering it would turn a refusal a client must act on into
+one a model would try to self-correct past.
 
 **A fourth thing is rendered here and is not a refusal.** Arguments a tool's
 declared schema does not permit answer ``-32602``, the protocol's own code for a
@@ -33,7 +42,7 @@ touch, and the one worth keeping.
 """
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Final
 
 import mcp_types as types
@@ -43,11 +52,28 @@ from mcp.server.lowlevel import Server
 from mcp_types.jsonrpc import INTERNAL_ERROR, INVALID_PARAMS
 from starlette.requests import Request
 
-from mcp_erp.authorization import Decision, DenialClass, Principal
+from mcp_erp.authorization import Decision, DenialClass, Principal, Reason
 from mcp_erp.transport import refusals
 from mcp_erp.transport.gates import PRINCIPAL_STATE, TOKEN_STATE
 from mcp_erp.transport.registry import Outcome, Registry
 from mcp_erp.transport.tokens import ValidatedToken
+
+FOLD_KEY: Final = "outcomes"
+"""What holds the N answers when a call yields more than one.
+
+ADR-0013's own word for what a handler yields per item, and ``CONTEXT.md``
+records that spending: *outcome* is barred as a word for a ``Decision`` and is
+spent twice besides — once on the whole-call ``GateOutcome``, once on this. The
+key says nothing about which tool answered or which of its arguments was the
+batch, which is the negative guarantee the fold had to be built without
+breaking.
+
+**Layer 3 spells it a second time**, beside the schema that declares the folded
+body, for the reason ``Handler`` is spelled twice: the two packages import
+nothing from each other, and a constant they shared would have to live in layer
+2 — which would then hold a value describing how layer 1 renders. The two
+spellings meet at the wire, in ``tests/wire/test_the_fold.py``.
+"""
 
 MAXIMUM_LISTING_TTL_MS: Final = 300_000
 """Five minutes, the cap in ``ttlMs = min(5 min, remaining token lifetime)``.
@@ -152,23 +178,18 @@ def build(registry: Registry) -> Server[None]:
             # is the handler's, and this module never inspects it.
             raise MCPError(INVALID_PARAMS, str(unusable)) from unusable
 
-        if len(outcomes) != 1:
-            # N outcomes fold into one result body — specified by ADR-0013 and
-            # not implemented, because no tool yields more than one yet. Loud
-            # rather than silently rendering the first, because a batch quietly
-            # answering for one item is the failure the rule "outcomes equal
-            # items requested" exists to prevent.
-            #
-            # The message names a ticket rather than a capability, so it stays
-            # true until the fold lands rather than until something is "built".
-            raise MCPError(
-                INTERNAL_ERROR,
-                f"{registration.name!r} produced {len(outcomes)} outcomes; "
-                "no tool yields more than one yet, and the fold that folds them "
-                "into one result lands with issue 41",
-            )
+        if not outcomes:
+            # A handler answers, always. Nothing at all is what a batch that
+            # dropped every item it was given looks like, and "outcomes equal
+            # items requested" is the rule that distinction is the whole of — so
+            # it is refused here rather than rendered as an empty fold, which
+            # would be this module inventing an answer on a handler's behalf.
+            raise MCPError(INTERNAL_ERROR, f"{registration.name!r} produced no outcome at all")
 
-        return _render(outcomes[0])
+        if len(outcomes) == 1:
+            return _render(outcomes[0])
+
+        return _fold(outcomes)
 
     return Server(
         "mcp-erp",
@@ -198,10 +219,7 @@ def _render(outcome: Outcome) -> types.CallToolResult:
     if not isinstance(outcome, Decision):
         return _result(outcome, is_error=False)
 
-    reason = outcome.reason
-    if reason is None:
-        raise MCPError(INTERNAL_ERROR, "a permitted Decision is not an outcome")
-
+    reason = _refused_on(outcome)
     payload = refusals.refusal_payload(reason)
     if reason.denial_class is DenialClass.PROTOCOL_ERROR:
         raise MCPError(refusals.ROLE_DENIED_CODE, reason.value, data=payload)
@@ -212,6 +230,73 @@ def _render(outcome: Outcome) -> types.CallToolResult:
         INTERNAL_ERROR,
         f"the {reason.denial_class.value!r} denial class cannot be rendered at dispatch",
     )
+
+
+def _fold(outcomes: Sequence[Outcome]) -> types.CallToolResult:
+    """N outcomes as one result body, one answer per item the request named.
+
+    **In the order the handler yielded them, and carrying no identifier.** A
+    caller maps answers to items by position, which is what they have and layer 1
+    does not: an answer that named the row it was about would make ``not_found``
+    on a foreign row distinguishable from ``not_found`` on a row that never
+    existed, which is the existence oracle ADR-0002 declined to ship. Position
+    costs the caller nothing — they wrote the list.
+
+    **Marked in error when any one item was refused.** That is the same reading a
+    single-item refusal has, applied to a call with more than one item on it: the
+    specification's tool-execution error is *actionable feedback a model can
+    self-correct on*, and a batch with a refusal in it has something to act on.
+    It invites a retry of the whole call, and per-item idempotency is precisely
+    what makes that harmless — ADR-0002 states the promise in those terms.
+
+    Raises:
+        MCPError: A permitted ``Decision`` was yielded as an outcome, or an
+            answer's denial class is one no result body can carry.
+    """
+    answers = [_answer(outcome) for outcome in outcomes]
+    return _result(
+        {FOLD_KEY: [payload for payload, _ in answers]},
+        is_error=any(refused for _, refused in answers),
+    )
+
+
+def _answer(outcome: Outcome) -> tuple[Mapping[str, Any], bool]:
+    """One item's answer inside a fold, and whether it is a refusal.
+
+    Raises:
+        MCPError: The denial class is not ``tool_result``. Caller-level refusals
+            are whole-call and item-level refusals are per-item (ADR-0002), so a
+            ``-31010`` or a challenge reaching here means a handler walked its
+            items without settling the call first. Both would have to be the
+            *response* rather than a line inside one, and rendering either as a
+            per-item answer would tell a model to route around a wall it cannot
+            route around.
+    """
+    if not isinstance(outcome, Decision):
+        return outcome, False
+
+    reason = _refused_on(outcome)
+    if reason.denial_class is not DenialClass.TOOL_RESULT:
+        raise MCPError(
+            INTERNAL_ERROR,
+            f"the {reason.denial_class.value!r} denial class cannot ride in a folded result",
+        )
+    return refusals.refusal_payload(reason), True
+
+
+def _refused_on(decision: Decision) -> Reason:
+    """The reason a refused outcome carries.
+
+    Raises:
+        MCPError: There is none. A permitted ``Decision`` is layer 2's answer
+            that a handler may proceed, never something for it to hand back —
+            the two types exist so a permit cannot be mistaken for an answer, and
+            this is that distinction reaching the wire.
+    """
+    reason = decision.reason
+    if reason is None:
+        raise MCPError(INTERNAL_ERROR, "a permitted Decision is not an outcome")
+    return reason
 
 
 def _result(payload: Mapping[str, Any], *, is_error: bool) -> types.CallToolResult:
