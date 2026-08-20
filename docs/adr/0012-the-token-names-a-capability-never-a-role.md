@@ -4,7 +4,7 @@
 - **Date:** 2026-08-16
 - **Ticket:** [#11 Settle scope granularity and naming](https://github.com/marcosfsousa/mcp-erp/issues/11)
 - **Evidence:** [ADR-0002](0002-refusal-shape-follows-the-remedy.md), [ADR-0003](0003-the-schema-is-the-policy-functions-argument-list.md), [ADR-0004](0004-layer-2-is-a-portable-pattern-layer-3-is-ejectable.md), [ADR-0007](0007-the-realm-is-the-exhibit.md); map constraints #2, #3, #10; RFC 6749 §3.3, RFC 6750 §3, RFC 9728
-- **Amended:** 2026-08-20 — additive, by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46), which built the conformance client. The open verification item is **answered by observation**: Keycloak honours RFC 6749 §3.3's `MUST` on the authorization code flow, so the outcome is a conformance proof and the normative register gains no row. See *One open verification item*. No decision here is changed.
+- **Amended:** 2026-08-20 — additive, by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46), which built the conformance client. The open verification item is **answered by observation**: Keycloak honours RFC 6749 §3.3's `MUST` on the authorization code flow, so the outcome is a conformance proof and the normative register gains no row. See *One open verification item — answered, and it is honoured*. No decision here is changed.
 
 ## Question
 
@@ -143,7 +143,7 @@ Falsified the way ADR-0004 requires: **deleting the layer-3 module leaves layer 
 
 The choice of `decide` is what makes this claim honest rather than aspirational — it beat `approve` precisely because all three words survive ejection. Had `approve` won, the vocabulary would have been layer 3 wearing a layer-2 label.
 
-### ~~One open verification item~~ — answered, and it is honoured
+### One open verification item — answered, and it is honoured
 
 The role scope mapping above deliberately manufactures the situation RFC 6749 §3.3 governs: a person without `approver` or `unlimited_approver` requests `erp.decide` and silently does not receive it, because Keycloak omits an unpermitted scope and the flow succeeds. That behaviour is itself conformant — the same section says the authorization server *"MAY fully or partially ignore the scope requested by the client"* — so it is a property of the design, not a Keycloak quirk.
 

@@ -20,7 +20,16 @@ artifact's directory becomes that artifact's and gets copied by the next.
 
 It is [ADR-0008](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/adr/0008-the-run-is-over-the-wire-and-the-token-is-the-only-seam.md)'s
 **one library surface with two entry points** — this suite imports it, and its
-`__main__` block performs the flow from a command line. The two differ by
+`__main__` block performs the flow from a command line.
+
+ADR-0008 says *package* and this is one **module**, which is the same claim at
+the size the thing turned out to be. What that sentence was drawing a line
+against is two distributions with a version relationship between them — its
+option 5, *"two packaging manifests… for a single constructor argument"* — and a
+directory with an `__init__.py` would buy the word at the cost of splitting a
+file nothing has yet asked to split. `tokens.py` sits beside it in the same
+shape, library and `__main__` in one file, and the pair reads as a pair because
+of it. The two differ by
 **exactly one object**, and that is a property of the protocol package rather
 than a choice: `mcp` 2.0.0's unified `Client` takes no authentication parameter,
 so authentication attaches to the HTTP client underneath the transport.

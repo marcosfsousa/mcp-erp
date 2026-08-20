@@ -641,6 +641,17 @@ jobs:
   # are immutable` above. What remains is a Pages or egress outage inside a merge
   # window, which the `main` ruleset's Admin bypass absorbs at the cost of one
   # recorded override.
+  #
+  # **It is meant to block and it does not yet**, on the same terms
+  # `public/README.md` already states for the job above: no ruleset requires any
+  # context in this repository, so a red result here is visible and ignorable.
+  # Making it required is a repository-settings change, and ADR-0013 owns the
+  # order — the ruleset cannot precede the jobs it requires, because a required
+  # context whose job does not exist leaves every pull request pending
+  # indefinitely, including the one that would add them. #47 lands the ruleset
+  # and the test that holds these names and the required contexts equal in both
+  # directions. Saying so here is cheaper than discovering later that the gate
+  # was assumed.
   authorization-code-flow:
     name: Authorization code flow
     # **Keyless and not offline — the one job of which both halves are true.**

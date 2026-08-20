@@ -17,6 +17,27 @@ registered anywhere. Its identity is a URL that GitHub Pages serves, the
 authorization server dereferences that URL on the authorization request, and the
 whole point is that a client we did not pre-provision can complete a flow.
 
+**What is shared with `tokens.py`, and what is copied.** The two drive the same
+three forms, so the overlap is real and worth being explicit about rather than
+noticed later.
+
+*Shared, imported from there:* every pure function and every constant —
+`form_action`, `redirect_error`, `rebase`, `scope_set`, `decode_claims`,
+`PASSWORD`, `LOGIN_FORM`, `MAX_AUTHORIZATION_STEPS`. Two of those were made
+public for this module, which is the shape sharing takes when it can be taken.
+
+*Copied, deliberately:* everything that touches a client — the request helpers,
+the cookie concession, the walk to the callback. They cannot be shared, and not
+for a reason a little more effort would remove: that helper is **synchronous and
+speaks `httpx`**, this one is **asynchronous and speaks `httpx2`**, and both
+packages are in this environment on purpose — the 2.x line is what the protocol
+package carries and the 0.x line belongs to the fixture minter. Bridging them
+means an abstraction over two HTTP packages and two concurrency models, to save
+a handful of functions whose whole content is *do one request and raise with the
+server's words*. The copy is the cheaper honesty. Where the two diverge in more
+than colour — the cookie concession, the consent step being recorded — the
+function that differs says so at its own definition.
+
 **Preflight, and why it runs before Compose.** ADR-0008's second mechanism.
 Without it, Pages being unreachable and this server rejecting a valid flow
 present identically as *the flow failed*. :func:`preflight` fetches the document
@@ -118,10 +139,15 @@ SERVER = f"{rpc.BASE_URL}{rpc.ENDPOINT}"
 GRANT_TYPES: Final = ["authorization_code"]
 """What the client tells **its own library** it can do, and the one place that is not the document.
 
-The published document names `refresh_token` as well, deliberately, and nothing
-here changes that: under a hosted document no `client_metadata` reaches the wire
-at all. The authorization server reads `grant_types` off the document it fetched
-for itself, and it still issues this client a refresh token.
+The published document names `refresh_token` as well, deliberately, and **the
+run still drives the document as published** — because under a hosted document
+the `client_metadata` handed to the package is local configuration rather than
+anything sent. There is no registration request to put it in. Exactly two of its
+members leave this process: `redirect_uris[0]`, on the authorization request,
+and `scope`, which the package overwrites from this server's own metadata before
+it is used. `grant_types` is never one of them. The authorization server reads
+`grant_types` off the document it fetched for itself, and it still issues this
+client a refresh token.
 
 The protocol package reads it for exactly one other purpose. SEP-2207 appends
 `offline_access` to the requested scope when the client declares `refresh_token`
@@ -140,11 +166,22 @@ and a client that asked anyway would fail at the last step of the flow for a
 reason that has nothing to do with what it was demonstrating.
 """
 
+JSON_MEDIA_TYPE: Final = "application/json"
+"""What RFC 6749 §5.1 requires a token response to be, and what :meth:`Flow._record` gates on."""
+
 TIMEOUT: Final = 30.0
+"""How long any one request may take — a form post, the preflight fetch, a tool call.
+
+One number rather than three, because none of the three is slow for a reason of
+its own: everything here talks to a container on the same machine or to a static
+file, so anything approaching this is stuck rather than busy.
+"""
 
 CONSENT = "consent"
+"""The second form, and the one ADR-0012 warned would be discovered on the day."""
+
 LOGIN = "login"
-"""The two forms a person posts. Recorded by name on :attr:`Flow.posted`.
+"""The first form. Recorded, with :data:`CONSENT`, on :attr:`Flow.posted`.
 
 ADR-0012 called the consent post *"a build step not to discover on the day"*, and
 a run that silently skipped it would still end in a token — Keycloak remembers a
@@ -318,8 +355,6 @@ class Flow(httpx2.Auth):
     weakening it.
     """
 
-    requires_response_body = True
-
     def __init__(self, username: str, *, timeout: float = TIMEOUT) -> None:
         """Prepare a flow for one Person, without performing anything yet.
 
@@ -330,14 +365,22 @@ class Flow(httpx2.Auth):
         """
         self.username = username
         self.posted: list[str] = []
-        """The forms this flow posted, in order — `login`, then `consent`."""
+        """Every form this flow posted, in order — `login`, then `consent`.
+
+        **Every** form, not the last flow's: it accumulates if the client
+        authorizes twice in one process. That is the record being honest rather
+        than a leak to reset. One earned grant is what a run performs — the
+        wallet holds the token, so a second `401` means something reauthorized —
+        and an assertion of `[login, consent]` that quietly tolerated a second
+        pair would be hiding exactly that.
+        """
 
         self.reported: str | None = None
         """The token response's own `scope` parameter, verbatim, or `None`."""
 
         self.wallet = Wallet()
         self._timeout = timeout
-        self._came_back: str | None = None
+        self._callback_location: str | None = None
         self._provider = OAuthClientProvider(
             server_url=SERVER,
             client_metadata=OAuthClientMetadata.model_validate(
@@ -406,26 +449,38 @@ class Flow(httpx2.Auth):
 
         while True:
             response = yield outbound
-            await response.aread()
-            self._record(response)
+            await self._record(response)
 
             try:
                 outbound = await inner.asend(response)
             except StopAsyncIteration:
                 return
 
-    def _record(self, response: httpx2.Response) -> None:
-        """Keep the `scope` parameter off a token response, and ignore everything else.
+    async def _record(self, response: httpx2.Response) -> None:
+        """Keep the `scope` parameter off a token response, and read nothing else.
 
         Recognised by the body carrying an `access_token` rather than by the
         address, so the reading does not depend on this client having resolved
-        the token endpoint to the same string the package did.
+        the token endpoint to the same string the package did — under
+        :class:`Rebased` it would not have, since a rewritten request no longer
+        carries the discovered host.
+
+        **The content-type gate is a safety property, not a shortcut.** Every
+        response the client sends passes through here, including the transport's
+        own — and `streamable_http` opens a long-lived `text/event-stream` GET
+        through the same client. Reading that one buffers until the server closes
+        the stream, which is a hang rather than a failure. RFC 6749 §5.1 requires
+        a token response to be `application/json`, so gating on it excludes the
+        stream structurally rather than by knowing which request was which.
         """
         if response.status_code not in (httpx2.codes.OK, httpx2.codes.CREATED):
             return
 
+        if not response.headers.get("content-type", "").startswith(JSON_MEDIA_TYPE):
+            return
+
         try:
-            body = response.json()
+            body = json.loads(await response.aread())
         except ValueError:
             return
 
@@ -444,14 +499,14 @@ class Flow(httpx2.Auth):
         async with httpx2.AsyncClient(
             follow_redirects=False,
             timeout=self._timeout,
-            transport=Rebased(origin=ISSUER_ORIGIN, onto=KEYCLOAK_BASE_URL),
+            transport=_reaching_the_issuer(),
         ) as http:
             page = await _get(http, rebase(authorization_url))
             _keep_the_session_over_plain_http(http)
 
             answered = await _post(
                 http,
-                await _action_of(page),
+                _action_of(page),
                 {"username": self.username, "password": PASSWORD, "credentialId": ""},
             )
             self.posted.append(LOGIN)
@@ -462,7 +517,7 @@ class Flow(httpx2.Auth):
             if LOGIN_FORM in answered.text:
                 raise RuntimeError(f"the authorization server did not accept {self.username!r}")
 
-            self._came_back = await self._walk_to_the_callback(http, answered)
+            self._callback_location = await self._walk_to_the_callback(http, answered)
 
     async def _walk_to_the_callback(self, http: httpx2.AsyncClient, page: httpx2.Response) -> str:
         """Follow the authorization server's own steps until one redirects to the client.
@@ -493,7 +548,7 @@ class Flow(httpx2.Auth):
             if location is not None:
                 page = await _get(http, rebase(location))
             else:
-                page = await _post(http, await _action_of(page), {"accept": "Yes"})
+                page = await _post(http, _action_of(page), {"accept": "Yes"})
                 self.posted.append(CONSENT)
 
             _keep_the_session_over_plain_http(http)
@@ -516,14 +571,14 @@ class Flow(httpx2.Auth):
         Raises:
             RuntimeError: No redirect arrived, or it carried a refusal.
         """
-        if self._came_back is None:
+        if self._callback_location is None:
             raise RuntimeError("the authorization server never redirected back to the client")
 
-        refusal = redirect_error(self._came_back)
+        refusal = redirect_error(self._callback_location)
         if refusal is not None:
             raise RuntimeError(refusal)
 
-        query = parse_qs(urlparse(self._came_back).query)
+        query = parse_qs(urlparse(self._callback_location).query)
 
         return AuthorizationCodeResult(
             code=query.get("code", [""])[0],
@@ -570,7 +625,7 @@ async def connect(auth: httpx2.Auth) -> AsyncIterator[Client]:
     async with httpx2.AsyncClient(
         auth=auth,
         timeout=TIMEOUT,
-        transport=Rebased(origin=ISSUER_ORIGIN, onto=KEYCLOAK_BASE_URL),
+        transport=_reaching_the_issuer(),
     ) as http:
         # The transport is handed over unentered: `Client` owns its lifetime, and
         # entering it here would hand `Client` a pair of streams instead.
@@ -598,7 +653,18 @@ def _keep_the_session_over_plain_http(http: httpx2.AsyncClient) -> None:
         cookie.secure = False
 
 
-async def _action_of(response: httpx2.Response) -> str:
+def _reaching_the_issuer() -> Rebased:
+    """The transport both of this module's clients open, built the one way.
+
+    Two clients rather than one is not a choice: the forms need their own cookie
+    jar and their own redirect policy, and the protocol package owns the other.
+    What they must not differ on is *where the authorization server is*, and a
+    pair of constructor calls is a pair of places for that to stop being true.
+    """
+    return Rebased(origin=ISSUER_ORIGIN, onto=KEYCLOAK_BASE_URL)
+
+
+def _action_of(response: httpx2.Response) -> str:
     """Where a page's form posts to, absolute and reachable.
 
     The two forms differ, and only one of them says so: the login form's action

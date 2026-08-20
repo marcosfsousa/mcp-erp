@@ -23,6 +23,7 @@ from dataclasses import dataclass
 import pytest
 from mcp_types import CallToolResult, ListToolsResult
 
+import rpc
 from conformance_client import CLIENT_ID, CONSENT, LOGIN, Bearer, Flow, connect, preflight
 from tokens import ISSUER
 from tokens import mint as minted_by_the_helper
@@ -37,10 +38,10 @@ derivation reaches all three — a suite that recomputed it from the same source
 would agree with itself.
 """
 
-DECIDER = "priya.raman"
+WITH_A_DECIDING_ROLE = "priya.raman"
 """Holds `approver`, so the authorization server grants every scope requested."""
 
-NARROWED = "rafael.costa"
+WITHOUT_A_DECIDING_ROLE = "rafael.costa"
 """Holds `invoice_clerk` and neither deciding role, so `erp.decide` is declined.
 
 ADR-0012 manufactured this situation deliberately — a role scope mapping listing
@@ -51,6 +52,20 @@ item. This is the Person that item is answered with.
 
 TOOL = "list_requisitions"
 """One call, chosen because every Person in the Cast can make it and see rows."""
+
+
+def audiences(claim: object) -> set[str]:
+    """The `aud` claim as a set, since it is one value or a list of them.
+
+    The same shape `tests/attack_suite/test_token_validation.py` reads it in, and
+    copied rather than shared for the reason that file's own helper is private to
+    it: two suites asking one question of one claim is not yet a third module.
+    """
+    if isinstance(claim, str):
+        return {claim}
+    if isinstance(claim, list):
+        return {str(value) for value in claim}
+    return set()
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,7 +136,7 @@ def test_the_flow_completes_and_the_call_lands() -> None:
     every gate ADR-0006 orders, and a token that only decoded would prove none of
     them.
     """
-    run = performed(DECIDER)
+    run = performed(WITH_A_DECIDING_ROLE)
 
     assert run.called.is_error is False, run.called
     assert run.called.structured_content is not None
@@ -145,12 +160,12 @@ def test_both_forms_are_posted() -> None:
     Person against this container has a warm one, and the message below says so
     rather than leaving a red check to be read as a broken consent post.
     """
-    posted = performed(DECIDER).flow.posted
+    posted = performed(WITH_A_DECIDING_ROLE).flow.posted
 
     assert posted == [LOGIN, CONSENT], (
         f"posted {posted}: Keycloak remembers a grant per Person and client, so this "
         f"assertion is about the first flow of a boot. Run `docker compose down` and "
-        f"up again if {DECIDER} has already consented against this container."
+        f"up again if {WITH_A_DECIDING_ROLE} has already consented against this container."
     )
 
 
@@ -163,7 +178,7 @@ def test_the_request_is_derived_from_what_this_server_publishes() -> None:
     authorization server rather than about a constant this client happened to
     hold.
     """
-    assert performed(DECIDER).flow.requested == CAPABILITY_SCOPES
+    assert performed(WITH_A_DECIDING_ROLE).flow.requested == CAPABILITY_SCOPES
 
 
 def test_the_token_is_bound_to_this_resource_and_to_the_hosted_identity() -> None:
@@ -174,14 +189,17 @@ def test_the_token_is_bound_to_this_resource_and_to_the_hosted_identity() -> Non
     the realm, so the authorization server can only have got the name by
     dereferencing it.
     """
-    claims = performed(DECIDER).flow.claims
+    claims = performed(WITH_A_DECIDING_ROLE).flow.claims
 
     assert claims["iss"] == ISSUER
     assert claims["sub"] == "priya-raman"
     assert claims["azp"] == CLIENT_ID
     # The audience the realm's mapper stamps, which is the string this server is
     # configured with. A token minted for anyone else is refused at gate 4.
-    assert claims["aud"] == "http://localhost:8080/mcp"
+    # Read as a set against `rpc.RESOURCE`, the way the attack suite reads it:
+    # `aud` is one value or a list of them, and the resource identifier moves
+    # with the deployment while this file must not.
+    assert rpc.RESOURCE in audiences(claims.get("aud"))
 
 
 def test_a_declined_scope_is_reported_in_the_scope_response_parameter() -> None:
@@ -199,7 +217,7 @@ def test_a_declined_scope_is_reported_in_the_scope_response_parameter() -> None:
     The outcome is therefore a conformance proof and **not** a normative register
     row. A row would record a gap; there is none to record.
     """
-    flow = performed(NARROWED).flow
+    flow = performed(WITHOUT_A_DECIDING_ROLE).flow
 
     assert flow.narrowed == {"erp.decide"}
     assert flow.reported is not None, "no scope response parameter on a narrowed grant"
@@ -214,7 +232,7 @@ def test_a_declined_scope_takes_its_tool_out_of_the_listing() -> None:
     is the same filter `tests/wire/` asserts on a minted token, reached here
     through a scope the authorization server itself decided.
     """
-    run = performed(NARROWED)
+    run = performed(WITHOUT_A_DECIDING_ROLE)
 
     assert "approve_requisition" not in {tool.name for tool in run.listed.tools}
     assert run.called.is_error is False, run.called
@@ -233,8 +251,8 @@ def test_minting_and_earning_differ_by_exactly_one_object() -> None:
     object wide, and a listing that differed because the two tokens carried
     different capabilities would be answering a question about scope instead.
     """
-    earned = performed(DECIDER)
-    presented = minted_by_the_helper(DECIDER, sorted(CAPABILITY_SCOPES))
+    earned = performed(WITH_A_DECIDING_ROLE)
+    presented = minted_by_the_helper(WITH_A_DECIDING_ROLE, sorted(CAPABILITY_SCOPES))
 
     async def through_a_minted_token() -> ListToolsResult:
         async with connect(Bearer(presented.access_token)) as client:

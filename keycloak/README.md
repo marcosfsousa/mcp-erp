@@ -192,10 +192,10 @@ Two settings in there are worth reading rather than copying:
   and `redirect_uris` is not among them. So the exhibit keeps the production
   setting and `public/README.md`'s *only the document must be HTTPS, never the
   redirect URI* survives contact with an implementation.
-- **`cimd-allow-permitted-domains` lists three hosts**, and it has to. The
-  executor checks the client identifier *and* the redirect URI against that
-  list, so `marcosfsousa.github.io` alone would refuse the document's own
-  `localhost` and `127.0.0.1` callbacks. The policy's condition is narrower —
+- **`cimd-allow-permitted-domains` has to name the callback's host as well as
+  the document's.** The executor checks the client identifier *and* the redirect
+  URI against that one list, so the publishing origin alone would refuse the
+  document's own loopback callbacks. The policy's condition is narrower —
   `https` from `marcosfsousa.github.io` and nothing else — which is what decides
   whether a stranger's document is looked at in the first place.
 
