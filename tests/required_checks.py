@@ -39,7 +39,14 @@ HERE: Final = Path(__file__).resolve().parent
 """This directory."""
 
 REPO: Final = HERE.parent
-"""The checkout, from this file's own location — `tests/fixtures.py`'s resolution."""
+"""The checkout, from this file's own location.
+
+`tests/fixtures.py` already derives the same path, and this re-derives it rather
+than importing it. The job that runs this file must stand when the suites around
+it are cut or fall over — that is the whole argument for it being its own job —
+so a two-line resolution is cheaper than a dependency on a module that belongs to
+the wire suites.
+"""
 
 WORKFLOW: Final = ".github/workflows/ci.yml"
 """The workflow whose job `name:` values a ruleset matches by string."""
@@ -67,6 +74,7 @@ BRANCH: Final = "main"
 """The branch the ruleset protects, which is the branch this workflow gates."""
 
 API: Final = "https://api.github.com"
+"""GitHub's REST host. The one address this check reaches."""
 
 ATTEMPTS: Final = 3
 """Retries on a transport failure, because this job is required and gates merges.
@@ -78,8 +86,20 @@ report as one.
 """
 
 REQUIRED_STATUS_CHECKS: Final = "required_status_checks"
+"""The rule type carrying the contexts a branch requires. GitHub's own spelling.
+
+It names both the rule and, inside its parameters, the array of checks — the API
+repeats the word at two levels, which is worth knowing before reading the reader
+below.
+"""
+
 NON_FAST_FORWARD: Final = "non_fast_forward"
-"""The two rule types read here. GitHub's own spellings, which are the contract."""
+"""The rule type that refuses a force push. GitHub's own spelling, again.
+
+Both of these are matched against the API's payload rather than against anything
+this repository writes, so a rename on GitHub's side would show up here as a rule
+that is suddenly absent — which is the honest failure and not a silent pass.
+"""
 
 SUPPRESSORS: Final = ("if", "strategy")
 """The job-level keys map constraint `#13` refuses, as they appear in the file.
@@ -134,9 +154,14 @@ def read_workflow(text: str) -> tuple[Job, ...]:
     )
 
 
-def workflow() -> tuple[Job, ...]:
-    """The committed workflow's jobs."""
-    return read_workflow((REPO / WORKFLOW).read_text(encoding="utf-8"))
+def source() -> str:
+    """The committed workflow's text, which is where every check here starts.
+
+    Text rather than parsed jobs, unlike :func:`adr_table` beside it: half the
+    checks edit this file in memory to show what they would report, so a second
+    read of the same bytes would be the thing that goes stale.
+    """
+    return (REPO / WORKFLOW).read_text(encoding="utf-8")
 
 
 def names(jobs: Iterable[Job]) -> frozenset[str]:
@@ -171,8 +196,8 @@ def trigger_filters(text: str) -> dict[str, tuple[str, ...]]:
     return {event: filters for event, filters in found.items() if filters}
 
 
-def fetch_branch_rules(repository: str | None = None, branch: str = BRANCH) -> list[Any]:
-    """The rules that actually apply to a branch, read from GitHub.
+def fetch_branch_rules() -> list[Any]:
+    """The rules that actually apply to `main`, read from GitHub.
 
     This is the only network call in the suite that is not part of the
     authorization code flow, and it is keyless: the endpoint answers
@@ -181,10 +206,9 @@ def fetch_branch_rules(repository: str | None = None, branch: str = BRANCH) -> l
     counted against the workflow's rate limit rather than against the runner's
     shared address.
 
-    Args:
-        repository: The `owner/name` slug. Defaults to the environment's, then to
-            this repository.
-        branch: The branch to read the applicable rules for.
+    Neither the repository nor the branch is a parameter. There is one ruleset
+    this check is about — the one gating the branch this workflow runs against —
+    and a parameter would invite a caller to ask about a different one.
 
     Returns:
         The endpoint's array of active rules, each with its `type`.
@@ -194,9 +218,9 @@ def fetch_branch_rules(repository: str | None = None, branch: str = BRANCH) -> l
             The message names the API rather than the ruleset, because an
             unreachable endpoint is not a disagreement about required contexts.
     """
-    slug = repository or os.environ.get("GITHUB_REPOSITORY") or REPOSITORY
+    slug = os.environ.get("GITHUB_REPOSITORY") or REPOSITORY
     request = urllib.request.Request(
-        f"{API}/repos/{slug}/rules/branches/{branch}",
+        f"{API}/repos/{slug}/rules/branches/{BRANCH}",
         headers={
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",

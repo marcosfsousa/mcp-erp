@@ -65,10 +65,13 @@
 # standing assertion that the suites are offline* — and #46 broke the
 # implication rather than the premise. `Authorization code flow` fetches a
 # public GitHub Pages URL, which needs no credential: it is keyless and it is
-# not offline. #47 added the second instance, `Required checks match the
-# ruleset`, which reads this repository's own branch rules from an endpoint that
-# answers unauthenticated — so the pattern is a pair rather than an exception. ADR-0008 replaced the repository-wide claim with a **per-job**
+# not offline. ADR-0008 replaced the repository-wide claim with a **per-job**
 # one, which is more honest than the version it replaces.
+#
+# #47 added the second instance, `Required checks match the ruleset`, which
+# reads this repository's own branch rules from an endpoint that answers
+# unauthenticated — so the pattern is a pair rather than an exception, and the
+# per-job claim is what makes both of them legible.
 #
 # So every job below states what it reaches, including the ones that reach
 # nothing. An assertion only some jobs make is one nobody checks, and the value

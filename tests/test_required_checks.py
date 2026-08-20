@@ -29,7 +29,6 @@ and would then mean two unrelated things, against ADR-0013's own rule.
 
 from typing import Any
 
-import required_checks
 from required_checks import (
     adr_table,
     branch_rules,
@@ -37,16 +36,16 @@ from required_checks import (
     names,
     read_workflow,
     required_contexts,
+    source,
     table_job_names,
     trigger_filters,
-    workflow,
 )
 
-SOURCE = (required_checks.REPO / required_checks.WORKFLOW).read_text(encoding="utf-8")
+SOURCE = source()
 """The workflow as committed, kept as text because half the checks below edit it."""
 
-JOBS = workflow()
-"""Its jobs."""
+JOBS = read_workflow(SOURCE)
+"""Its jobs, parsed from those same bytes rather than from a second read."""
 
 CONTEXTS = names(JOBS)
 """The contexts they produce, which is what a ruleset has to match by string."""
@@ -59,6 +58,11 @@ def rules_requiring(*contexts: str) -> list[Any]:
     demonstrations below can show what this check does with a ruleset that does
     not exist yet — including the one this ticket had to be careful never to
     create: a required context no job produces.
+
+    Its keys are spelled out rather than taken from :mod:`required_checks`'s
+    constants, deliberately: this is a transcription of the wire shape, and a
+    transcription written through the reader's own vocabulary would agree with
+    the reader by construction.
 
     Args:
         contexts: The contexts the synthetic rule requires.

@@ -51,11 +51,13 @@ equality in both directions, no exemption list — and
 contexts equal on every run, so a rename fails a check instead of quietly
 detaching the rule that pointed at the old name.
 
-**Force pushes to `main` are blocked in the same ruleset, and this job is why.**
-With no comparable base commit it warns and passes, having checked nothing. A
-pull request always carries a base and an ordinary push always carries a real
-predecessor, so the only reachable path to that green tick was a force push to
-`main`. Blocking it closes the gap without touching the job.
+**Force pushes to `main` are blocked in the same ruleset, and this job is why it
+matters.** With no comparable base commit it warns and passes, having checked
+nothing. A pull request always carries a base and an ordinary push always carries
+a real predecessor, so the only reachable path to that green tick is a force push
+to `main`. The `non_fast_forward` rule that refuses one has been in the ruleset
+since it was created, before anybody noticed it was load-bearing here; what #47
+added is the assertion that fails if it is ever removed.
 
 It also decides the publishing sequence, because GitHub Pages serves from `main`
 and a pull request therefore cannot publish the document it tests against. One
