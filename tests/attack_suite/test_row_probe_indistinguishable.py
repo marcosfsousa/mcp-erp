@@ -35,6 +35,8 @@ from scenarios import exercises
 
 import fixtures
 import rpc
+from mcp_erp.authorization import NOT_FOUND
+from refusal_records import refusal_body
 from tokens import mint
 
 TOOL = "get_requisition"
@@ -136,20 +138,21 @@ def test_the_refusal_is_a_refusal_rather_than_an_omission() -> None:
     So the answer is a tool result marked in error carrying `not_found`, and not
     an empty success. The `not_found` reason and the `null` remedy are the whole
     of what a caller learns, and neither is a fact only the database holds.
+
+    **`retry_as_other_person_helps` is the load-bearing field**, and it is read
+    from the record rather than written out here. True would confirm that the row
+    exists and that somebody else can see it — the existence oracle ADR-0002
+    declined to ship, stated in the refusal itself rather than only in the bytes
+    the test above compares. What holds it false is
+    `tests/matrix/test_the_reason_mapping.py`, which checks `not_found`'s record
+    against ADR-0002's table; what this asserts is that the wire carries what
+    that record says — the half a copy written out here could not tell the
+    difference about, because a copy agrees with a changed record by not moving.
     """
     result = rpc.result(_answer(PROBER, _foreign_identifier()))
 
     assert result["isError"] is True, result
-    assert result["structuredContent"] == {
-        "reason": "not_found",
-        "remedy": "none",
-        "retry_identical_helps": False,
-        # The load-bearing one. True here would confirm that the row exists and
-        # that somebody else can see it, which is the existence oracle ADR-0002
-        # declined to ship — stated in the refusal itself rather than only in the
-        # bytes above.
-        "retry_as_other_person_helps": False,
-    }
+    assert result["structuredContent"] == refusal_body(NOT_FOUND)
 
 
 @exercises("row_probe_indistinguishable")

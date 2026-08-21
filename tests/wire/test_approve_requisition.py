@@ -37,6 +37,16 @@ Six things arrive here that no earlier tool could reach.
   that owns that assertion is `double_approval_via_batch_retry`, in the attack
   suite.
 
+**The refusal bodies below are written out, and that is the choice rather than
+the omission.** `tests/matrix/` and `tests/attack_suite/` read theirs off the
+`Reason` record the server renders from, because a driver checking every row of
+a table and a suite asserting a defence both get worse the more they restate.
+This file is neither: a reader opens it to see what a refusal *looks like* on the
+wire, and a lookup in place of the body costs exactly the thing they came for.
+The cost is admitted — a change to ADR-0002's mapping edits these literals too,
+and `tests/matrix/test_the_reason_mapping.py` is what turns that into a red
+check rather than a silent divergence (#87).
+
 **Every row this suite decides on is one it raised.** Approval is terminal, so a
 row shared between two tests would hand the second one `already_decided` — and
 ADR-0003 chose a wipe per run over a reset between rows. Raising through

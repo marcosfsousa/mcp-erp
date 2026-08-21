@@ -24,6 +24,13 @@ is postponed here: the fold exists, layer 1 folds on outcome cardinality and
 never learns which tool produced one, so a single outcome renders directly — the
 same body `get_requisition` answers with, reached the same way.
 
+**The refusal bodies below are written out, on the same grounds
+`test_approve_requisition.py` states at length.** This suite exists to show what
+the wire looks like, and a refusal that reads as a lookup shows nothing; the
+suites whose job is a defence or a whole table read theirs from the `Reason`
+record instead. A change to ADR-0002's mapping edits the literals below, and
+`tests/matrix/test_the_reason_mapping.py` is what makes that a red check (#87).
+
 **Every order this suite records against is one it raised and approved.**
 Recording is terminal, so an order shared between two tests would hand the second
 one `already_invoiced` — and an order at all has to be minted through
