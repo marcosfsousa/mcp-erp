@@ -118,12 +118,16 @@ def _next_identifier(prefix: str) -> str:
     moving it. Everything below 10000 is unchanged, which is what the committed
     fixture rendering rests on, and the row after ``req_9999`` is ``req_10000``.
 
-    **The bound is now 2147483647 rows per table, and it is the cast that sets
-    it.** ``::integer`` is int4, so the row after ``req_2147483647`` fails the cast
-    rather than the key — a different error at a number nobody chose, which is the
-    shape of the defect above and not its recurrence only because the pad was
-    reachable and this is not: the exhibit seeds four requisitions and #84's own
-    boundary test is the only thing here that has ever passed three figures.
+    **The bound is now 2147483647 rows per table, and it is the cast's width that
+    sets it.** ``::integer`` is int4, so the row after ``req_2147483647`` fails on
+    the ``+ 1`` rather than on the key. The cast itself succeeds — verified
+    against the running database, ``select '2147483647'::integer + 1`` answers
+    ``ERROR: integer out of range`` — so a maintainer greps for an overflow and
+    not for a cast that never fails. It is a different error at a number nobody
+    chose, which is the shape of the defect above and not its recurrence only
+    because the pad was reachable and this is not: the exhibit seeds seventeen
+    requisitions and #84's own boundary test is the only thing here that has ever
+    passed three figures.
     Widening to ``::bigint`` is one word and was left alone deliberately, because
     #84 put the ``substring`` and its cast out of scope. **Written down rather than
     fixed is the whole point** — the previous bound cost nothing to reach and was

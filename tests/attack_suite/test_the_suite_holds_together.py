@@ -466,11 +466,21 @@ def test_a_boolean_citation_key_never_renders_as_a_quotation() -> None:
 
 
 def test_every_blockquote_is_a_sentence_some_citation_carries() -> None:
-    """The general form, which does not depend on the flag being a boolean.
+    """Every blockquote is a citation value **verbatim**, character for character.
 
-    A rendered quotation that no row carries is a sentence the renderer made up,
-    and on a table whose whole value is that its citations are real that is the
-    worst available failure.
+    What this catches is a renderer that alters a quotation on the way out — a
+    prefix left on, a value truncated, a line the renderer composed rather than
+    copied. On a table whose whole value is that its citations are real, a
+    sentence nobody wrote is the worst available failure.
+
+    **What it cannot catch, deliberately named.** Both sides of the comparison
+    read `scenario_table.QUOTED`, so a key wrongly listed as quotable lands in
+    `carried` and in `blockquotes` together and this stays green.
+    `test_a_boolean_citation_key_never_renders_as_a_quotation` above is the
+    assertion that bites there — it reads the booleans off the raw table rather
+    than off `QUOTED`, which is why it was red against the renderer that
+    published `> True` seven times. This one is kept beside it because the two
+    fail on different defects, not because it is the general case of the other.
     """
     carried = {
         row.citation[key]

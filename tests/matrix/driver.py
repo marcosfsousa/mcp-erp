@@ -55,10 +55,11 @@ LISTING: Final = "tools/list"
 """The one call a row may name that is not a tool, spelled here and not in `src/`.
 
 `tools/list` is layer 1's word. Layer 3's parser used to hold it so that it could
-refuse a fixture on a call that names no resource, and it now states the three
-tools that **do** hydrate one instead — every member a name layer 3 owns. Which
-leaves the protocol method to be spelled where protocol methods are already
-spelled: in a suite, beside `rpc.post("tools/list", ...)`.
+refuse a fixture on a call that names no resource, and it now states the tools
+that **do** hydrate one instead — `get_requisition`, `approve_requisition` and
+`record_invoice`, every member a name layer 3 owns. Which leaves the protocol
+method to be spelled where protocol methods are already spelled: in a suite,
+beside `rpc.post("tools/list", ...)`.
 """
 
 MATRIX_DEFINITION: Final = read_matrix((fixtures.REPO / MATRIX).read_text(encoding="utf-8"))
@@ -228,9 +229,11 @@ def _permitted(row: Row, response: httpx2.Response) -> None:
     """A row the chain let through, plus whatever else its tool's row claims.
 
     Every permitted row asserts the same first thing — a result not marked in
-    error — and three tools add one claim each on top of it. Those extra claims
-    are the ones a permit alone would not catch: a listing that returned the
-    wrong partition, and a submission stamped with the wrong one.
+    error — and `list_requisitions`, `submit_requisition` and `get_requisition`
+    add one claim each on top of it. Those extra claims are the ones a permit
+    alone would not catch: a listing that returned the wrong partition, a
+    submission stamped with the wrong one, and a named read answering with a row
+    other than the one it was asked for.
     """
     result = rpc.result(response)
     assert result["isError"] is False, result

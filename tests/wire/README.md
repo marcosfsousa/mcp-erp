@@ -13,7 +13,8 @@ listing's filter away**, which is the first thing this directory has handed over
 rather than gained; the table below said it would, and *What moved to #43*
 records what happened.
 
-**The sixth is about all three tools at once**, which is new for this directory
+**The sixth is about all three writing tools at once** — `submit_requisition`,
+`approve_requisition` and `record_invoice` — which is new for this directory
 and follows from #70 factoring the identifier mint into one expression the three
 writes share. What a table mints next is identical for every caller, so it keys
 on no `(principal x tool x resource)` and has no home in `tests/matrix/`; it is
@@ -84,8 +85,9 @@ places these three.
   declaration that wrongly granted breadth on this write would ship green — which
   ADR-0013 names as the mistake a reader makes on this tool by name. Review is
   the guard, and the reasoning is in the declaration.
-- **The named-versus-discovered contract across all three tools** (#39) is the
-  seam between two attack-suite rows rather than a third one. Each of
+- **The named-versus-discovered contract across the two read tools and the write
+  that feeds them** (#39) is the seam between two attack-suite rows rather than a
+  third one. Each of
   `row_probe_indistinguishable` and `list_partition_scoped` asserts its own half
   about its own tool; neither says the *same* row takes the *other* shape through
   the other tool. Minting a row for the seam would move a derived count to record

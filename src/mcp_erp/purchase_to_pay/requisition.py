@@ -11,9 +11,9 @@ three that name this entity are declared in a module each beside this one:
 **The entity is here and the tools are not**, which is what the second and third
 tool made necessary rather than merely tidy. A tool declares five module-level
 names — ``NAME``, ``TITLE``, ``DESCRIPTION``, ``INPUT_SCHEMA``, ``OUTPUT_SCHEMA``
-— and three tools in one module would have to prefix every one of them. That is
-the same flattening layer 3's ``__init__`` refuses at the package level, arriving
-one level down.
+— and the three named just above, sharing one module, would have to prefix every
+one of them. That is the same flattening layer 3's ``__init__`` refuses at the
+package level, arriving one level down.
 
 **Nothing here is protocol-shaped.** The schemas below are plain JSON Schema
 documents and the rows are plain mappings — layer 1 wraps them in whatever the
@@ -65,12 +65,16 @@ ROW_SCHEMA: Final[dict[str, Any]] = {
     ],
     "additionalProperties": False,
 }
-"""One requisition on the wire, and the three tools that return one share it.
+"""One requisition on the wire, shared by every tool that answers with one.
 
-Declared once for the same reason :meth:`Requisition.as_row` is written once:
-the type that knows the fields is the type that renders them, and three tools
-returning the same row must not grow three descriptions of it that only nearly
-agree.
+Which is ``list_requisitions``, ``get_requisition``, ``submit_requisition`` and —
+through :data:`mcp_erp.purchase_to_pay.purchase_order.DECISION_SCHEMA` —
+``approve_requisition``. ``record_invoice`` is the one tool that answers with no
+requisition at all.
+
+Declared once for the same reason :meth:`Requisition.as_row` is written once: the
+type that knows the fields is the type that renders them, and tools returning the
+same row must not grow four descriptions of it that only nearly agree.
 """
 
 SINGLE_ROW_SCHEMA: Final[dict[str, Any]] = {
@@ -79,10 +83,11 @@ SINGLE_ROW_SCHEMA: Final[dict[str, Any]] = {
     "required": ["requisition"],
     "additionalProperties": False,
 }
-"""A result carrying exactly one requisition — the output of two of the three tools.
+"""A result carrying exactly one requisition.
 
-The named read answers with the row it was asked for and the write answers with
-the row it created, and those are the same document. Shared for the same reason
+The output of ``get_requisition`` and of ``submit_requisition``. The named read
+answers with the row it was asked for and the write answers with the row it
+created, and those are the same document. Shared for the same reason
 :data:`ROW_SCHEMA` is, one level up: the wrapper is as much a description of the
 row as the row's own properties are, and two copies of it is two places for
 ``required`` to disagree.
@@ -146,8 +151,8 @@ class Requisition:
         """The wire shape of one requisition, matching :data:`ROW_SCHEMA`.
 
         Built here rather than in a handler so that the type that knows the
-        fields is the type that renders them, and so three tools cannot grow
-        three renderings of the same row.
+        fields is the type that renders them, and so the tools that answer with
+        this row cannot grow a rendering each.
         """
         return {
             "id": self.id,

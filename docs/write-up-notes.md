@@ -368,11 +368,16 @@ rediscover.
   from the table — every row still has its test while the suite grows an
   assertion nobody can trace to a defence. — #44, ADR-0010
 
-- **Two rows claimed `status: asserted` with nothing behind them, and the table
-  could not tell.** `get_stream_removed` and `state_handle_hijack` both sat green
-  in a column that says *asserted* while no request in any suite exercised them.
-  The status column is only as good as the join, which is the argument for
-  building the bijection with the suite rather than after it. — #44, #37
+- **A row claimed `status: asserted` with nothing behind it, and the table could
+  not tell.** `get_stream_removed` sat green in a column that says *asserted*
+  while no request in any suite issued a `GET` at all. The status column is only
+  as good as the join, which is the argument for building the bijection with the
+  suite rather than after it. *Corrected 2026-08-21 by
+  [#80](https://github.com/marcosfsousa/mcp-erp/issues/80): this note read* two
+  rows *and named `state_handle_hijack` beside it.
+  `tests/attack_suite/test_state_handle_hijack.py` predates #44 — it landed with
+  `approve_requisition` — so that row had a falsifier the whole time, and a note
+  about unfalsifiable claims is the worst place to keep one.* — #44, #37
 
 - **A removal is a claim, and claims written before the code go stale
   silently.** Three of them named deletions that could not be performed or could

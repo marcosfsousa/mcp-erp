@@ -138,9 +138,10 @@ OUTPUT_SCHEMA: Final[dict[str, Any]] = DECISIONS_SCHEMA
 """The rows as decided, and the purchase orders the approvals emitted.
 
 Declared beside the entity it renders rather than here, so the tool that changes
-a requisition's status describes that row with the same document the three tools
-that read one use — and so that the two bodies a call can answer with are
-declared once, from the same description of one decision.
+a requisition's status describes that row with the same document
+``list_requisitions`` and ``get_requisition`` read one through — and so that the
+two bodies a call can answer with are declared once, from the same description of
+one decision.
 """
 
 

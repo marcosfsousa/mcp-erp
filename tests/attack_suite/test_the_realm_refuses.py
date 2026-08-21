@@ -131,16 +131,22 @@ def test_pkce_downgrade_plain() -> None:
     client is public, and the weak challenge method is refused.
 
         removal: Clear the per-client challenge-method pin **and** the
-                 `pkce-enforcer` client policy in the realm file. Either alone
-                 still refuses.
+                 `proof-key-for-code-exchange` client policy in the realm file.
+                 Either alone still refuses for the five clients the realm file
+                 declares, which is what this test loops over. For the client
+                 provisioned from the hosted identity document the policy is the
+                 whole of the refusal, and that half is performed in
+                 `tests/conformance/test_the_realm_refuses_the_provisioned_client_too.py`.
 
     **The pin is two things, since #46.** It was a per-client attribute when the
     row was written; that cannot reach a client the realm does not contain, and
     #46's conformance client is provisioned from a hosted document and carries no
-    attributes — so it accepted `plain`. The realm gained a `pkce-enforcer`
-    client policy conditioned on `client-access-type: public`, which is the one
-    thing every client here has in common. Both are live, and the recorded
-    removal names both because deleting one changes nothing observable.
+    attributes — so it accepted `plain`. The realm gained a
+    `proof-key-for-code-exchange` client policy conditioned on
+    `client-access-type: public` — which is the one thing every client here has
+    in common — carrying `pkce-enforcer` as its executor. Both are live, and the
+    recorded removal names both because deleting one changes nothing observable
+    to the clients this file loops over.
 
     **`basis: adr` and not `clause`, and the row's `context` field says why.** The
     MUST that exists — *"MCP clients MUST use the S256 code challenge method when

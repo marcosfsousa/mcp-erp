@@ -104,12 +104,14 @@ figures in a test run.
 
 @pytest.fixture(scope="module", autouse=True)
 def requisitions() -> Iterator[None]:
-    """Start from the generated fixtures, with the orders and invoices cleared.
+    """Start from the committed rendering, so this module knows where it began.
 
-    This module writes three times over — a row raised, approved, then invoiced —
-    so it must know where it began. The loader clears `invoice` before
-    `purchase_order` before `requisition`, which is what makes the orders and
-    invoices this module mints the only ones in their tables.
+    It writes three times over — a row raised, approved, then invoiced — and
+    `fixtures.load()` deletes `invoice` before `purchase_order` before
+    `requisition` and then re-inserts all three, so the starting state is the
+    rendering rather than whatever a previous module left. The rendering's own
+    six orders and one invoice are there throughout; what this module mints is
+    reached by identifier, never by counting a table.
     """
     fixtures.load()
     yield

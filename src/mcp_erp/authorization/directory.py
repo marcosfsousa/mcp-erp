@@ -153,9 +153,11 @@ def shipped_directory() -> PrincipalDirectory:
     Cached because the file is a build artifact rather than configuration: it
     cannot change while the process runs, so re-reading it per request would
     buy nothing and put a file read inside the token middleware. A duplicated
-    row therefore fails on the first lookup of the process rather than on the
-    request that happens to hit the second copy — and it cannot get that far,
-    because the renderer refuses a duplicated subject before it writes.
+    row therefore fails the first time this function is called, and
+    :func:`mcp_erp.app.create_app` calls it while building the token gate — so
+    it fails the boot rather than the request that happens to hit the second
+    copy, and it cannot get that far anyway, because the renderer refuses a
+    duplicated subject before it writes.
 
     No database, no Docker, and no call to the authorization server per
     request: ADR-0006 rejected the last of those outright, and this is what

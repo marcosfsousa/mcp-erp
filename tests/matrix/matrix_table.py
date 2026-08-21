@@ -71,7 +71,11 @@ SHAPES: Final = {
 """How each denial class reads in a table. Layer 1's renderings, named where ADR-0002 named them."""
 
 HYDRATES: Final = frozenset({get_requisition.NAME, approve_requisition.NAME, record_invoice.NAME})
-"""The three tools that act against a named row, stated as the generator states them.
+"""The tools that act against a named row, stated as the generator states them.
+
+`get_requisition`, `approve_requisition` and `record_invoice`. Named rather than
+counted, for the reason the generator's own `_HYDRATES` gives: *three tools* is
+three different subsets of the five depending on who is saying it.
 
 The calls that **do** hydrate rather than the calls that do not, so that every
 member is a name layer 3 owns — the complement would have to spell `tools/list`,

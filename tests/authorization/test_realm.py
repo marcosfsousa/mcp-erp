@@ -614,9 +614,14 @@ def _read(path: Path) -> dict[str, Any]:
 def _clients(document: dict[str, Any]) -> list[dict[str, Any]]:
     """Every client a realm document **declares**, which is not every client it runs.
 
-    The realm provisions a sixth from a hosted Client Identity Metadata Document
-    whose `clientId` is that document's URL. It is a real client of this realm and
-    it is in no file, so nothing here can reach it and nothing here should try:
+    A client with no file is the ordinary case rather than a curiosity: Keycloak
+    creates its own per-realm clients — `account`, `account-console`, `admin-cli`,
+    `broker`, `realm-management`, `security-admin-console` — and none of them is
+    in this document either. What is singular about the one below is that the
+    exhibit put it there. The realm provisions it from a hosted Client Identity
+    Metadata Document whose `clientId` is that document's URL. It is a real client
+    of this realm and it is in no file, so nothing here can reach it and nothing
+    here should try:
     every assertion in this module reads committed bytes, which is what makes the
     module Docker-free and what lets the ejection job run it.
 
