@@ -108,11 +108,38 @@ here drives real HTTP against Compose like the three suites beside it~~.
 Recorded as an amendment to ADR-0013 by #37.
 
 **~~One assertion~~ ~~Two assertions~~ ~~Four assertions~~ ~~Seven assertions~~
-Nine assertions here are not over HTTP** — one since #41, one since #85, two
-since #37 that no count ever carried, three since #82, and two since #109. They
-are **not one kind**: the four #85 counted are three, set out below, and #82's
-three and #109's two are described in their own sections further down. Amended by
-#85 and #82, which landed the same day, and by #109.
+Nine assertions here are not over HTTP**, and #109 writes the list out rather
+than leaving the number to be maintained by increment — which is the failure mode
+#85 was raised to fix and which the reviews of #109 promptly reproduced, reading
+the same running total as seven-plus-two and seven-plus-three. **The unit is one
+thing asserted that no request can show**, which is why one test function reading
+two committed files counts twice, and why one claim parametrised across a handful
+of document shapes counts once.
+
+| # | What is asserted | Where | Since |
+| --- | --- | --- | --- |
+| 1 | Layer 1's source names no tool and no batch argument | `test_the_fold.py` | #41 |
+| 2 | One order was minted, read off `purchase_order` | `test_the_fold.py` | #85 |
+| 3 | `worker_processes 1`, read off `gateway/nginx.conf` | `test_replicas.py` | #37 |
+| 4 | The same, read off `compose.yaml` | `test_replicas.py` | #37 |
+| 5 | An unreadable key-set document is a fruitless fetch, disclosing nothing | `test_the_cause_a_refusal_names.py` | #82 |
+| 6 | The issuer step answers *missing* rather than *mismatched* | `test_the_cause_a_refusal_names.py` | #82 |
+| 7 | Dispatch's catch does not dress our own failure as the caller's | `test_the_cause_a_refusal_names.py` | #82 |
+| 8 | A failure inside the key-set fetch leaves a record naming it | `test_the_cause_a_refusal_names.py` | #109 |
+| 9 | Cancellation inside that fetch still tears the request down | `test_the_cause_a_refusal_names.py` | #109 |
+
+They are **not one kind**: the four #85 counted are three, set out below, and
+#82's three and #109's two are described in their own sections further down.
+Amended by #85 and #82, which landed the same day, and by #109.
+
+**Two things #109 added are deliberately not rows above**, and both are the same
+judgement. *The caller learns none of what that record holds* is row 5's
+non-disclosure reached through a different failure, so it is a second test of row
+5. And the assertions that close row 7 at its true scope — a `Decimal` outcome
+through `_render` and through `_fold`, a failure inside the listing, the two eras
+held equal at each, and a control that the listing still answers — are new tests
+of row 7, which was always written as a claim about dispatch and was only ever
+true of the handler's iteration.
 
 The second is `test_two_simultaneous_decisions_on_one_requisition_mint_one_order`
 reading `purchase_order` directly through `fixtures.purchase_orders_for`. *One
@@ -180,35 +207,24 @@ carries there. A row taking more than one test is the suite's own precedent, and
 it is what lets that assertion sit over the wire without moving a count.
 Recorded as an amendment to ADR-0013 by #82.
 
-**Two more are not over HTTP, since #109, and they are the same kind as those.**
-Both are about `KeySet._refetch`, in the same file, and both are in process for
-the reason its neighbour above is: no caller can make a real authorization
-server's fetch fail in a chosen way.
+**Rows 8 and 9 are #109's, and they are the same kind as rows 5 and 7.** Both are
+about `KeySet._refetch`, in the same file, and both are in process for the reason
+their neighbours are: no caller can make a real authorization server's fetch fail
+in a chosen way. Row 8 is driven with `caplog`, which is the only altitude a log
+record has. Row 9 is **load-bearing on the change in the same commit** — #109
+rewrote that `suppress` into an `except` so a failure leaves a record, and the
+obvious next widening, to `BaseException` so the record covers everything, would
+keep every other test in the file green. Written before the rewrite rather than
+after it.
 
-- **A failure inside the fetch leaves a record naming it, and the caller learns
-  none of what that record holds.** One claim in two directions, asserted as two
-  tests, because a fix satisfying either alone is the wrong fix — a silent
-  refusal is what #109 is named for, and a refusal that carried the transport's
-  words would be the disclosure ADR-0006 keeps a gate up over. It is driven with
-  `caplog`, which is the only altitude a log record has.
-- **Cancellation inside the fetch still tears the request down.** `keys.py` has
-  rested on `CancelledError` descending from `BaseException` since it was
-  written, and nothing asserted it. This is **load-bearing on the change in the
-  same commit**: #109 rewrote that `suppress` into an `except` so a failure
-  leaves a record, and the obvious next widening — to `BaseException`, to make
-  the record cover *everything* — would keep every other test in the file green.
-  Written before the rewrite rather than after it.
-
-**#109's third claim is #82's third, rescoped rather than added.** *Dispatch's
-catch does not dress our own failure as the caller's* was asserted around the
-handler's iteration and was false of everything after it: `_render`, `_fold`,
-`_result` and the whole of `on_list_tools` still reached a legacy caller as
-`code: 0` with the failure's own words. What closes it is new tests of that same
-claim — a `Decimal` outcome through `_render` and through `_fold`, a failure
-inside the listing, the two eras' answers held equal at each, and a control that
-the listing still answers when nothing below it fails — and they sit at the
-altitude the claim already sat at, so the count above moves by two rather than by
-three. Recorded as an amendment to ADR-0013 by #109.
+**Row 7 is where #109's third claim went, and it is why the total moves by two
+rather than three.** *Dispatch's catch does not dress our own failure as the
+caller's* was asserted around the handler's iteration and was false of everything
+after it: `_render`, `_fold`, `_result` and the whole of `on_list_tools` reached
+a legacy caller as `code: 0` with the failure's own words. That row was never
+scoped to the iteration in words; it was only ever true of it, so the tests that
+close the gap are that row asserted properly rather than a tenth row. Recorded as
+an amendment to ADR-0013 by #109.
 
 **The listing's freshness hint stays here, since #66.** `cacheScope`, the
 `ttlMs` cap, the declared schemas and `listChanged: false` were listed above as

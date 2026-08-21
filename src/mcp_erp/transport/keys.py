@@ -184,10 +184,11 @@ class KeySet:
 
         The attempt is recorded **before** the request rather than after it
         succeeds, so a failing authorization server is rate-limited by the same
-        cooldown as a caller sending nonsense. Failures are swallowed here and
-        become :class:`UnknownKeyIdentifier` at the call site: the caller's
-        answer is the same, and a transport error carries facts about our own
-        infrastructure that a refusal must not disclose.
+        cooldown as a caller sending nonsense. Failures are caught here, logged,
+        and become :class:`UnknownKeyIdentifier` at the call site: the caller's
+        answer is the same whichever one fired, and a transport error carries
+        facts about our own infrastructure that a refusal must not disclose —
+        but the log line is on this side of that rule and holds all of them.
 
         **Every failure, rather than a list of them, and the list is why.** Until
         #82 this suppressed four names, and each was there for a step written

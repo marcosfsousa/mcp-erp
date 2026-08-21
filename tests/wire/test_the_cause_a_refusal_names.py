@@ -1,10 +1,10 @@
 """What layer 1 answers when the failure is its own, and what it records instead.
 
-#82's reading of one seam, asked in three places, and #109's reading of the same
-seam's other side, asked in two more. Layer 1 catches a category of failure and
-answers with a word; each claim below is that the word is one the code has
-grounds for, **and that answering it did not close the only record of what went
-wrong**.
+#82's reading of one seam, asked in three places, and #109's reading of what
+happens when one of those catches actually fires. Layer 1 catches a category of
+failure and answers with a word; each claim below is that the word is one the
+code has grounds for, **and that answering it did not close the only record of
+what went wrong**.
 
 **Two of the first three are refusals and the third deliberately is not** — the
 `-32602` path authorizes and denies nothing, which is the distinction half #82
@@ -24,13 +24,17 @@ named, rather than for a kind they do not.
   problem.** Both halves are here, because what has to hold is a difference: an
   `UnusableArgument` answers `-32602` carrying the handler's own message, and
   everything else answers the caller nothing at all.
-- **A failure inside the key-set fetch leaves a record naming it, and the caller
-  learns none of what the record holds** (#109). One claim in two directions,
-  asserted
-  as two tests: a silent refusal and a disclosing one are both wrong, and a fix
-  can satisfy either alone. Beside it sits the falsifier for the claim
-  `keys.py` rested on and nothing checked — **cancellation is not caught**, so a
-  torn-down request still tears down.
+- **A failure inside the key-set fetch leaves a record naming it** (#109), and
+  the caller learns none of what that record holds — which is the first bullet's
+  non-disclosure reached through a different failure, so it is a second test of
+  that claim rather than a sixth one. Both directions are asserted, because a fix
+  can satisfy either alone and a silent refusal and a disclosing one are both
+  wrong.
+- **Cancellation inside that fetch is not caught** (#109), so a torn-down request
+  still tears down. `keys.py` has rested on this since it was written and nothing
+  checked it, which matters because the obvious next widening — to
+  `BaseException`, so the record covers everything — would keep the rest of this
+  file green.
 - **Containment at dispatch spans the callback, not the handler's iteration**
   (#109). The third bullet's claim, at the scope it was always written as having
   and did not: `_render`, `_fold`, `_result` and the whole of `on_list_tools`
@@ -56,7 +60,7 @@ something that is not an attack.
 **The issuer one is additionally asserted over the wire**, in
 `tests/attack_suite/test_token_validation.py`, as a second test on the
 `foreign_issuer_token` row rather than a row of its own — the shape `unknown_key`
-already carries there. Of the five above it is the one a real authorization
+already carries there. Of the bullets above it is the one a real authorization
 server's own flow can be made to produce, and the row it sits on is the row it is
 a near miss for. The overlap with the assertion here is the one
 `tests/authorization/test_identity.py` already takes against `Seed renders
@@ -79,7 +83,6 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from mcp import MCPError
 from mcp.server import ServerRequestContext
-from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import (
     StreamableHTTPASGIApp,
     StreamableHTTPSessionManager,
@@ -104,7 +107,7 @@ from mcp_erp.authorization import (
     Resource,
     UnusableArgument,
 )
-from mcp_erp.transport.dispatch import INTERNAL_FAILURE, build
+from mcp_erp.transport.dispatch import CALL_TOOL, INTERNAL_FAILURE, LIST_TOOLS, build
 from mcp_erp.transport.gates import PRINCIPAL_STATE, TOKEN_STATE, TokenGate
 from mcp_erp.transport.keys import KeySet, UnknownKeyIdentifier
 from mcp_erp.transport.registry import Handler, Registry, ToolRegistration
@@ -135,33 +138,29 @@ FAR_FUTURE = 4102444800
 """2100-01-01, as an expiry that cannot arrive while this suite runs."""
 
 
-def _key_set(document: object) -> KeySet:
-    """A key set whose fetch answers with `document`, over a real client.
+def _key_set(answer: object | BaseException) -> KeySet:
+    """A key set whose key-set request answers with `answer`, or fails with it.
 
     `httpx2.MockTransport` rather than a stub client, so `raise_for_status` and
     `json` are the ones production calls and only the socket is replaced.
+
+    **Discovery always answers, whichever `answer` is.** The block under test is
+    the fetch, and a discovery step that failed first would leave every assertion
+    below true of a request that never reached it.
+
+    Args:
+        answer: A document the key-set address answers with, or an exception it
+            raises instead. One parameter rather than two helpers, because the
+            two differ by exactly this line and a second copy of the discovery
+            branch is a second thing to keep equal.
     """
 
     def respond(request: httpx2.Request) -> httpx2.Response:
-        if str(request.url) == JWKS_ADDRESS:
-            return httpx2.Response(200, json=document)
-        return httpx2.Response(200, json={"issuer": ISSUER, "jwks_uri": JWKS_ADDRESS})
-
-    return KeySet(ISSUER, client=httpx2.AsyncClient(transport=httpx2.MockTransport(respond)))
-
-
-def _key_set_whose_transport_raises(failure: BaseException) -> KeySet:
-    """A key set whose key-set request fails the way `failure` says.
-
-    Discovery answers first, so the failure lands on the fetch itself rather than
-    on the step before it — which is the block whose record and whose teardown are
-    what the two tests below are about.
-    """
-
-    def respond(request: httpx2.Request) -> httpx2.Response:
-        if str(request.url) == JWKS_ADDRESS:
-            raise failure
-        return httpx2.Response(200, json={"issuer": ISSUER, "jwks_uri": JWKS_ADDRESS})
+        if str(request.url) != JWKS_ADDRESS:
+            return httpx2.Response(200, json={"issuer": ISSUER, "jwks_uri": JWKS_ADDRESS})
+        if isinstance(answer, BaseException):
+            raise answer
+        return httpx2.Response(200, json=answer)
 
     return KeySet(ISSUER, client=httpx2.AsyncClient(transport=httpx2.MockTransport(respond)))
 
@@ -272,7 +271,7 @@ def test_a_failure_inside_the_fetch_leaves_a_record_naming_what_failed(
     — a bare message would name the block and not the line, which is the same
     silence with more code.
     """
-    key_set = _key_set_whose_transport_raises(httpx2.ConnectError(UNREACHABLE))
+    key_set = _key_set(httpx2.ConnectError(UNREACHABLE))
 
     with (
         caplog.at_level(logging.ERROR, logger="mcp_erp.transport.keys"),
@@ -294,7 +293,7 @@ def test_the_caller_is_told_none_of_what_that_record_holds() -> None:
     could not be reached. A fix that logged by widening what reaches the caller
     would pass the test above and fail this one.
     """
-    key_set = _key_set_whose_transport_raises(httpx2.ConnectError(UNREACHABLE))
+    key_set = _key_set(httpx2.ConnectError(UNREACHABLE))
 
     with pytest.raises(UnknownKeyIdentifier) as refused:
         asyncio.run(key_set.signing_key("unpublished"))
@@ -316,7 +315,7 @@ def test_a_cancellation_inside_the_fetch_still_tears_the_request_down() -> None:
     above cover *everything* — keeps every other test in this file green and
     turns this one red, which is the whole reason it exists.
     """
-    key_set = _key_set_whose_transport_raises(asyncio.CancelledError())
+    key_set = _key_set(asyncio.CancelledError())
 
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(key_set.signing_key("unpublished"))
@@ -465,19 +464,9 @@ def _registry_of(handler: Handler) -> Registry:
     )
 
 
-def _served(registry: Registry) -> Server[None]:
-    """The protocol server over that registry, with both callbacks registered.
-
-    A `Registry` rather than a handler, because one of the claims below is about
-    the callback that reaches **no** handler: `on_list_tools` walks the registry
-    and answers, and a failure inside that walk is contained by the same rule.
-    """
-    return build(registry)
-
-
 def _call(handler: Handler) -> types.CallToolResult:
     """Drive `tools/call` at the callback layer 1 registers, with a resolved principal."""
-    entry = _served(_registry_of(handler)).get_request_handler("tools/call")
+    entry = build(_registry_of(handler)).get_request_handler(CALL_TOOL)
     assert entry is not None
 
     parameters = types.CallToolRequestParams(name=TOOL, arguments=ARGUMENTS)
@@ -504,9 +493,7 @@ def _application(registry: Registry) -> Starlette:
     handler failure becomes an envelope happens above dispatch, and no assertion
     made before the envelope exists can see any of it.
     """
-    sessions = StreamableHTTPSessionManager(
-        app=_served(registry), stateless=True, json_response=True
-    )
+    sessions = StreamableHTTPSessionManager(app=build(registry), stateless=True, json_response=True)
 
     class _Resolved:
         """Stands in for the gate chain, writing the two things dispatch reads."""
@@ -539,12 +526,7 @@ def _application(registry: Registry) -> Starlette:
     )
 
 
-CALL = "tools/call"
-LIST = "tools/list"
-"""The two methods layer 1 registers a callback for, and the two `_over_http` drives."""
-
-
-def _over_http(registry: Registry, *, era: str = MODERN, method: str = CALL) -> dict[str, Any]:
+def _over_http(registry: Registry, *, era: str = MODERN, method: str = CALL_TOOL) -> dict[str, Any]:
     """One request through the package's transport, as the response body.
 
     **Both eras, because this server answers both and they do not share an error
@@ -566,7 +548,8 @@ def _over_http(registry: Registry, *, era: str = MODERN, method: str = CALL) -> 
     # handshake used to establish and the header pair that must agree with it,
     # and the legacy shape by subtraction from it — and a hand-written copy would
     # be a second rule to keep equal.
-    parameters: dict[str, Any] = {"name": TOOL, "arguments": ARGUMENTS} if method == CALL else {}
+    calling = method == CALL_TOOL
+    parameters: dict[str, Any] = {"name": TOOL, "arguments": ARGUMENTS} if calling else {}
     modern = era == MODERN
     headers = rpc.routing_headers(method, parameters) if modern else dict(rpc.TRANSPORT_HEADERS)
     body = (
@@ -766,14 +749,25 @@ def test_a_failure_rendering_an_outcome_is_contained_like_one_inside_the_handler
     assert body["error"]["message"] == INTERNAL_FAILURE
 
 
-def test_the_two_eras_answer_a_rendering_failure_identically() -> None:
+@pytest.mark.parametrize(
+    "cardinality",
+    [
+        pytest.param(1, id="one-outcome-through-render"),
+        pytest.param(2, id="two-outcomes-through-fold"),
+    ],
+)
+def test_the_two_eras_answer_a_rendering_failure_identically(cardinality: int) -> None:
     """*Both eras answer identically* now covers the dispatch, not just the iteration.
 
     Asserted as an equality rather than as two expectations of one literal, for
     the reason its sibling below the handler catch gives: the eras diverge in the
     package and converge here, and what has to hold is that they agree.
+
+    Over both cardinalities like the test above it, because `_render` and `_fold`
+    are two paths and the equality is claimed of the dispatch rather than of one
+    of them.
     """
-    registry = _registry_of(_handler_yielding({"amount": UNSERIALISABLE}))
+    registry = _registry_of(_handler_yielding(*({"amount": UNSERIALISABLE},) * cardinality))
 
     modern = _over_http(registry, era=MODERN)
     legacy = _over_http(registry, era=LEGACY)
@@ -792,7 +786,7 @@ def test_a_failure_inside_the_listing_is_contained_too(era: str) -> None:
     *what could go wrong there* is not a list layer 1 gets to enumerate on the
     deployment's behalf.
     """
-    body = _over_http(_listing_that_fails(), era=era, method=LIST)
+    body = _over_http(_listing_that_fails(), era=era, method=LIST_TOOLS)
     rendered = json.dumps(body)
 
     assert LISTING_FAILURE not in rendered
@@ -803,15 +797,15 @@ def test_a_failure_inside_the_listing_is_contained_too(era: str) -> None:
 
 def test_the_two_eras_answer_a_listing_failure_identically() -> None:
     """The same equality, on the callback the claim did not previously reach."""
-    modern = _over_http(_listing_that_fails(), era=MODERN, method=LIST)
-    legacy = _over_http(_listing_that_fails(), era=LEGACY, method=LIST)
+    modern = _over_http(_listing_that_fails(), era=MODERN, method=LIST_TOOLS)
+    legacy = _over_http(_listing_that_fails(), era=LEGACY, method=LIST_TOOLS)
 
     assert modern["error"] == legacy["error"]
 
 
 def test_the_listing_still_answers_when_nothing_below_it_fails() -> None:
     """The control. Wrapping a callback must not swallow the answer it was wrapping."""
-    body = _over_http(_registry_of(_handler_yielding({})), method=LIST)
+    body = _over_http(_registry_of(_handler_yielding({})), method=LIST_TOOLS)
 
     assert "error" not in body
     assert [tool["name"] for tool in body["result"]["tools"]] == [TOOL]

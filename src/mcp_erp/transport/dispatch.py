@@ -50,8 +50,12 @@ into the envelope verbatim. #82 built that guard around the handler's iteration
 alone, so the rendering below it and the whole of ``on_list_tools`` still
 escaped: a handler yielding a ``Decimal`` answered a legacy caller *Object of
 type Decimal is not JSON serializable*. Each callback is now one boundary, and an
-``MCPError`` passes through it untouched because an ``MCPError`` is this module
-having already chosen what to say.
+``MCPError`` passes through it untouched — **an ``MCPError`` reaching it is
+always this module's own**, because ADR-0013 has a handler return a domain
+outcome or a refused ``Decision`` and *never anything protocol-shaped*, and
+nothing else under ``src/`` names the type. Re-wrapping one would replace a
+``-31010`` carrying its ``Reason`` with a generic failure, which is the refusal
+shape ADR-0002 built being thrown away by the guard meant to protect it.
 
 Nothing here keys on a tool's name — the negative guarantee the cut did not
 touch, and the one worth keeping.
@@ -111,21 +115,24 @@ caller arrived on is not a fact this server discloses either.
 **Scoped to a callback, which since #109 is the whole of one.** The equality was
 written against #82's guard around the handler's iteration and held for exactly
 that much; the rendering below it and the whole of ``on_list_tools`` diverged.
-Both are inside now, and
-``tests/wire/test_the_cause_a_refusal_names.py`` asserts the equality at each of
-the three — the handler's iteration, the render and fold below it, and the
-listing.
+Both are inside now, and ``tests/wire/test_the_cause_a_refusal_names.py`` asserts
+the equality at four places rather than one: a failure out of the handler's
+iteration, one rendering a single outcome through :func:`_render`, one rendering
+several through :func:`_fold`, and one inside the listing.
 """
 
 CALL_TOOL: Final = "tools/call"
-LIST_TOOLS: Final = "tools/list"
-"""The two methods this module registers a callback for, and the two it contains.
+"""The method behind ``on_call_tool``, as a contained failure's record names it.
 
-Spelled here only for the record a contained failure leaves. Neither is compared
-against anything a caller sends — the protocol package routes on the method and
-hands the matching callback a typed parameter object, so these are labels rather
-than a second routing table to keep equal.
+**Not a routing decision.** The protocol package routes on the method itself and
+hands the matching callback a typed parameter object; nothing here compares this
+against what a caller sent. It is the label on a log line, and it is public so
+that a suite driving the callback names it from here rather than spelling it
+again — which is the second routing table this would otherwise become.
 """
+
+LIST_TOOLS: Final = "tools/list"
+"""The method behind ``on_list_tools``, on the same terms as :data:`CALL_TOOL`."""
 
 _LOGGER: Final = logging.getLogger(__name__)
 """Where a failure of ours goes now that it no longer goes to the caller.
@@ -218,7 +225,7 @@ def build(registry: Registry) -> Server[None]:
         except MCPError:
             raise
         except Exception as failure:
-            raise _contained(CALL_TOOL) from failure
+            raise _contained(CALL_TOOL, tool=parameters.name) from failure
 
     return Server(
         "mcp-erp",
@@ -229,7 +236,7 @@ def build(registry: Registry) -> Server[None]:
     )
 
 
-def _contained(method: str) -> MCPError:
+def _contained(method: str, *, tool: str | None = None) -> MCPError:
     """Record the failure being handled, and answer for it in this server's own words.
 
     **Both halves in one call, because doing one without the other is the defect
@@ -250,12 +257,19 @@ def _contained(method: str) -> MCPError:
     failure`` and the chain survives for anything reading it below.
 
     Args:
-        method: Which callback failed, for the record. Never sent anywhere.
+        method: Which callback failed.
+        tool: What the caller named, from the callback that takes a name.
+            **Read off the request rather than off a registration**, so a failure
+            that never reached one still records what was asked for; it is the
+            caller's own string, and nothing here inspects it or sends it
+            anywhere. Omitted by the listing, which names no tool because it
+            answers about all of them.
 
     Returns:
         The refusal to raise, carrying the modern leg's own generic wording.
     """
-    _LOGGER.exception("the %s callback raised", method)
+    named = f" for {tool!r}" if tool is not None else ""
+    _LOGGER.exception("the %s callback raised%s", method, named)
     return MCPError(INTERNAL_ERROR, INTERNAL_FAILURE)
 
 
