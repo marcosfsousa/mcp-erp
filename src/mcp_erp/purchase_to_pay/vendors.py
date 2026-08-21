@@ -29,6 +29,8 @@ from importlib import resources
 from types import MappingProxyType
 from typing import Final
 
+from mcp_erp.authorization import UnusableArgument
+
 ORGANISATION_FILE: Final = "organisation.json"
 """The ERP rendering, inside layer 3's own package.
 
@@ -85,7 +87,7 @@ def identifier_for(name: str) -> str:
     """The identifier of the vendor with this display name.
 
     Raises:
-        ValueError: No vendor carries that name. The tool's schema enumerates
+        UnusableArgument: No vendor carries that name. The tool's schema enumerates
             every legal value, so this is an argument the declaration already
             forbade — layer 1 renders it as *invalid params*, which is what the
             protocol says about a request it cannot act on. It is deliberately
@@ -94,5 +96,5 @@ def identifier_for(name: str) -> str:
     """
     identifier = shipped_vendors().get(name)
     if identifier is None:
-        raise ValueError(f"no such vendor: {name!r}")
+        raise UnusableArgument(f"no such vendor: {name!r}")
     return identifier

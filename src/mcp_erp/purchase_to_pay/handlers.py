@@ -57,12 +57,24 @@ against that same entity — hydrating a requisition for an action decided again
 a purchase order is a red types job rather than a refusal nobody sees. That is
 what ADR-0013 kept the ``action`` parameter for, and #42 is the call it named.
 
-**An argument a schema forbade raises ``ValueError``.** That is not a refusal:
-nothing was authorized or denied, and giving it a ``Reason`` would amend a closed
-vocabulary for a spelling mistake. Layer 1 renders it as *invalid params*, which
-is what the protocol says about a request it cannot act on, and the exception
-type is the standard library's rather than one this package invents — so a
-handler signals it without importing anything layer 1 owns.
+**An argument a schema forbade raises ``UnusableArgument``.** That is not a
+refusal: nothing was authorized or denied, and giving it a ``Reason`` would amend
+a closed vocabulary for a spelling mistake. Layer 1 renders it as *invalid
+params*, which is what the protocol says about a request it cannot act on.
+
+*Amended by #82, which found the catch on the other side of that sentence.* The
+type is **layer 2's**, where it was the standard library's ``ValueError``. The
+argument for ``ValueError`` was that a handler signals with it without importing
+anything layer 1 owns, and layer 2 satisfies that as well — ``Action``,
+``Decision`` and ``Principal`` all arrive from there already. What ``ValueError``
+could not satisfy is the other end: layer 1 wraps a handler's *whole iteration*,
+the store is awaited inside it, and a type the standard library shares with every
+library below made any failure down there answer *the arguments are not ones the
+declared schema permits*. A name only a handler raises is what keeps the claim
+true.
+
+The boundary is untouched — layers 1 and 3 still import nothing from each other,
+which is why the name could not live here.
 """
 
 import re
@@ -75,6 +87,7 @@ from mcp_erp.authorization import (
     Decision,
     Principal,
     Resource,
+    UnusableArgument,
     decide_call,
     decide_item,
 )
@@ -155,14 +168,14 @@ def load[R: Resource](store: ByIdentifier[R]) -> Load[R]:
         row from a foreign one: it never looks.
 
         Raises:
-            ValueError: No ``id`` was named, or it was not a string. Distinct
+            UnusableArgument: No ``id`` was named, or it was not a string. Distinct
                 from ``not_found`` on purpose — nothing was named, so nothing was
                 looked for, and answering *not found* would claim a search that
                 did not happen.
         """
         identifier = arguments.get("id")
         if not isinstance(identifier, str):
-            raise ValueError("'id' must be a string")
+            raise UnusableArgument("'id' must be a string")
 
         return await store.by_id(identifier)
 
@@ -241,7 +254,7 @@ def get_requisition(requisitions: Requisitions) -> Handler:
         the two apart, because it never looks.
 
         Raises:
-            ValueError: No ``id`` was named, or it was not a string. Raised by
+            UnusableArgument: No ``id`` was named, or it was not a string. Raised by
                 the hydration step, and distinct from ``not_found`` on purpose —
                 nothing was named, so nothing was looked for, and answering *not
                 found* would claim a search that did not happen.
@@ -282,7 +295,7 @@ def submit_requisition(requisitions: Requisitions) -> Handler:
         minted and then refused would still have consumed an identifier.
 
         Raises:
-            ValueError: An argument the input schema forbade — an unknown vendor,
+            UnusableArgument: An argument the input schema forbade — an unknown vendor,
                 a currency that is not the one legal value, or an amount that is
                 not a positive decimal.
         """
@@ -367,7 +380,7 @@ def approve_requisition(requisitions: Requisitions) -> Handler:
         varies with a typo is a refusal that discloses.
 
         Raises:
-            ValueError: An argument the input schema forbade — a list that is not
+            UnusableArgument: An argument the input schema forbade — a list that is not
                 one of strings, is empty, or is longer than the declared ceiling;
                 or a ``decision`` that is not one of the two declared values.
         """
@@ -421,7 +434,7 @@ def _identifiers(arguments: Mapping[str, Any]) -> tuple[str, ...]:
     rules unless one of them is written twice.
 
     Raises:
-        ValueError: It is absent, is not a list of strings, is empty, or names
+        UnusableArgument: It is absent, is not a list of strings, is empty, or names
             more rows than the declaration permits. The empty list is refused
             rather than answered with nothing: a call that named no item and got
             no answer is indistinguishable from a batch that dropped every item
@@ -429,11 +442,11 @@ def _identifiers(arguments: Mapping[str, Any]) -> tuple[str, ...]:
     """
     value = arguments.get("ids")
     if not isinstance(value, list) or not all(isinstance(entry, str) for entry in value):
-        raise ValueError("'ids' must be an array of strings")
+        raise UnusableArgument("'ids' must be an array of strings")
     if not value:
-        raise ValueError("'ids' must name at least one requisition")
+        raise UnusableArgument("'ids' must name at least one requisition")
     if len(value) > MAXIMUM_BATCH:
-        raise ValueError(f"'ids' names more than {MAXIMUM_BATCH} requisitions: {len(value)}")
+        raise UnusableArgument(f"'ids' names more than {MAXIMUM_BATCH} requisitions: {len(value)}")
     return tuple(value)
 
 
@@ -481,7 +494,7 @@ def record_invoice(orders: PurchaseOrders) -> Handler:
         the chain per item are the same call.
 
         Raises:
-            ValueError: No ``id`` was named, or it was not a string. Raised by
+            UnusableArgument: No ``id`` was named, or it was not a string. Raised by
                 the hydration step, and distinct from ``not_found`` on purpose.
         """
         resource = await hydrate(RECORD_INVOICE, arguments)
@@ -518,11 +531,11 @@ def _decision(arguments: Mapping[str, Any]) -> str:
     :func:`_amount` makes about a pattern.
 
     Raises:
-        ValueError: It is absent, is not a string, or is not one of the two.
+        UnusableArgument: It is absent, is not a string, or is not one of the two.
     """
     value = _string(arguments, "decision")
     if value not in DECISIONS:
-        raise ValueError(f"'decision' must be one of {DECISIONS}: {value!r}")
+        raise UnusableArgument(f"'decision' must be one of {DECISIONS}: {value!r}")
     return value
 
 
@@ -530,11 +543,11 @@ def _string(arguments: Mapping[str, Any], name: str) -> str:
     """One required string argument.
 
     Raises:
-        ValueError: It is absent or is not a string.
+        UnusableArgument: It is absent or is not a string.
     """
     value = arguments.get(name)
     if not isinstance(value, str):
-        raise ValueError(f"{name!r} must be a string")
+        raise UnusableArgument(f"{name!r} must be a string")
     return value
 
 
@@ -547,11 +560,11 @@ def _currency(arguments: Mapping[str, Any]) -> str:
     they did not name.
 
     Raises:
-        ValueError: It is absent or is not the one legal value.
+        UnusableArgument: It is absent or is not the one legal value.
     """
     value = _string(arguments, "currency")
     if value != CURRENCY:
-        raise ValueError(f"'currency' must be {CURRENCY!r}")
+        raise UnusableArgument(f"'currency' must be {CURRENCY!r}")
     return value
 
 
@@ -574,7 +587,7 @@ def _amount(arguments: Mapping[str, Any]) -> Decimal:
     is the constant this matches, and the rule is stated once.
 
     Raises:
-        ValueError: It is absent, is not a string, is not the shape the schema
+        UnusableArgument: It is absent, is not a string, is not the shape the schema
             declares, or is not positive. The last is the one rule the pattern
             deliberately does not carry — the column's own ``CHECK (amount > 0)``,
             checked here so a caller gets a message about their argument rather
@@ -582,9 +595,9 @@ def _amount(arguments: Mapping[str, Any]) -> Decimal:
     """
     value = _string(arguments, "amount")
     if re.fullmatch(AMOUNT_PATTERN, value) is None:
-        raise ValueError(f"'amount' is not a decimal amount: {value!r}")
+        raise UnusableArgument(f"'amount' is not a decimal amount: {value!r}")
 
     amount = Decimal(value)
     if amount <= 0:
-        raise ValueError(f"'amount' must be positive: {value!r}")
+        raise UnusableArgument(f"'amount' must be positive: {value!r}")
     return amount

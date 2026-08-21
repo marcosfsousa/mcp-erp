@@ -155,6 +155,41 @@ def test_foreign_issuer_token() -> None:
     assert parameters["error_description"] == "issuer_mismatch"
 
 
+@exercises("foreign_issuer_token")
+def test_a_token_naming_no_issuer_at_all_is_refused_as_malformed() -> None:
+    """A credential with no `iss` mismatched nothing, and is not told that it did.
+
+    Scenario: `foreign_issuer_token`.
+
+    **The near miss worth pinning, and the second test on this row** — the shape
+    `unknown_key` already carries below, for the same reason. `iss` is in
+    `REQUIRED_CLAIMS`, so a token without one is missing a claim rather than
+    disagreeing about it, and until #82 the comparison this row defends answered
+    both cases: `None != issuer` is true, so an absent issuer was refused
+    `issuer_mismatch` — a comparison the server never made, reported as though it
+    had.
+
+    It shares the row rather than minting one because it falsifies no removal of
+    its own. Delete the `iss` comparison and this token is still refused; what
+    changes is only which word, which is exactly what the row above turns on and
+    why the two belong together. Both readings answer `401`, so the description
+    rather than the status is what this asserts.
+
+    Forged rather than minted, on the terms the two rows below take: no
+    authorization server issues a credential with no issuer, and the `iss` step
+    runs before the key lookup, so the signature this cannot get past is never
+    reached.
+    """
+    forged = _signed_without(claim="iss")
+
+    response = rpc.post("tools/list", token=forged)
+
+    assert response.status_code == httpx2.codes.UNAUTHORIZED
+    parameters = rpc.challenge(response)
+    assert parameters["error"] == "invalid_token"
+    assert parameters["error_description"] == "malformed"
+
+
 @exercises("token_passthrough")
 def test_token_passthrough() -> None:
     """A credential another authorization server minted verifies — and is refused anyway.
@@ -418,6 +453,27 @@ def _signed_with_an_unpublished_key(*, issuer: str, key_id: str | None) -> str:
         algorithm="RS256",
         headers={} if key_id is None else {"kid": key_id},
     )
+
+
+def _signed_without(*, claim: str) -> str:
+    """The same forgery as above, with one required claim left out.
+
+    Built by subtraction from the well-formed set rather than by writing a second
+    one, so what makes the token defective is exactly the absence named — the
+    same rule `rpc.legacy_post` keeps about the two request shapes.
+    """
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    claims = {
+        "iss": _our_issuer(),
+        "aud": rpc.RESOURCE,
+        "sub": "tomas-weber",
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 300,
+        "scope": "erp.read",
+    }
+    del claims[claim]
+
+    return jwt.encode(claims, key, algorithm="RS256", headers={"kid": "a-key-nobody-published"})
 
 
 def _verified_by_the_issuer_that_minted_it(token: str, *, realm: str) -> dict[str, Any]:
