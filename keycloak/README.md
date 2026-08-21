@@ -444,8 +444,9 @@ to a name:
 
 `ClientAccessTypeCondition` votes on any context that carries a resolved client,
 which covers both events the `pkce-enforcer` executor handles. Every client in
-this realm is public, so the pin now holds for the four in this file, for the fifth that is
-not, and for any sixth — and `auto-configure` stamps `S256` onto the provisioned
+this realm is public, so the pin now holds for the authored clients in this file,
+for the provisioned one that is not in it, and for any further client the realm
+gains — and `auto-configure` stamps `S256` onto the provisioned
 client as well, so the attribute and the policy agree rather than one standing in
 for the other.
 

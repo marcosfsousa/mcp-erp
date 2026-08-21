@@ -40,7 +40,8 @@ None of that matters, because none of them is redeemable anywhere. The realm is 
 throwaway local one that re-imports from committed files into an in-memory
 database on every boot and **mints fresh signing keys each time**, so every token
 here was signed by a key that no longer exists and is refused by the only party
-that could ever have honoured it. They are issued to People whose shared password
+that could ever have honoured it. The cookies are not signed and do not need to
+be: the sessions they name went with the database that held them. They are issued to People whose shared password
 is committed as `not-a-secret-demo-password`, and there is no deployment for any
 of it to reach. Direct Access Grants are disabled on every client, and
 `password_grant_refused` is the assertion of it.

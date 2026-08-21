@@ -10,16 +10,18 @@ stopped refusing.
 **A falsifier per refusal, for the refusals here.** #81 found eight checks whose
 docstrings named a refusal the code did not make, and a promise with no falsifier
 is how that happens: the `Raises:` list is prose until something feeds it the
-input it names. Six of those promises are fed below — three of the four
-`read_organisation` makes about a key, and, three ways, the one `read_matrix`
-makes about a row's per-tool expectation.
+input it names. Four promises are fed below, by six cases: three of the four
+`read_organisation` declares — a person charged to a centre the seed does not
+list, a duplicated cost-centre code, a duplicated vendor identifier — and, three
+ways, the one `read_matrix` makes about a row's per-tool expectation.
 
 **That is not the whole of either `Raises:` list, and this file does not claim
-it is.** `read_organisation`'s duplicate-subject refusal has no case here, and
-neither do the shape and value refusals `_given` and `_expect` make — a missing
-fixture field, a status outside the vocabulary, an amount that is not decimal. A
-refusal with no case here is a promise still unfed; adding the input it names is
-the standing way to close one, and it belongs in this file when somebody does.
+it is.** `read_organisation`'s fourth, two people sharing a subject, has no case
+here, and neither do the shape and value refusals `_given` and `_expect` make —
+a missing fixture field, a status outside the vocabulary, an amount that is not
+decimal. A refusal with no case here is a promise still unfed; adding the input
+it names is the standing way to close one, and it belongs in this file when
+somebody does.
 
 **Not in `tests/matrix/`.** That directory is driven from the table in its
 entirety and its invariants file says so — it asserts the parser's refusals by

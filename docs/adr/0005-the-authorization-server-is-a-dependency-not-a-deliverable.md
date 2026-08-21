@@ -58,7 +58,7 @@ Dynamic client registration is dropped. **Verified: that cannot mean the endpoin
 registration_endpoint: http://keycloak:8081/realms/{realm}/clients-registrations/openid-connect
 ```
 
-*Corrected 2026-08-21 by [#80](https://github.com/marcosfsousa/mcp-erp/issues/80) — the host, and nothing else.* The line above was transcribed with `localhost:8081`. `KC_HOSTNAME` is `http://keycloak:8081` and the issuer is `http://keycloak:8081/realms/mcp-erp`, so `keycloak:8081` is the authority Keycloak advertises every endpoint on, this one included. The decision is untouched; a quoted probe that names an authority the server never returns is a stale claim rather than a record of what was decided.
+*Corrected 2026-08-21 by [#80](https://github.com/marcosfsousa/mcp-erp/issues/80) — the host, and nothing else.* The line above was transcribed with `localhost:8081`. `compose.yaml` sets `KC_HOSTNAME` to `${MCP_KEYCLOAK_ORIGIN:-http://keycloak:8081}` and the issuer the seed declares is `http://keycloak:8081/realms/mcp-erp`, so on the run this ADR describes `keycloak:8081` is the authority Keycloak advertises every endpoint on, this one included. The decision is untouched; a quoted probe that names an authority the server never returns is a stale claim rather than a record of what was decided.
 
 So "dropped" means *the client-registration policy refuses anonymous registration*. The endpoint exists and says no.
 
