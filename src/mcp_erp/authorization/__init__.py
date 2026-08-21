@@ -6,8 +6,10 @@ unfilled (map constraint ``#10``).
 
 Owns the principal directory, the frozen ``Claims``/``Principal`` stages, the
 ``Action`` seam, the ``Rule`` and ``Resource`` protocols, the ``Reason`` record
-with its closed ``Remedy`` and ``DenialClass`` vocabularies, and the one ordered
-policy chain behind three entry points.
+with its closed ``Remedy`` and ``DenialClass`` vocabularies, the one ordered
+policy chain behind three entry points, and — since #82 — the ``UnusableArgument``
+signal, which decides nothing and is here because it is the one name layers 1 and
+3 both need.
 
 Imports nothing from layers 1 or 3 — enforced by the *Layer 2 knows nothing
 above it* contract over the whole static import graph, and by the ejection job
@@ -18,6 +20,7 @@ line and a reader can see the whole of what crosses it in ``__all__`` below.
 """
 
 from mcp_erp.authorization.action import Action, Capability, Resource, Rule
+from mcp_erp.authorization.arguments import UnusableArgument
 from mcp_erp.authorization.directory import (
     DIRECTORY_MISS,
     DirectoryEntry,
@@ -61,6 +64,7 @@ __all__ = [
     "Remedy",
     "Resource",
     "Rule",
+    "UnusableArgument",
     "decide_call",
     "decide_item",
     "permits_scope",

@@ -125,6 +125,10 @@ _Avoid_: result, verdict, judgement, outcome **as another word for this one**. T
 Any authorization decision that stops a call. Deliberately not "error" — two of the three kinds are not errors in any protocol sense.
 _Avoid_: error, failure, rejection, denial
 
+**Unusable argument**:
+A call carrying an argument the tool's own declaration does not permit. **Not a kind of Refusal and never counted as one**: nothing was authorized or denied, so it carries no Reason and no Denial class, and the three shapes stay three. Named as its own thing because the alternative — calling it an error, or a fourth denial class — is what the closed vocabulary above exists to prevent. *(Recorded 2026-08-21 by [#82](https://github.com/marcosfsousa/mcp-erp/issues/82), which gave it a type of its own; [ADR-0013](docs/adr/0013-layer-3-declares-what-layer-2-decides-and-layer-1-never-learns-why.md) had described the case since 2026-08-19 as the handler's "third answer", with no name for it.)*
+_Avoid_: invalid params (the wire code, not the concept), bad input, validation error, refusal
+
 **Denial class**:
 One of the three shapes a refusal takes on the wire, chosen by what would fix it for the caller. One of its three members is named for a **protocol error**, which is exact rather than a lapse against the line below: the Refusal entry's *"two of the three kinds are not errors in any protocol sense"* says of the third that it is one.
 _Avoid_: error type, status

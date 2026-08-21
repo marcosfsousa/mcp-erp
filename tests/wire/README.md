@@ -117,6 +117,31 @@ class of reason: a property true by **absence** has no behaviour to drive. The
 alternative was a sixth directory holding one file. Recorded as an amendment to
 ADR-0013 by #41, which narrows the struck sentence above rather than keeping it.
 
+**Three more are not over HTTP, since #82, and two of them could not be.** The
+key set's refusal when the document is unreadable, the issuer step answering
+*missing* rather than *mismatched*, and dispatch's catch not dressing our own
+failure as the caller's — `test_the_cause_a_refusal_names.py`, one file for one
+seam asked in three places. All three are what the server does **regardless of
+the caller**, which is this directory's own dividing line, and the two that
+could not be driven over HTTP say why in the file: a real authorization server
+does not serve a key set PyJWT cannot read, and a real store does not raise the
+exception layer 1 was catching, so the failures they falsify have no altitude to
+be provoked at. The third — an argument a declaration forbids still answering
+`-32602` — is over HTTP already, in `test_submit_requisition.py` and
+`test_approve_requisition.py`, and is restated here because what has to hold is
+the **difference** between the two, which neither of those files can see. The
+precedent is the one #41 set immediately above; the alternative was, again, a
+sixth directory.
+
+**No scenario row was minted for any of the three**, on the rule the section
+above already takes: nothing gets through, the caller is refused either way, and
+what changed is which word the refusal carries. The absent-`iss` case did earn a
+**second test on an existing row** — `foreign_issuer_token`, in the attack suite,
+which is the row it is a near miss for and the shape `unknown_key` already
+carries there. A row taking more than one test is the suite's own precedent, and
+it is what lets that assertion sit over the wire without moving a count.
+Recorded as an amendment to ADR-0013 by #82.
+
 **The listing's freshness hint stays here, since #66.** `cacheScope`, the
 `ttlMs` cap, the declared schemas and `listChanged: false` were listed above as
 matrix-bound and are not: they are things the server states **identically to

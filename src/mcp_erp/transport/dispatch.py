@@ -35,13 +35,18 @@ one a model would try to self-correct past.
 declared schema does not permit answer ``-32602``, the protocol's own code for a
 request that cannot be acted on. Nothing was authorized or denied, so it carries
 no ``Reason`` and no ``denial_class`` — giving it one would amend a closed
-vocabulary for a spelling mistake.
+vocabulary for a spelling mistake. A handler says so with
+:class:`~mcp_erp.authorization.arguments.UnusableArgument`, a name only a handler
+raises: the catch spans the handler's whole iteration, and a type the standard
+library shares with the store would make every failure below it the caller's
+fault (#82).
 
 Nothing here keys on a tool's name — the negative guarantee the cut did not
 touch, and the one worth keeping.
 """
 
 import json
+import logging
 from collections.abc import Mapping, Sequence
 from typing import Any, Final
 
@@ -52,7 +57,13 @@ from mcp.server.lowlevel import Server
 from mcp_types.jsonrpc import INTERNAL_ERROR, INVALID_PARAMS
 from starlette.requests import Request
 
-from mcp_erp.authorization import Decision, DenialClass, Principal, Reason
+from mcp_erp.authorization import (
+    Decision,
+    DenialClass,
+    Principal,
+    Reason,
+    UnusableArgument,
+)
 from mcp_erp.transport import refusals
 from mcp_erp.transport.gates import PRINCIPAL_STATE, TOKEN_STATE
 from mcp_erp.transport.registry import Outcome, Registry
@@ -75,6 +86,25 @@ nothing from each other, and a constant they shared would have to live in layer
 either side can catch the two drifting apart, so the equality is asserted at the
 one altitude that sees both:
 ``tests/wire/test_the_fold.py::test_the_declared_key_and_the_rendered_one_are_one_key``.
+"""
+
+INTERNAL_FAILURE: Final = "Internal server error"
+"""What a caller is told when the failure was ours, and it says nothing else.
+
+Word for word the protocol package's own generic message on the modern leg, so
+converting a handler's escaped exception here changes what a **legacy** caller
+reads and leaves a modern one's answer exactly as it was. Two eras, one body:
+which leg a caller arrived on is not a fact this server discloses either.
+"""
+
+_LOGGER: Final = logging.getLogger(__name__)
+"""Where a failure of ours goes now that it no longer goes to the caller.
+
+The package logs an unrecognised handler exception itself, and converting one
+into an ``MCPError`` stops it doing so — an `MCPError` is a *recognised* failure
+and is rendered rather than reported. This restores what the conversion takes
+away rather than introducing a practice: without it, closing the disclosure would
+have closed the only record that anything went wrong.
 """
 
 MAXIMUM_LISTING_TTL_MS: Final = 300_000
@@ -166,19 +196,47 @@ def build(registry: Registry) -> Server[None]:
                 outcome
                 async for outcome in registration.handler(principal, parameters.arguments or {})
             ]
-        except ValueError as unusable:
+        except UnusableArgument as unusable:
             # **Not a refusal, and deliberately not one.** Nothing was authorized
             # or denied here — the arguments are not ones the declared schema
             # permits — so it gets the protocol's own code for a request that
             # cannot be acted on rather than a `Reason`, which would amend a
             # closed vocabulary for a spelling mistake.
             #
-            # `ValueError` because it is the standard library's name for exactly
-            # this, so a handler signals it without importing anything layer 1
-            # owns. The catch stays wrapped around the handler's own iteration
-            # and nothing else, and layer 1 still learns no grounds: the message
-            # is the handler's, and this module never inspects it.
+            # **The span is the handler's whole iteration and the type is what
+            # narrows it.** Until #82 this caught `ValueError`, on the argument
+            # that a handler could then signal without importing anything layer 1
+            # owns — and the store is awaited inside that iteration, so any
+            # `ValueError` from below it answered *the arguments are not ones the
+            # declared schema permits*, with whatever the thing that failed
+            # happened to say as the message. A type only a handler raises is
+            # what makes this catch mean what the paragraph above claims; the
+            # span could not be narrowed instead, because an async generator's
+            # body does not run until it is iterated.
+            #
+            # Layer 1 still learns no grounds: the message is the handler's, and
+            # this module never inspects it.
             raise MCPError(INVALID_PARAMS, str(unusable)) from unusable
+        except Exception as failure:
+            # **Everything else out of the iteration is ours, and is refused in
+            # our own words.** Narrowing the type above is only half of #82: an
+            # exception that merely escapes is not contained, because the
+            # protocol package decides what an unrecognised failure looks like
+            # on the wire and the two eras decide it differently. The modern
+            # entry logs and answers a generic `INTERNAL_ERROR`; the legacy
+            # dispatcher pins `code=0` with `str(error)` as the message for v1
+            # compatibility, which puts a driver's host, port and role name in
+            # the envelope verbatim. ADR-0009 is why that is ours to answer for
+            # rather than the package's: not built is not unreachable, and this
+            # server serves both legs.
+            #
+            # Converting here is what makes the two identical, since an
+            # `MCPError` carries its own `ErrorData` down both paths. The
+            # wording is the modern entry's own, so the leg a caller arrived on
+            # stays invisible to them — which is the same non-disclosure
+            # ADR-0006 keeps one gate up.
+            _LOGGER.exception("the handler for %r raised", registration.name)
+            raise MCPError(INTERNAL_ERROR, INTERNAL_FAILURE) from failure
 
         if not outcomes:
             # A handler answers, always. Nothing at all is what a batch that
