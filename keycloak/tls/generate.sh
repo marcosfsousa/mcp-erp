@@ -18,16 +18,34 @@
 # nowhere. A trusted certificate authority reaches every site the reader visits.
 #
 #
-# THE AUTHORITY'S PRIVATE KEY IS DESTROYED, AND THAT IS THE POINT
-# ---------------------------------------------------------------
-# It exists for one `-gencert` and is deleted in the last line. What stays on
-# disk is the authority's *certificate*, which is what the trust store needs,
-# and the leaf key, which is Keycloak's and is trusted by nothing. So the thing
-# the reader installs has no usable private key anywhere — not in this
-# repository, and not in the directory it wrote.
+# THE AUTHORITY'S PRIVATE KEY IS DESTROYED. THE LEAF'S IS NOT
+# -----------------------------------------------------------
+# The authority's key exists for one `-gencert` and is deleted in the last line.
+# What stays on disk is the authority's *certificate*, which is what the trust
+# store needs. So the thing the reader installs has no usable private key
+# anywhere — not in this repository, and not in the directory it wrote.
 #
-# Re-minting therefore means trusting again. That is the honest cost of the
-# property above, and one year is the validity chosen against it.
+# **The leaf key stays, and after the trust step the reader's whole machine
+# trusts what it signs.** `keycloak.p12` holds it, under the password below,
+# which this repository
+# commits. `keycloak/README.md` §*Trusting the certificate* sends the reader to
+# the Windows **Local Machine** store, the macOS **System** keychain or
+# `/usr/local/share/ca-certificates` — machine-wide, all three — and from that
+# moment the certificate that key belongs to is accepted for `DNS:keycloak`
+# **and `DNS:localhost`**, for 365 days. Concretely: whoever obtains that one
+# file can present a valid `https://localhost` certificate to that reader for a
+# year, against any local service they browse.
+#
+# Reaching the file needs local access to the reader's machine already, which is
+# the whole of why an exhibit that runs nowhere else accepts it. It is written
+# down because the two keys are not the same promise, and this header is where a
+# reader looks for the difference.
+#
+# **Revoking the grant is two steps**, and re-minting is not one of them on its
+# own: delete `keycloak/tls/` — which takes the leaf key with it — and remove
+# *mcp-erp demo certificate authority* from the store it was added to. Minting
+# again therefore means trusting again. That is the honest cost of the property
+# above, and one year is the validity chosen against it.
 #
 #
 # KEYTOOL RATHER THAN OPENSSL

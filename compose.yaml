@@ -307,8 +307,17 @@ services:
     # so map constraint `#11` costs nothing here: the profile adds no external
     # image. It is also the only one at hand that can do the job — the base is a
     # micro image with neither `openssl` nor `curl`, and a JVM, so `keytool`.
-    build:
-      context: ./keycloak
+    #
+    # **The tag and no `build:`, because the service above already builds it.**
+    # Two services declaring the same `build:` and the same `image:` build that
+    # tag twice, in parallel — measured on Compose v5.3.1, two `Building` lines
+    # and two exporters for one Dockerfile. It resolves to the same image, so it
+    # was waste rather than a race, and leaning on the other service's build
+    # spends nothing: Compose builds the whole project before it starts any of
+    # it, so the tag exists by the time this container is created, and a service
+    # whose image another service builds is not pulled. The cost is that
+    # `docker compose --env-file tls.env up keycloak-certificate` — this service
+    # *alone*, which nothing documents — would have nothing to build the tag.
     image: mcp-erp-keycloak:26.7.1
     # **Root, and the script gives the files back.** The image runs as uid 1000,
     # and a Linux bind mount carries host ownership through unchanged — so on any
@@ -319,6 +328,15 @@ services:
     entrypoint:
       - /bin/bash
       - /tls/generate.sh
+    # The script's argument list, stated rather than inherited. Overriding
+    # `entrypoint:` already clears the image's `CMD` — measured on Compose
+    # v5.3.1: the container is created with `Cmd=null` where the image carries
+    # `["start", "--optimized", "--import-realm"]` — so this changes nothing
+    # today. It is here because that is a default a reader has to know to read
+    # the two lines above, and because the day `generate.sh` grows a `"$@"` or a
+    # `getopts` is the day the difference between "no arguments" and "whatever
+    # the image's `CMD` happens to be" stops being invisible.
+    command: []
     volumes:
       # The one service that writes here. Everything else mounts it read-only,
       # and it is a bind mount rather than a named volume because the reader has

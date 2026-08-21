@@ -9,6 +9,18 @@ several steps from the line that caused it. `IdentitySeed.issuers` and
 `tests/tokens.py`'s issuer check both exist to keep that failure unreachable;
 neither of them can see an edit to `compose.yaml` or to `tls.env`.
 
+**The option files the profile selects are held to the same standard**, because
+they fail in the same shape and one of them failed silently. `env_file`'s
+`required: false` is what lets the default configuration read no file at all,
+and it is also what makes a typo in `MCP_TLS_SERVER_ENV` cost nothing at render
+time: Compose exits 0, says nothing, and produces a configuration with no
+`SSL_CERT_FILE` in it. The stack then comes up, Keycloak serves TLS, and the
+resource server's key-set fetch fails certificate verification — which arrives
+as `invalid_token` on every call, several steps from the wrong character. So the
+paths are resolved here the way Compose resolves them, required to exist, and
+required to name somewhere the containers actually have: the `/tls` mount target
+the services declare.
+
 **It interpolates rather than matching literals.** Compose's `${VAR:-default}`
 is the mechanism the whole profile rests on — the default configuration is what
 the file says with nothing set, and the profile is what it says with `tls.env`
@@ -24,7 +36,7 @@ invariants a diff cannot see.
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import pytest
@@ -33,13 +45,22 @@ import yaml
 from mcp_erp.authorization.identity import SEED, IdentitySeed, read_identity_seed
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-"""The checkout, for the three committed files this reads."""
+"""The checkout, and the directory Compose resolves every relative path against.
+
+That second half is load-bearing rather than incidental: `tls.env` names its
+option files as `./keycloak/tls/…`, and Compose reads them relative to the
+project directory — not relative to the env file that named them. Resolving them
+any other way here would be a check on a path no container ever opens.
+"""
 
 COMPOSE = REPOSITORY / "compose.yaml"
 PROFILE = REPOSITORY / "tls.env"
 
 REPLICAS = ("server-1", "server-2")
 """Both, because one replica configured differently is a stack that half works."""
+
+CERTIFICATES = "./keycloak/tls"
+"""The profile's certificate directory, as every service names it on the host."""
 
 SUBSTITUTION = re.compile(r"\$\{(\w+)(?::-([^}]*))?\}")
 """Compose's `${NAME}` and `${NAME:-default}`, which is all this file uses.
@@ -94,6 +115,55 @@ def services() -> dict[str, Any]:
 def profile() -> dict[str, str]:
     """`tls.env`, which is the whole of what selecting the profile means."""
     return _env_file(PROFILE)
+
+
+def _mount_target(services: dict[str, Any]) -> str:
+    """The one container path the services mount the certificate directory at.
+
+    Three declare it — the two the profile configures and the one that writes the
+    files — and the option files below name absolute paths inside it. Moving the
+    target in one service and not another would leave those options pointing at
+    nothing, so this refuses to answer unless all three agree.
+    """
+    targets = {
+        str(entry).split(":")[1]
+        for service in services.values()
+        for entry in service.get("volumes", ())
+        if str(entry).split(":")[0] == CERTIFICATES
+    }
+    assert len(targets) == 1, targets
+
+    return targets.pop()
+
+
+def _selected_option_files(
+    services: dict[str, Any], profile: dict[str, str]
+) -> list[tuple[str, str, str]]:
+    """Every option file the profile selects: which service, which name, which path.
+
+    An entry counts when its path is interpolated from a variable `tls.env` sets
+    — which is exactly what "the profile selects it" means, and is why this reads
+    `compose.yaml` rather than listing the two `MCP_TLS_*` names. A third one
+    added to the profile is enrolled by being written, not by this file being
+    remembered.
+
+    Paths come back as Compose resolves them: relative to the project directory,
+    which is the repository, and not to `tls.env`'s own directory.
+    """
+    selected: list[tuple[str, str, str]] = []
+    for name, service in sorted(services.items()):
+        for entry in service.get("env_file", ()):
+            template = entry["path"] if isinstance(entry, dict) else str(entry)
+            variables = [
+                match.group(1)
+                for match in SUBSTITUTION.finditer(template)
+                if match.group(1) in profile
+            ]
+            if not variables:
+                continue
+            selected.append((name, ", ".join(variables), _interpolate(template, profile)))
+
+    return selected
 
 
 def _issuer(services: dict[str, Any], environment: dict[str, str]) -> str:
@@ -168,3 +238,61 @@ def test_the_profile_serves_tls_on_the_one_published_port(
 
     assert published == {options["KC_HTTPS_PORT"]}
     assert plain not in published
+
+
+def test_every_option_file_the_profile_selects_is_there(
+    services: dict[str, Any], profile: dict[str, str]
+) -> None:
+    """A typo in one of these paths is otherwise free, and that is the whole point.
+
+    `required: false` is load-bearing — it is what lets the default run read no
+    file — and it means Compose renders a wrong path without a word. The variable
+    that had no reader at all was `MCP_TLS_SERVER_ENV`: it appears in
+    `compose.yaml` and in `tls.env` and nowhere else, and a stack started on a
+    misspelling of it refuses every token as `invalid_token` with the cause three
+    services away.
+
+    The message names the file, because "which path is wrong" is the entire
+    diagnosis and reading it out of a stack trace is not.
+    """
+    selected = _selected_option_files(services, profile)
+
+    assert selected, "tls.env selects no option file — the profile configures nothing"
+
+    missing = [
+        f"{variable} names {path!r}, which {service} reads and which is not in the repository"
+        for service, variable, path in selected
+        if not (REPOSITORY / path).is_file()
+    ]
+
+    assert not missing, "\n".join(missing)
+
+
+def test_every_path_the_option_files_name_is_under_the_mount_that_carries_it(
+    services: dict[str, Any], profile: dict[str, str]
+) -> None:
+    """The container paths and the bind mount are one fact, written in two places.
+
+    `KC_HTTPS_KEY_STORE_FILE` and `SSL_CERT_FILE` both name `/tls/…`, and `/tls`
+    is a mount target `compose.yaml` declares three times. Nothing joined them:
+    moving the target would leave both options naming a directory that no longer
+    exists in the container, and the failure would arrive as a keystore Keycloak
+    cannot open or a key set the resource server cannot verify.
+
+    An absolute value is the test for "this is a path", which is what
+    distinguishes the two above from a port and a password sitting beside them.
+    """
+    target = PurePosixPath(_mount_target(services))
+
+    for service, _, path in _selected_option_files(services, profile):
+        options = REPOSITORY / path
+        # A file that is not there is the test above's diagnosis, and one defect
+        # should light one test rather than two — this one would report it as a
+        # stack trace, which is the worse of the two messages.
+        if not options.is_file():
+            continue
+
+        for option, value in _env_file(options).items():
+            if not value.startswith("/"):
+                continue
+            assert PurePosixPath(value).is_relative_to(target), (service, option, value)
