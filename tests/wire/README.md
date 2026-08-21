@@ -106,7 +106,7 @@ here drives real HTTP against Compose like the three suites beside it~~.
 Recorded as an amendment to ADR-0013 by #37.
 
 **~~One assertion~~ ~~Two assertions~~ ~~Four assertions~~ Seven assertions here
-are not over HTTP** — one since #41, one since #85, two since #38 that no count
+are not over HTTP** — one since #41, one since #85, two since #37 that no count
 ever carried, and three since #82. They are **not one kind**: the four #85
 counted are three, set out below, and #82's three are described in their own
 section further down. Amended by #85 and #82, which landed the same day.
@@ -135,7 +135,7 @@ merely stay green, and nginx answers no request reporting its worker count.
 in a suite that otherwise speaks only HTTP — so the committed file is read
 instead, on the same terms as the seed's rendering checks.
 
-**That file has said so in its own docstring since #38; the count above it never
+**That file has said so in its own docstring since #37; the count above it never
 did.** Which is why the number moves twice in one edit. The first two exceptions
 were found by writing them, and a count maintained only when someone writes a new
 exception cannot see one that was already there — this one was found by counting.
