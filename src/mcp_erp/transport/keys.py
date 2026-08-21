@@ -165,9 +165,36 @@ class KeySet:
         become :class:`UnknownKeyIdentifier` at the call site: the caller's
         answer is the same, and a transport error carries facts about our own
         infrastructure that a refusal must not disclose.
+
+        **Every failure, rather than a list of them, and the list is why.** Until
+        #82 this suppressed four names, and each was there for a step written
+        above it: the transport's own errors, the issuer disagreement
+        :meth:`_discover` raises, the missing key in the document it reads, and a
+        body that is not JSON. ``PyJWKSet.from_dict`` came last and brought none
+        of its own, so an empty or malformed key set left the token gate as an
+        unhandled error and the caller got a ``500`` where they were owed
+        ``401 unknown_key`` — the one outcome the suppression exists to prevent,
+        reached through the suppression itself.
+
+        A hand-written tuple is the wrong shape for the claim. What this method
+        promises is not *these four things may go wrong* but **after it, either
+        there are keys or there are not** — and the ways there are not include
+        every library-internal exception in a dependency whose hierarchy nobody
+        here enumerates. Enumerating it again would be the same defect with a
+        longer list. ``anyio``'s cancellation is not caught, because
+        ``CancelledError`` descends from ``BaseException``: a request being torn
+        down still tears down.
+
+        **What it costs is a bug in this block going unseen**, since a defect of
+        ours here is indistinguishable from an authorization server that is down
+        — both leave ``self._keys`` as it was and both refuse the caller. The
+        price is paid rather than hidden: the success path has a falsifier of its
+        own beside the failure ones, in
+        ``tests/wire/test_the_cause_a_refusal_names.py``, because a suppression
+        this wide is only safe while something proves the keys still arrive.
         """
         self._last_attempt = anyio.current_time()
-        with contextlib.suppress(httpx2.HTTPError, RuntimeError, ValueError, KeyError):
+        with contextlib.suppress(Exception):
             metadata = await self.metadata()
             response = await self._client.get(metadata.jwks_uri)
             response.raise_for_status()

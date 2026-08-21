@@ -138,6 +138,15 @@ async def validate(token: str, *, key_set: KeySet, issuer: str, audience: str) -
     realm is refused for the reason it is actually wrong, rather than incidentally
     because its key is unknown to us.
 
+    **The issuer step is two questions, since #82.** A token that names no issuer
+    is refused ``malformed`` and one that names the wrong issuer
+    ``issuer_mismatch``; folding them together answered every absent claim with a
+    comparison that never happened. A **non-string** ``iss`` — ``123``, a list —
+    stays on the second branch and is refused ``issuer_mismatch``, which is a
+    position rather than an oversight: the claim is there and it is not ours, and
+    the caller's remedy is the same one a wrong string earns. Absence is the only
+    thing the first branch is about.
+
     Args:
         token: The credential from the ``Authorization`` header.
         key_set: The issuer's signing keys, refetched on a miss behind a cooldown.
@@ -156,7 +165,27 @@ async def validate(token: str, *, key_set: KeySet, issuer: str, audience: str) -
     except jwt.PyJWTError as error:
         raise TokenRefusal(MALFORMED) from error
 
-    if unverified.get("iss") != issuer:
+    if "iss" not in unverified:
+        # Absent is not wrong. `iss` is in `REQUIRED_CLAIMS`, so a token carrying
+        # none is missing something rather than disagreeing about it, and
+        # `issuer_mismatch` would name a comparison this server never made. The
+        # branch below draws the same distinction in the other direction — a
+        # token naming no key is `unknown_key` and not `malformed`, because it is
+        # structurally fine — and it is the same reasoning one step earlier.
+        #
+        # Checked here rather than left to `require` in the decode below, which
+        # would also answer `malformed`: the key lookup and the signature check
+        # run in between, so a token with no `iss` *and* an unpublished `kid`
+        # would be refused `unknown_key` — a third cause, and no truer than the
+        # first two.
+        raise TokenRefusal(MALFORMED)
+
+    # Subscripted rather than `.get`, because the branch above is what makes it
+    # total and saying so twice would make neither line the rule. The two are
+    # deliberately coupled: delete the guard and this raises `KeyError` instead
+    # of quietly answering `issuer_mismatch` to a claim that is not there, which
+    # is the failure #82 found and the louder way to fail it again.
+    if unverified["iss"] != issuer:
         raise TokenRefusal(ISSUER_MISMATCH)
 
     key_id = header.get("kid")

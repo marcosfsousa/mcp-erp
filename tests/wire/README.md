@@ -105,9 +105,11 @@ a layer.** ADR-0013's prohibition is on a directory named `transport/` or
 here drives real HTTP against Compose like the three suites beside it~~.
 Recorded as an amendment to ADR-0013 by #37.
 
-**~~One assertion~~ ~~Two assertions~~ Four assertions here are not over HTTP**
-— one since #41, one since #85, and two since #38 that no count has ever
-carried. They are **three kinds**, not one. Amended by #85.
+**~~One assertion~~ ~~Two assertions~~ ~~Four assertions~~ Seven assertions here
+are not over HTTP** — one since #41, one since #85, two since #38 that no count
+ever carried, and three since #82. They are **not one kind**: the four #85
+counted are three, set out below, and #82's three are described in their own
+section further down. Amended by #85 and #82, which landed the same day.
 
 The second is `test_two_simultaneous_decisions_on_one_requisition_mint_one_order`
 reading `purchase_order` directly through `fixtures.purchase_orders_for`. *One
@@ -149,6 +151,31 @@ prose would fail on the sentence describing what it asserts. The precedent is
 class of reason: a property true by **absence** has no behaviour to drive. The
 alternative was a sixth directory holding one file. Recorded as an amendment to
 ADR-0013 by #41, which narrows the struck sentence above rather than keeping it.
+
+**Three more are not over HTTP, since #82, and two of them could not be.** The
+key set's refusal when the document is unreadable, the issuer step answering
+*missing* rather than *mismatched*, and dispatch's catch not dressing our own
+failure as the caller's — `test_the_cause_a_refusal_names.py`, one file for one
+seam asked in three places. All three are what the server does **regardless of
+the caller**, which is this directory's own dividing line, and the two that
+could not be driven over HTTP say why in the file: a real authorization server
+does not serve a key set PyJWT cannot read, and a real store does not raise the
+exception layer 1 was catching, so the failures they falsify have no altitude to
+be provoked at. The third — an argument a declaration forbids still answering
+`-32602` — is over HTTP already, in `test_submit_requisition.py` and
+`test_approve_requisition.py`, and is restated here because what has to hold is
+the **difference** between the two, which neither of those files can see. The
+precedent is the one #41 set immediately above; the alternative was, again, a
+sixth directory.
+
+**No scenario row was minted for any of the three**, on the rule the section
+above already takes: nothing gets through, the caller is refused either way, and
+what changed is which word the refusal carries. The absent-`iss` case did earn a
+**second test on an existing row** — `foreign_issuer_token`, in the attack suite,
+which is the row it is a near miss for and the shape `unknown_key` already
+carries there. A row taking more than one test is the suite's own precedent, and
+it is what lets that assertion sit over the wire without moving a count.
+Recorded as an amendment to ADR-0013 by #82.
 
 **The listing's freshness hint stays here, since #66.** `cacheScope`, the
 `ttlMs` cap, the declared schemas and `listChanged: false` were listed above as
