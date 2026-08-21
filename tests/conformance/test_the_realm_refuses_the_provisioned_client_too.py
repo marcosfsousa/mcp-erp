@@ -7,10 +7,13 @@ this directory's flow uses is declared nowhere: it is provisioned at runtime fro
 a hosted Client Identity Metadata Document, its `clientId` **is** that document's
 URL, and no file in this repository names it.
 
-**That gap has already shipped a defect once.** #46 found the fifth client
-accepting `plain` and accepting no `code_challenge` at all, because the SHA-256
-pin was a per-client attribute and a per-client attribute cannot reach a client
-the realm does not contain. The repair was a second `pkce-enforcer` policy
+**That gap has already shipped a defect once.** #46 found this client accepting
+`plain` and accepting no `code_challenge` at all, because the SHA-256 pin was a
+per-client attribute and a per-client attribute cannot reach a client the realm
+does not contain. `keycloak/README.md` calls it *the fifth* and this file calls
+it *the sixth*: the realm declared four authored clients when #46 was written and
+declares five now, so the ordinal moves and the client does not. It is named
+rather than numbered everywhere below. The repair was a second `pkce-enforcer` policy
 conditioned on `client-access-type: public`, which is the one thing every client
 here has in common — and until this module, **nothing asserted the repair.**
 Deleting that policy leaves all forty assertions in the two files above green
@@ -31,6 +34,15 @@ out of it.** The admin API would answer these questions faster and would be
 answering a different one: ADR-0007's caveat is that the pin is per client and
 the metadata is realm-wide, so what a row may assert is the refusal. A stored
 attribute saying `S256` is not a client that refuses `plain`.
+
+**The request builders here are near-copies of
+`tests/attack_suite/test_the_realm_refuses.py`'s, and they stay copies for now.**
+The rule this repository applies to shared test tooling is the one `tokens.py`
+and `requisitions.py` both state — a helper moves up beside them at its **third**
+caller, because two is a coincidence and three is a pattern. This is the second.
+When a third arrives, what moves up is the authorization request and the token
+post; what cannot move is the client each one names, which is the whole
+difference between the two files.
 """
 
 from __future__ import annotations

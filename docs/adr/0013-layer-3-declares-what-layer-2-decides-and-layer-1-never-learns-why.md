@@ -323,6 +323,12 @@ The alternative was to mint scenario rows for the first two, and it was declined
 
 The precedent is `tests/authorization/test_purity.py`, which reads layer 2's source for the same class of reason: a property that is true by *absence* has no behaviour to drive. The sentence above is therefore narrowed rather than kept — the directory is named for the altitude its assertions share, and one of them belongs to a claim that has no altitude.
 
+*Amended 2026-08-21 by [#85](https://github.com/marcosfsousa/mcp-erp/issues/85).* **A second assertion in `tests/wire/` is not over HTTP, and it is a different exception.** ~~One assertion~~ **Two**.
+
+`test_two_simultaneous_decisions_on_one_requisition_mint_one_order` reads `purchase_order` directly, through `tests/fixtures.py`. *One order was minted* is the half of ADR-0002's promise no response can carry: a refused item answers with a reason and no order, so the wire cannot distinguish *no second order* from *a second order that was not shown* — and ADR-0002's count of five cut every read tool that demonstrated no authorization behaviour, so no tool lists one. The bullet above is a claim with **no altitude**; this is a claim with an altitude and no *tool*. The assertion is about what a call did to the rows behind it, and those rows are reachable only one layer down.
+
+So the narrowing holds and the count moves: the directory is still named for the altitude its assertions share, and the exceptions are now two — one property that has no altitude, and one effect that has no tool. ADR-0003 already priced the credential this needs, choosing a suite that holds a database password over a test-only reset route, and `tests/attack_suite/` has read the same table on those terms since #41.
+
 ### Both generators, split by the vocabulary each speaks
 
 The **identity generator** lives in `authorization/`: it reads the seed's authored cast and renders directory rows and the authorization server's user import. The **fixture generator** lives in `purchase_to_pay/`: it reads the matrix definition and emits one requisition per row. Each is deleted with the layer whose words it uses, so ejection correctly removes the fixture generator while provisioning survives — ADR-0004's criterion 4 read literally rather than approximately.
@@ -398,7 +404,7 @@ Because `app.py` sits at the package root rather than inside any sub-package, th
 | Server posture | the server exposes, declares or deploys something other than what it should, with no caller's authorization involved | yes |
 | Decision matrix (wire) | an authorization expectation is wrong | yes |
 | Attack suite (wire) | a defence regressed | yes |
-| Authorization code flow | the flow broke, or what it says on the wire changed (preflight names external causes first) | yes + network |
+| Authorization code flow | the flow broke, or what it says on the wire changed, **or the realm stopped refusing what it refuses for the client that has no file** (preflight names external causes first) | yes + network |
 
 **~~All eight~~ Every context gates `main`.** Set equality holds in both directions, there is no exemption list to justify, and ADR-0008's *"a check that can never block becomes noise"* applies uniformly. ADR-0008 already committed the conformance job as the repository's first required status check.
 

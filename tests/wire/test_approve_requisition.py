@@ -132,19 +132,25 @@ refusal be sorted into one list — which is what keeps an assertion about *whic
 two answers came back* from also having to say which thread got which.
 """
 
-SIMULTANEOUS_ATTEMPTS = 5
-"""How many times the race below is driven, and why it is more than one.
+SIMULTANEOUS_ATTEMPTS = 12
+"""How many times the race below is driven, and why the number is measured.
 
-The barrier releases both callers together, which is what makes them
-simultaneous. It does not make either one arrive inside the other's window on a
-runner nobody controls, and five cheap attempts buy that where one does not: the
-rows are raised and decided over the loopback, and the whole test costs under a
-second.
+The barrier releases both callers together, and that is not the same as either
+one landing inside the other's window: each thread still builds its client and
+connects after the release, and that slack is where a lost race gets missed.
 
-**Five attempts are not five chances to flake.** Under the guard as written the
-pair is deterministic — one permit and one `already_decided`, every time — and
-the only thing that varies is which caller wins. That is why the assertion is
-written over a sorted pair rather than over a first and a second.
+**Measured against the deletion rather than guessed at.** Driven 60 times with
+the terminal check moved out of the write, the pair came apart **32 times** — a
+hit rate near one attempt in two. Twelve attempts put the chance of a run missing
+all of them under one in eight thousand, and cost about two seconds: a row raised
+and decided over the loopback is cheap, which is the only reason a number this
+size is affordable.
+
+**Twelve attempts are not twelve chances to flake.** Under the guard as written
+the pair is deterministic — one permit and one `already_decided`, every time —
+and the only thing that varies is which caller wins. That is why the assertion is
+written over a sorted pair rather than over a first and a second. The attempts
+buy sensitivity to the deletion, and they cost nothing against the code as it is.
 """
 
 
@@ -535,26 +541,38 @@ def test_two_simultaneous_decisions_on_one_requisition_mint_one_order() -> None:
     check against what was true when it was read: two callers deciding the same
     requisition at once would both pass it"* — so the guard is the predicate
     riding in the `UPDATE`, and a suite whose second caller always arrives second
-    gives the same verdict whether the guard is there or not.
+    answers the same way whether the guard is there or not.
 
-    **What it falsifies, stated as the deletion.** Move the terminal check out of
-    the write and into a read of the row before it — the shape the docstring
-    calls a race two callers both pass — and every sequential assertion in this
-    file and in `double_approval_via_batch_retry` stays green while this one goes
-    red. Dropping the predicate outright is a different deletion and the
-    sequential ones already catch it; this is the one nothing else sees.
+    **What it falsifies, stated as the deletion, and confirmed by performing it.**
+    Move the terminal check out of the write and into a read of the row before it
+    — the shape the docstring calls a race two callers both pass — and **26**
+    sequential assertions across this file and `double_approval_via_batch_retry`
+    stay green while this one goes red. Dropping the predicate outright is a
+    different deletion, and the sequential ones already turn **five** tests red on
+    it; this is the one nothing else sees. Both were run rather than reasoned
+    about, which is what `scenarios.yaml` asks of a recorded removal and what
+    ADR-0009 found the confirm-by-hand rule exists to catch.
 
-    **The word is asserted, and the count beside it.** A lost race does not mint
-    two orders even without the predicate: `purchase_order.requisition_id` is
-    `UNIQUE`, so the schema refuses the second insert and the loser gets `-32603`
-    where ADR-0002 promised `already_decided`. The count alone would call that
-    green. So the reason is what this checks first, and the count rides along
-    because a second guard is worth knowing is still there.
+    **The word is asserted, and that is the load-bearing half.** A lost race does
+    not mint a second order even without the predicate: `purchase_order.
+    requisition_id` is `UNIQUE`, so the schema refuses the insert and the loser
+    gets `-32603` where ADR-0002 promised a reason. Over the 60 attempts that
+    measured :data:`SIMULTANEOUS_ATTEMPTS`, the count was **one every single
+    time** and the word was wrong in 32 of them — so a falsifier that checked only
+    the count would have called the deletion green on all sixty. The count is
+    asserted anyway, because it is what says the second guard is still there.
 
     **One token, minted before either thread starts.** `tokens.mint` caches in a
     plain dict, so two threads reaching a cold key would each perform a whole
     authorization code flow and reach the tool endpoint hundreds of milliseconds
     apart — which is the sequential test again, with threads around it.
+
+    **Here and not in `tests/matrix/`, by that directory's own dividing rule:**
+    *a matrix row asserts the decision; these files additionally assert what the
+    call did.* What is asserted here is the order the pair minted and the status
+    the row reads back as, which is an effect and not a `(principal x tool x
+    resource -> expected)` row — there is no expectation about a caller in it at
+    all, because both callers are the same person holding the same token.
     """
     token = mint(APPROVER, ["erp.decide"]).access_token
 

@@ -105,6 +105,24 @@ a layer.** ADR-0013's prohibition is on a directory named `transport/` or
 here drives real HTTP against Compose like the three suites beside it~~.
 Recorded as an amendment to ADR-0013 by #37.
 
+**~~One assertion~~ Two assertions here are not over HTTP** — one since #41, one
+since #85, and they are not the same kind of exception. Amended by #85.
+
+The second is `test_two_simultaneous_decisions_on_one_requisition_mint_one_order`
+reading `purchase_order` directly through `fixtures.purchase_orders_for`. *One
+order was minted* is the half of ADR-0002's promise the wire cannot answer: a
+refused item carries no order, so a response cannot tell *no second order* from
+*a second order it was not shown*, and ADR-0002 cut every read tool that
+demonstrated no authorization behaviour, so there is no tool to ask. The fold's
+exception below is a property with **no altitude**; this one has an altitude and
+no *tool* — the assertion is about what the call did to the rows behind it, and
+the rows behind it are reachable only one layer down.
+
+The precedent for the credential is ADR-0003's, which took a suite holding a
+database password over a test-only reset route on a server whose whole subject is
+authorization, and `tests/attack_suite/` has read the same table on the same
+terms since #41.
+
 **One assertion here is not over HTTP, since #41.** *Layer 1 contains no
 reference to the tool name, nor to which argument is the batch* is the negative
 guarantee the fold had to be built without breaking, and it is not reachable at

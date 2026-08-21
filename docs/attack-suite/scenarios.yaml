@@ -476,6 +476,15 @@ scenarios:
     status: asserted
     floor: false
     note: >-
+      Either alone still refuses THE FIVE CLIENTS THE REALM FILE DECLARES, which
+      is what this row's test loops over. The policy half alone is falsifiable
+      against the client provisioned from the hosted identity document, and that
+      client is in no file — so clearing the policy leaves every assertion in
+      tests/attack_suite/ green. #85 wrote that falsifier, in
+      tests/conformance/test_the_realm_refuses_the_provisioned_client_too.py,
+      because minting that client needs egress and the attack suite job takes
+      none. The row stays here and one of its two removals is performed there.
+    note: >-
       ADR-0007's caveat is binding: the realm advertises both `plain` and `S256`
       because the pin is per client and discovery does not reflect per-client
       policy. This asserts the server REFUSES a plain challenge for our client —

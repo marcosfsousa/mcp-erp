@@ -412,6 +412,15 @@ def purchase_orders_for(*identifiers: str) -> int:
     refusal carries no order, so the wire cannot tell "no second order" from
     "a second order that was not shown".
 
+    *Amended 2026-08-21 by #85.* **A second suite asks the same question of a
+    concurrent pair rather than of a retry.**
+    `tests/wire/test_approve_requisition.py` reads this for
+    `test_two_simultaneous_decisions_on_one_requisition_mint_one_order`, which is
+    the second assertion in that directory not made over HTTP and says so in its
+    own README. Nothing about the question changed — an effect the tool set does
+    not expose is still an effect the tool set does not expose — so this stayed
+    one function rather than gaining a caller-shaped variant.
+
     Here rather than in that suite for the reason this module exists at all: it
     is where a test-side database credential lives, and a second one is a second
     place for the address and the connection handling to come apart.
