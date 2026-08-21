@@ -66,8 +66,24 @@ name, so a key added to the table appears in the write-up on the same commit
 rather than on the one that remembers to come back here.
 """
 
-QUOTED: Final = frozenset({"quote", "quote_elided", "quote_corrected", "context"})
-"""Citation keys whose value is somebody else's sentence, and so a blockquote."""
+QUOTED: Final = frozenset({"quote", "context"})
+"""Citation keys whose value is somebody else's sentence, and so a blockquote.
+
+**`quote_elided` and `quote_corrected` are not in it, and neither is an
+oversight.** `quote_elided` is a boolean — it says the sentence above carries an
+elision, and blockquoting it publishes the word *True* where a reader expects a
+clause. `quote_corrected` is *our* editorial note about the quote, so a
+blockquote attributes our sentence to the source it corrects.
+"""
+
+FLAGS: Final = frozenset({"quote_elided"})
+"""Citation keys carrying a boolean.
+
+The label is the whole rendering, and a false one renders nothing at all.
+"""
+
+FALSE: Final = frozenset({"False", "false", "no", "off", ""})
+"""What :data:`FLAGS` reads as unset. The rows are parsed to `str`, so `False` arrives as a word."""
 
 LABELS: Final = {
     "source": "Decided by",
@@ -76,10 +92,14 @@ LABELS: Final = {
     "context": "Context, and not the basis",
     "also": "Also",
     "note": "On the citation",
-    "quote_elided": "Quoted with an elision",
-    "quote_corrected": "Quoted with a correction",
+    "quote_elided": "The quote above elides, where it reads …",
+    "quote_corrected": "On the quote, corrected",
 }
-"""How each citation key reads in a document. `quote` needs none — it is the sentence."""
+"""How each citation key reads in a document. `quote` needs none — it is the sentence.
+
+A :data:`FLAGS` key's label is read as a whole sentence, because the label *is*
+the rendering: the value is a boolean and never appears.
+"""
 
 
 def render(rows: Suite) -> str:
@@ -174,6 +194,11 @@ def _citation(row: Scenario) -> list[str]:
 
     for key in _keys(row.citation):
         value = row.citation[key]
+        if key in FLAGS:
+            if value not in FALSE:
+                lines.extend([f"*{LABELS[key]}.*", ""])
+            continue
+
         if key in QUOTED:
             if key != "quote":
                 lines.append(f"*{LABELS[key]}:*")

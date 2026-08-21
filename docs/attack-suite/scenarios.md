@@ -206,8 +206,7 @@ A valid token lacking the operation's scope reaches the operation.
 
 > When a client makes a request with an access token with insufficient scope during runtime operations, the server SHOULD respond with: HTTP 403 Forbidden status code (per RFC 6750 Section 3.1) … WWW-Authenticate header with the Bearer scheme and additional parameters: error="insufficient_scope" … scope="required_scope1 required_scope2" … resource_metadata - the URI of the Protected Resource Metadata document
 
-*Quoted with an elision:*
-> True
+*The quote above elides, where it reads ….*
 
 **Retrieved** 2026-08-12
 
@@ -244,8 +243,7 @@ A header claiming one method or name while the body carries another.
 
 > Servers … MUST reject requests where the values specified in the headers do not match the corresponding values in the request body.
 
-*Quoted with an elision:*
-> True
+*The quote above elides, where it reads ….*
 
 **Retrieved** 2026-08-06
 
@@ -263,11 +261,9 @@ A POST omitting a required standard header is processed anyway.
 
 > These headers are REQUIRED for compliance. … When rejecting a request due to header validation failure, servers MUST return HTTP status 400 Bad Request and MUST include a JSON-RPC error response … Validation failure conditions include: … A required standard header (MCP-Protocol-Version, Mcp-Method, Mcp-Name) is missing.
 
-*Quoted with an elision:*
-> True
+*The quote above elides, where it reads ….*
 
-*Quoted with a correction:*
-> Spot-check 2026-08-12: the original quote was the failure-condition bullet alone, which is descriptive rather than normative. Paired with the REQUIRED statement and the MUST-return sentence that make it binding.
+**On the quote, corrected** Spot-check 2026-08-12: the original quote was the failure-condition bullet alone, which is descriptive rather than normative. Paired with the REQUIRED statement and the MUST-return sentence that make it binding.
 
 **Retrieved** 2026-08-12
 
@@ -297,8 +293,7 @@ A POST missing a required `_meta` field is processed as well-formed.
 
 > A request missing any required field is malformed; the server MUST reject it with JSON-RPC error code -32602 … the response status MUST be 400 Bad Request.
 
-*Quoted with an elision:*
-> True
+*The quote above elides, where it reads ….*
 
 **Retrieved** 2026-08-06
 
@@ -314,8 +309,7 @@ A malicious page in a victim's browser reaching a server on their machine.
 
 > Servers MUST validate the Origin header on all incoming connections … servers MUST respond with HTTP 403 Forbidden.
 
-*Quoted with an elision:*
-> True
+*The quote above elides, where it reads ….*
 
 **Retrieved** 2026-08-06
 
@@ -349,8 +343,7 @@ A standalone server-initiated stream surviving into the modern era.
 
 > A server that supports only this revision and receives such traffic from an older client SHOULD respond as follows: … HTTP GET or DELETE to the MCP endpoint: respond with 405 Method Not Allowed.
 
-*Quoted with an elision:*
-> True
+*The quote above elides, where it reads ….*
 
 **Retrieved** 2026-08-12
 
@@ -399,8 +392,7 @@ A stolen refresh token being redeemed twice.
 
 > Authorization servers MUST utilize one of these methods to detect refresh token replay by malicious actors for public clients: sender-constrained refresh tokens … refresh token rotation.
 
-*Quoted with an elision:*
-> True
+*The quote above elides, where it reads ….*
 
 **Retrieved** 2026-08-11
 

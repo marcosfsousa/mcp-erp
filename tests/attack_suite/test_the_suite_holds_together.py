@@ -31,7 +31,9 @@ for the file this one is modelled on.
 from collections import Counter
 from pathlib import Path
 
+import scenario_table
 import scenarios
+import yaml
 from scenarios import ASSERTED, DOCUMENTED, RETITLE_BELOW, Suite, read_suite, suite
 
 SUITE: Suite = suite()
@@ -313,3 +315,72 @@ def test_a_test_carrying_no_declaration_is_reported(tmp_path: Path) -> None:
     )
 
     assert scenarios.tests_without_a_declaration(tmp_path) == ("test_undeclared.py::test_it",)
+
+
+# ─── The rendering ────────────────────────────────────────────────────────────
+
+
+def _boolean_citation_keys() -> set[str]:
+    """Citation keys the table writes as a YAML boolean, read off the file itself.
+
+    Read from the raw document rather than from :class:`~scenarios.Scenario`,
+    because the parse coerces every citation value to `str` and `True` arrives
+    indistinguishable from a one-word quotation. The renderer sees what the parse
+    hands it; this sees what the author wrote.
+    """
+    document = yaml.safe_load((scenarios.REPO / scenarios.SCENARIOS).read_text(encoding="utf-8"))
+
+    return {
+        str(key)
+        for entry in document["scenarios"]
+        for key, value in entry["citation"].items()
+        if isinstance(value, bool)
+    }
+
+
+def test_a_boolean_citation_key_never_renders_as_a_quotation() -> None:
+    """A flag says something *about* the quote; it is not part of it.
+
+    `quote_elided: true` sat in `scenario_table.QUOTED` and the write-up
+    published `> True` under *Quoted with an elision* seven times. Nothing caught
+    it: `Seed renders clean` asks only whether re-rendering leaves the tree
+    clean, and a wrong rendering is stably wrong. So this asserts the property
+    that check cannot — every blockquote in the document is prose somebody
+    wrote, and a boolean reaches the reader as its label or not at all.
+    """
+    booleans = _boolean_citation_keys()
+    rendered = scenario_table.render(SUITE)
+    blockquotes = {
+        line.removeprefix("> ") for line in rendered.splitlines() if line.startswith("> ")
+    }
+
+    assert booleans, "no row carries a flag, so this assertion proves nothing — check the table"
+    assert booleans <= scenario_table.FLAGS
+    assert booleans.isdisjoint(scenario_table.QUOTED)
+    assert not blockquotes & {"True", "False"}
+    for key in booleans:
+        assert scenario_table.LABELS[key] in rendered, (
+            f"{key} renders neither its label nor a value"
+        )
+
+
+def test_every_blockquote_is_a_sentence_some_citation_carries() -> None:
+    """The general form, which does not depend on the flag being a boolean.
+
+    A rendered quotation that no row carries is a sentence the renderer made up,
+    and on a table whose whole value is that its citations are real that is the
+    worst available failure.
+    """
+    carried = {
+        row.citation[key]
+        for row in SUITE.rows
+        for key in row.citation
+        if key in scenario_table.QUOTED
+    }
+    blockquotes = {
+        line.removeprefix("> ")
+        for line in scenario_table.render(SUITE).splitlines()
+        if line.startswith("> ")
+    }
+
+    assert blockquotes <= carried

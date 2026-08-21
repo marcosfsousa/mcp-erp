@@ -14,6 +14,15 @@
 #             adr    -> the ADR and section that decided the rule. May carry a
 #                       `context` field quoting a real clause that is NOT the
 #                       basis, where one exists but governs a different party.
+#             Walked key by key rather than destructured, so a key added here
+#             renders on the same commit. Two of them are **not** somebody
+#             else's sentence and scenario_table.py must not blockquote them:
+#               quote_elided     boolean. The quote above omits text, marked `…`.
+#                                Renders as its label; the value never appears.
+#               quote_corrected  our own note on a quote we went back and fixed.
+#                                Renders as a labelled field, like `note`.
+#             A boolean added to a citation needs a place in `scenario_table.FLAGS`;
+#             test_the_suite_holds_together.py refuses one that has none.
 #   normative_strength
 #             MUST | MUST NOT | SHOULD | SHOULD NOT for clause rows; null for
 #             adr and seam rows, which have no normative statement behind them.
