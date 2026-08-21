@@ -96,10 +96,13 @@ It is here rather than in `tests/attack_suite/` because of the job. Minting this
 client needs the authorization server to dereference the document, and that
 document's URL *is* the `clientId` — so a locally served copy is a different
 client rather than a stand-in, and the identity #46's repair was found on cannot
-be served from inside the compose network. The profile itself would admit a local
-copy: `cimd-allow-permitted-domains` lists `localhost` and `127.0.0.1` beside the
-exhibit's origin, and the condition naming that origin belongs to the *other*
-policy. So there is no way to make this assertion without egress. `Attack suite (wire)` says of itself that nothing it
+be served from inside the compose network. The `localhost` and `127.0.0.1`
+entries in `cimd-allow-permitted-domains` are not an opening for a local
+document: the executor checks the redirect URI against that same list, so they
+are there for the document's own loopback callback. The policy that binds this
+profile admits only `https` from the exhibit's origin, so a locally served
+identifier never reaches the profile at all. So there is no way to make this
+assertion without egress. `Attack suite (wire)` says of itself that nothing it
 asserts depends on a service outside this repository, and that sentence is worth
 keeping. This job already fetches the document, and already runs the preflight
 that names an outage first.
