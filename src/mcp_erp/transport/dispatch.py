@@ -41,6 +41,22 @@ raises: the catch spans the handler's whole iteration, and a type the standard
 library shares with the store would make every failure below it the caller's
 fault (#82).
 
+**Containment is per callback, and since #109 that is the whole of one.** A
+failure of ours is answered in our own words rather than left to escape, because
+what an *unrecognised* failure looks like on the wire is the protocol package's
+decision and the two eras decide it differently — the legacy dispatcher pins
+``code: 0`` with ``str(error)`` for v1 compatibility, which puts whatever failed
+into the envelope verbatim. #82 built that guard around the handler's iteration
+alone, so the rendering below it and the whole of ``on_list_tools`` still
+escaped: a handler yielding a ``Decimal`` answered a legacy caller *Object of
+type Decimal is not JSON serializable*. Each callback is now one boundary, and an
+``MCPError`` passes through it untouched — **an ``MCPError`` reaching it is
+always this module's own**, because ADR-0013 has a handler return a domain
+outcome or a refused ``Decision`` and *never anything protocol-shaped*, and
+nothing else under ``src/`` names the type. Re-wrapping one would replace a
+``-31010`` carrying its ``Reason`` with a generic failure, which is the refusal
+shape ADR-0002 built being thrown away by the guard meant to protect it.
+
 Nothing here keys on a tool's name — the negative guarantee the cut did not
 touch, and the one worth keeping.
 """
@@ -92,19 +108,45 @@ INTERNAL_FAILURE: Final = "Internal server error"
 """What a caller is told when the failure was ours, and it says nothing else.
 
 Word for word the protocol package's own generic message on the modern leg, so
-converting a handler's escaped exception here changes what a **legacy** caller
-reads and leaves a modern one's answer exactly as it was. Two eras, one body:
-which leg a caller arrived on is not a fact this server discloses either.
+converting an escaped exception here changes what a **legacy** caller reads and
+leaves a modern one's answer exactly as it was. Two eras, one body: which leg a
+caller arrived on is not a fact this server discloses either.
+
+**Scoped to a callback, which since #109 is the whole of one.** The equality was
+written against #82's guard around the handler's iteration and held for exactly
+that much; the rendering below it and the whole of ``on_list_tools`` diverged.
+Both are inside now, and ``tests/wire/test_the_cause_a_refusal_names.py`` asserts
+the equality at four places rather than one: a failure out of the handler's
+iteration, one rendering a single outcome through :func:`_render`, one rendering
+several through :func:`_fold`, and one inside the listing.
 """
+
+CALL_TOOL: Final = "tools/call"
+"""The method behind ``on_call_tool``, as a contained failure's record names it.
+
+**Not a routing decision.** The protocol package routes on the method itself and
+hands the matching callback a typed parameter object; nothing here compares this
+against what a caller sent. It is the label on a log line, and it is public so
+that a suite driving the callback names it from here rather than spelling it
+again — which is the second routing table this would otherwise become.
+"""
+
+LIST_TOOLS: Final = "tools/list"
+"""The method behind ``on_list_tools``, on the same terms as :data:`CALL_TOOL`."""
 
 _LOGGER: Final = logging.getLogger(__name__)
 """Where a failure of ours goes now that it no longer goes to the caller.
 
-The package logs an unrecognised handler exception itself, and converting one
-into an ``MCPError`` stops it doing so — an `MCPError` is a *recognised* failure
-and is rendered rather than reported. This restores what the conversion takes
-away rather than introducing a practice: without it, closing the disclosure would
-have closed the only record that anything went wrong.
+The package logs an unrecognised exception itself, and converting one into an
+``MCPError`` stops it doing so — an ``MCPError`` is a *recognised* failure and is
+rendered rather than reported. This restores what the conversion takes away
+rather than introducing a practice: without it, closing the disclosure would have
+closed the only record that anything went wrong.
+
+Nothing collects it in this process's own right — uvicorn configures no root
+handler, so it reaches ``stderr`` through :data:`logging.lastResort` and Compose
+collects the container's ``stderr``. That is established rather than assumed, and
+:data:`mcp_erp.transport.keys._LOGGER` is where the establishing is written down.
 """
 
 MAXIMUM_LISTING_TTL_MS: Final = 300_000
@@ -153,27 +195,19 @@ def build(registry: Registry) -> Server[None]:
         context: ServerRequestContext[None, Request],
         parameters: types.PaginatedRequestParams | None,
     ) -> types.ListToolsResult:
-        """The tools this caller's **token** permits, with the freshness hint they earn."""
-        principal = _principal(context)
-        token = _token(context)
-        return types.ListToolsResult(
-            tools=[
-                types.Tool(
-                    name=registration.name,
-                    title=registration.title,
-                    description=registration.description,
-                    input_schema=registration.input_schema,
-                    output_schema=registration.output_schema,
-                )
-                for registration in registry.listed_for(principal)
-            ],
-            # `private` is forced rather than chosen: the specification warns
-            # that a `public` result from an authenticated endpoint may be
-            # shared between callers, and a scope-filtered listing marked public
-            # is a cross-principal leak (ADR-0002).
-            cache_scope="private",
-            ttl_ms=min(MAXIMUM_LISTING_TTL_MS, token.remaining_lifetime_ms()),
-        )
+        """The tools this caller's **token** permits, with the freshness hint they earn.
+
+        Raises:
+            MCPError: The gate chain did not run, or anything below the listing
+                failed — the second refused in this server's own words rather
+                than in whatever the thing that failed happened to say.
+        """
+        try:
+            return _listing(registry, context)
+        except MCPError:
+            raise
+        except Exception as failure:
+            raise _contained(LIST_TOOLS) from failure
 
     async def on_call_tool(
         context: ServerRequestContext[None, Request],
@@ -183,73 +217,15 @@ def build(registry: Registry) -> Server[None]:
 
         Raises:
             MCPError: No tool has that name, the arguments are not ones the
-                tool's schema permits, or the handler refused with a
-                protocol-error denial class.
+                tool's schema permits, the handler refused with a protocol-error
+                denial class, or anything below this callback failed.
         """
-        registration = registry.get(parameters.name)
-        if registration is None:
-            raise MCPError(INVALID_PARAMS, f"no such tool: {parameters.name!r}")
-
-        principal = _principal(context)
         try:
-            outcomes = [
-                outcome
-                async for outcome in registration.handler(principal, parameters.arguments or {})
-            ]
-        except UnusableArgument as unusable:
-            # **Not a refusal, and deliberately not one.** Nothing was authorized
-            # or denied here — the arguments are not ones the declared schema
-            # permits — so it gets the protocol's own code for a request that
-            # cannot be acted on rather than a `Reason`, which would amend a
-            # closed vocabulary for a spelling mistake.
-            #
-            # **The span is the handler's whole iteration and the type is what
-            # narrows it.** Until #82 this caught `ValueError`, on the argument
-            # that a handler could then signal without importing anything layer 1
-            # owns — and the store is awaited inside that iteration, so any
-            # `ValueError` from below it answered *the arguments are not ones the
-            # declared schema permits*, with whatever the thing that failed
-            # happened to say as the message. A type only a handler raises is
-            # what makes this catch mean what the paragraph above claims; the
-            # span could not be narrowed instead, because an async generator's
-            # body does not run until it is iterated.
-            #
-            # Layer 1 still learns no grounds: the message is the handler's, and
-            # this module never inspects it.
-            raise MCPError(INVALID_PARAMS, str(unusable)) from unusable
+            return await _called(registry, context, parameters)
+        except MCPError:
+            raise
         except Exception as failure:
-            # **Everything else out of the iteration is ours, and is refused in
-            # our own words.** Narrowing the type above is only half of #82: an
-            # exception that merely escapes is not contained, because the
-            # protocol package decides what an unrecognised failure looks like
-            # on the wire and the two eras decide it differently. The modern
-            # entry logs and answers a generic `INTERNAL_ERROR`; the legacy
-            # dispatcher pins `code=0` with `str(error)` as the message for v1
-            # compatibility, which puts a driver's host, port and role name in
-            # the envelope verbatim. ADR-0009 is why that is ours to answer for
-            # rather than the package's: not built is not unreachable, and this
-            # server serves both legs.
-            #
-            # Converting here is what makes the two identical, since an
-            # `MCPError` carries its own `ErrorData` down both paths. The
-            # wording is the modern entry's own, so the leg a caller arrived on
-            # stays invisible to them — which is the same non-disclosure
-            # ADR-0006 keeps one gate up.
-            _LOGGER.exception("the handler for %r raised", registration.name)
-            raise MCPError(INTERNAL_ERROR, INTERNAL_FAILURE) from failure
-
-        if not outcomes:
-            # A handler answers, always. Nothing at all is what a batch that
-            # dropped every item it was given looks like, and "outcomes equal
-            # items requested" is the rule that distinction is the whole of — so
-            # it is refused here rather than rendered as an empty fold, which
-            # would be this module inventing an answer on a handler's behalf.
-            raise MCPError(INTERNAL_ERROR, f"{registration.name!r} produced no outcome at all")
-
-        if len(outcomes) == 1:
-            return _render(outcomes[0])
-
-        return _fold(outcomes)
+            raise _contained(CALL_TOOL, tool=parameters.name) from failure
 
     return Server(
         "mcp-erp",
@@ -258,6 +234,138 @@ def build(registry: Registry) -> Server[None]:
         on_list_tools=on_list_tools,
         on_call_tool=on_call_tool,
     )
+
+
+def _contained(method: str, *, tool: str | None = None) -> MCPError:
+    """Record the failure being handled, and answer for it in this server's own words.
+
+    **Both halves in one call, because doing one without the other is the defect
+    this exists to close.** An exception that merely escapes is not contained —
+    the protocol package decides what an unrecognised failure looks like on the
+    wire and the two eras decide it differently: the modern entry logs and
+    answers a generic ``INTERNAL_ERROR``, and the legacy dispatcher pins
+    ``code=0`` with ``str(error)`` as the message for v1 compatibility, which
+    would put a driver's host, port and role name in the envelope verbatim.
+    ADR-0009 is why that is ours to answer for rather than the package's: not
+    built is not unreachable, and this server serves both legs. And converting it
+    stops the package reporting it, so a conversion that did not log would close
+    the disclosure by closing the only record that anything went wrong.
+
+    Called from inside an ``except`` block, which is what
+    :meth:`logging.Logger.exception` reads the traceback from. It **returns**
+    the error rather than raising it so that the caller writes ``raise ... from
+    failure`` and the chain survives for anything reading it below.
+
+    Args:
+        method: Which callback failed.
+        tool: What the caller named, from the callback that takes a name.
+            **Read off the request rather than off a registration**, so a failure
+            that never reached one still records what was asked for; it is the
+            caller's own string, and nothing here inspects it or sends it
+            anywhere. Omitted by the listing, which names no tool because it
+            answers about all of them.
+
+    Returns:
+        The refusal to raise, carrying the modern leg's own generic wording.
+    """
+    named = f" for {tool!r}" if tool is not None else ""
+    _LOGGER.exception("the %s callback raised%s", method, named)
+    return MCPError(INTERNAL_ERROR, INTERNAL_FAILURE)
+
+
+def _listing(
+    registry: Registry, context: ServerRequestContext[None, Request]
+) -> types.ListToolsResult:
+    """The listing itself, with the containment boundary left to the callback above.
+
+    Raises:
+        MCPError: The gate chain did not run, so there is no principal or no
+            validated token in request state.
+    """
+    principal = _principal(context)
+    token = _token(context)
+    return types.ListToolsResult(
+        tools=[
+            types.Tool(
+                name=registration.name,
+                title=registration.title,
+                description=registration.description,
+                input_schema=registration.input_schema,
+                output_schema=registration.output_schema,
+            )
+            for registration in registry.listed_for(principal)
+        ],
+        # `private` is forced rather than chosen: the specification warns that a
+        # `public` result from an authenticated endpoint may be shared between
+        # callers, and a scope-filtered listing marked public is a
+        # cross-principal leak (ADR-0002).
+        cache_scope="private",
+        ttl_ms=min(MAXIMUM_LISTING_TTL_MS, token.remaining_lifetime_ms()),
+    )
+
+
+async def _called(
+    registry: Registry,
+    context: ServerRequestContext[None, Request],
+    parameters: types.CallToolRequestParams,
+) -> types.CallToolResult:
+    """One tool's handler run and its outcomes rendered, inside the callback's boundary.
+
+    Raises:
+        MCPError: No tool has that name, the arguments are not ones the tool's
+            schema permits, the handler yielded nothing, or a refusal's denial
+            class is one this module cannot render here.
+    """
+    registration = registry.get(parameters.name)
+    if registration is None:
+        raise MCPError(INVALID_PARAMS, f"no such tool: {parameters.name!r}")
+
+    principal = _principal(context)
+    try:
+        outcomes = [
+            outcome async for outcome in registration.handler(principal, parameters.arguments or {})
+        ]
+    except UnusableArgument as unusable:
+        # **Not a refusal, and deliberately not one.** Nothing was authorized or
+        # denied here — the arguments are not ones the declared schema permits —
+        # so it gets the protocol's own code for a request that cannot be acted
+        # on rather than a `Reason`, which would amend a closed vocabulary for a
+        # spelling mistake.
+        #
+        # **The span is the handler's whole iteration and the type is what
+        # narrows it.** Until #82 this caught `ValueError`, on the argument that
+        # a handler could then signal without importing anything layer 1 owns —
+        # and the store is awaited inside that iteration, so any `ValueError`
+        # from below it answered *the arguments are not ones the declared schema
+        # permits*, with whatever the thing that failed happened to say as the
+        # message. A type only a handler raises is what makes this catch mean
+        # what the paragraph above claims; the span could not be narrowed
+        # instead, because an async generator's body does not run until it is
+        # iterated.
+        #
+        # **This is the only catch left here, and #109 is why.** Everything else
+        # out of this iteration used to be caught beside it, which read as though
+        # the iteration were the thing that needed containing; it is the callback
+        # above that does, and the rest of this function is inside that boundary
+        # exactly like the iteration is. What stayed is the one catch that is
+        # about a *type* rather than about a span.
+        #
+        # Layer 1 still learns no grounds: the message is the handler's, and this
+        # module never inspects it.
+        raise MCPError(INVALID_PARAMS, str(unusable)) from unusable
+
+    if not outcomes:
+        # A handler answers, always. Nothing at all is what a batch that dropped
+        # every item it was given looks like, and "outcomes equal items
+        # requested" is the rule that distinction is the whole of — so it is
+        # refused here rather than rendered as an empty fold, which would be this
+        # module inventing an answer on a handler's behalf.
+        raise MCPError(INTERNAL_ERROR, f"{registration.name!r} produced no outcome at all")
+
+    if len(outcomes) == 1:
+        return _render(outcomes[0])
+
+    return _fold(outcomes)
 
 
 def _render(outcome: Outcome) -> types.CallToolResult:

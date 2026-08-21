@@ -11,7 +11,7 @@ the ordinary case rather than the exceptional one.
     token names an unknown key identifier?
       cooldown elapsed  -> fetch the key set once, retry the lookup
       cooldown active   -> reject
-    fetch fails         -> reject
+    fetch fails         -> reject, and record what failed
 
 A fixed refresh interval alone would mean every restart produces a window of
 blanket failure. The cooldown is what stops the same mechanism becoming an
@@ -26,7 +26,7 @@ server that could not reach it would be a server testing a different
 authorization server.
 """
 
-import contextlib
+import logging
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -35,6 +35,29 @@ import httpx2
 from jwt import PyJWK, PyJWKSet
 
 from mcp_erp.transport.configuration import origin_of, path_of
+
+_LOGGER: Final = logging.getLogger(__name__)
+"""Where a failed fetch goes, now that it does not go to the caller.
+
+The refusal a fetch failure becomes says ``unknown_key`` and nothing else, which
+is ADR-0006's rule and is not reopened here. What that leaves is a defect of ours
+being **indistinguishable from an outage and invisible at the same time**: both
+leave the key set as it was, both refuse every caller `401 unknown_key`, and both
+retry silently once per cooldown for as long as the process runs. The record is
+the half that tells them apart, and it is on the server's side of the line
+ADR-0006 draws.
+
+**Where it goes is established rather than assumed.** uvicorn's own
+``LOGGING_CONFIG`` configures ``uvicorn``, ``uvicorn.error`` and
+``uvicorn.access`` and **no root handler**, so a record from this module reaches
+:data:`logging.lastResort` — a ``stderr`` stream handler at ``WARNING``. ``ERROR``
+clears that threshold, and the default formatter appends the traceback, so what
+lands on ``stderr`` is the message and the frames with no level or timestamp in
+front of them. Compose collects the container's ``stderr`` under the default
+``json-file`` driver, which is what ``docker compose logs server-1`` reads and
+what continuous integration dumps when a Compose job fails. See
+``server/README.md`` §*Where a failure of ours is recorded*.
+"""
 
 DISCOVERY_SEGMENT: Final = "/.well-known/oauth-authorization-server"
 """Inserted between host and path, which is the half implementations miss."""
@@ -161,10 +184,11 @@ class KeySet:
 
         The attempt is recorded **before** the request rather than after it
         succeeds, so a failing authorization server is rate-limited by the same
-        cooldown as a caller sending nonsense. Failures are swallowed here and
-        become :class:`UnknownKeyIdentifier` at the call site: the caller's
-        answer is the same, and a transport error carries facts about our own
-        infrastructure that a refusal must not disclose.
+        cooldown as a caller sending nonsense. Failures are caught here, logged,
+        and become :class:`UnknownKeyIdentifier` at the call site: the caller's
+        answer is the same whichever one fired, and a transport error carries
+        facts about our own infrastructure that a refusal must not disclose —
+        but the log line is on this side of that rule and holds all of them.
 
         **Every failure, rather than a list of them, and the list is why.** Until
         #82 this suppressed four names, and each was there for a step written
@@ -185,16 +209,23 @@ class KeySet:
         ``CancelledError`` descends from ``BaseException``: a request being torn
         down still tears down.
 
-        **What it costs is a bug in this block going unseen**, since a defect of
-        ours here is indistinguishable from an authorization server that is down
-        — both leave ``self._keys`` as it was and both refuse the caller. The
-        price is paid rather than hidden: the success path has a falsifier of its
-        own beside the failure ones, in
-        ``tests/wire/test_the_cause_a_refusal_names.py``, because a suppression
+        **It costs a bug in this block going unseen, and #109 stopped paying
+        that.** Until then this was ``contextlib.suppress``, which made a defect
+        of ours indistinguishable from an authorization server that is down *and*
+        invisible: both leave ``self._keys`` as it was, both answer every caller
+        ``401 unknown_key``, and both retry once per cooldown for as long as the
+        process runs — an outage that reads as a fleet-wide client problem. The
+        caught set is unchanged and the caller's answer is unchanged; what the
+        ``except`` buys over the ``suppress`` is one line on ``stderr`` naming the
+        failure, on the server's side of the line ADR-0006 draws. :data:`_LOGGER`
+        records where that line goes and how it was established.
+
+        The success path still has a falsifier of its own beside the failure
+        ones, in ``tests/wire/test_the_cause_a_refusal_names.py``, because a catch
         this wide is only safe while something proves the keys still arrive.
         """
         self._last_attempt = anyio.current_time()
-        with contextlib.suppress(Exception):
+        try:
             metadata = await self.metadata()
             response = await self._client.get(metadata.jwks_uri)
             response.raise_for_status()
@@ -202,6 +233,13 @@ class KeySet:
             self._keys = {
                 key.key_id: key for key in PyJWKSet.from_dict(document).keys if key.key_id
             }
+        except Exception:
+            # No argument interpolated, and that is the non-disclosure rule read
+            # in the one direction it does not bind: this record never reaches a
+            # caller, so it may hold anything — and the traceback the default
+            # formatter appends already names the address, the status and the
+            # line, which is more than any hand-written message would.
+            _LOGGER.exception("the key set could not be fetched")
 
     async def _discover(self) -> AuthorizationServerMetadata:
         """Read the authorization server's metadata, path-inserted.

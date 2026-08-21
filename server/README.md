@@ -57,6 +57,48 @@ To watch one replica:
 docker compose logs -f server-1
 ```
 
+## Where a failure of ours is recorded
+
+Two places in `src/mcp_erp/transport/` catch broadly on purpose, because what
+reaches a caller has to be a refusal in this server's own words rather than a
+driver's: `KeySet._refetch`, which turns any failed key-set fetch into
+`401 unknown_key`, and dispatch's per-callback containment, which turns any
+failure below `tools/call` or `tools/list` into a generic `Internal server
+error`. Both would otherwise make a **defect of ours indistinguishable from an
+outage and invisible at the same time** — every caller refused, retried silently,
+nothing anywhere saying why. Each logs at `ERROR` with the traceback.
+
+**Where that lands was established rather than assumed** (#109):
+
+| Step | What is true |
+| --- | --- |
+| uvicorn's `LOGGING_CONFIG` | Configures `uvicorn`, `uvicorn.error`, `uvicorn.access` — and **no root handler** |
+| So an `mcp_erp` record | Reaches `logging.lastResort`, a `stderr` handler at `WARNING`; `ERROR` clears it |
+| What it looks like | The message and the traceback, with **no timestamp, level or logger name** in front |
+| Compose | Collects the container's `stderr` under the default `json-file` driver |
+| So a reader sees it | `docker compose logs server-1`, and continuous integration dumps `docker compose logs --no-color` when a Compose job fails |
+
+**Confirmed by running it**, rather than reasoned from the configuration: with
+`docker compose stop keycloak` and four requests carrying a token that names a
+key nobody minted, all four are refused `401 unknown_key` and
+`docker compose logs server-1` holds
+
+```
+server-1-1  | the key set could not be fetched
+server-1-1  | Traceback (most recent call last):
+...
+server-1-1  | httpx2.ConnectError: All connection attempts failed
+```
+
+— **one record per replica for four requests**, which is the cooldown doing its
+job, and no `keycloak:8081` anywhere in what the caller was told.
+
+The missing prefix is the cost, and it is stated rather than closed: adding one
+means a second logging configuration beside uvicorn's own, in a composition root
+whose whole argument is that importing it reads no environment and opens no
+socket. A line with a traceback on it and no timestamp still names the failure,
+which is the thing there was none of.
+
 ## Running it outside a container
 
 Possible on Linux and macOS —
