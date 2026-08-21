@@ -105,8 +105,9 @@ a layer.** ADR-0013's prohibition is on a directory named `transport/` or
 here drives real HTTP against Compose like the three suites beside it~~.
 Recorded as an amendment to ADR-0013 by #37.
 
-**~~One assertion~~ Two assertions here are not over HTTP** — one since #41, one
-since #85, and they are not the same kind of exception. Amended by #85.
+**~~One assertion~~ ~~Two assertions~~ Four assertions here are not over HTTP**
+— one since #41, one since #85, and two since #38 that no count has ever
+carried. They are **three kinds**, not one. Amended by #85.
 
 The second is `test_two_simultaneous_decisions_on_one_requisition_mint_one_order`
 reading `purchase_order` directly through `fixtures.purchase_orders_for`. *One
@@ -122,6 +123,20 @@ The precedent for the credential is ADR-0003's, which took a suite holding a
 database password over a test-only reset route on a server whose whole subject is
 authorization, and `tests/attack_suite/` has read the same table on the same
 terms since #41.
+
+The third and fourth are `test_the_gateway_runs_a_single_worker` reading
+`gateway/nginx.conf` and `compose.yaml` off the checkout. Those are a
+**precondition on the instrument**, not a claim about the subject: `worker_processes 1`
+is what makes the round-robin assertion beside it measure affinity rather than
+merely stay green, and nginx answers no request reporting its worker count.
+`docker compose exec gateway nginx -T` would, at the price of a docker invocation
+in a suite that otherwise speaks only HTTP — so the committed file is read
+instead, on the same terms as the seed's rendering checks.
+
+**That file has said so in its own docstring since #38; the count above it never
+did.** Which is why the number moves twice in one edit. The first two exceptions
+were found by writing them, and a count maintained only when someone writes a new
+exception cannot see one that was already there — this one was found by counting.
 
 **One assertion here is not over HTTP, since #41.** *Layer 1 contains no
 reference to the tool name, nor to which argument is the batch* is the negative

@@ -93,10 +93,13 @@ in both of those files green and puts the authorization endpoint back to
 answering `plain` with a login form. This module is what goes red instead.
 
 It is here rather than in `tests/attack_suite/` because of the job. Minting this
-client needs the authorization server to dereference the document, and the policy
-condition admits `https` on `marcosfsousa.github.io` and nothing else — so no
-locally served stand-in reaches the profile, and there is no way to make the
-assertion without egress. `Attack suite (wire)` says of itself that nothing it
+client needs the authorization server to dereference the document, and that
+document's URL *is* the `clientId` — so a locally served copy is a different
+client rather than a stand-in, and the identity #46's repair was found on cannot
+be served from inside the compose network. The profile itself would admit a local
+copy: `cimd-allow-permitted-domains` lists `localhost` and `127.0.0.1` beside the
+exhibit's origin, and the condition naming that origin belongs to the *other*
+policy. So there is no way to make this assertion without egress. `Attack suite (wire)` says of itself that nothing it
 asserts depends on a service outside this repository, and that sentence is worth
 keeping. This job already fetches the document, and already runs the preflight
 that names an outage first.

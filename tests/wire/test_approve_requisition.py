@@ -225,6 +225,9 @@ def _decided_simultaneously(token: str, identifier: str) -> list[dict[str, Any]]
         AssertionError: Either call answered with something that is not a tool
             result. Raised out of the worker and re-raised here by `.result()`,
             because an exception swallowed in a thread is a race that passes.
+        threading.BrokenBarrierError: A partner never arrived within `TIMEOUT`.
+            This is the case the paragraph above names, and it surfaces the same
+            way — out of `barrier.wait()` in the worker, through `.result()`.
     """
     barrier = threading.Barrier(2, timeout=TIMEOUT)
 

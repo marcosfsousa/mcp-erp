@@ -21,9 +21,13 @@ and puts the authorization endpoint back to answering `plain` with a login form.
 
 **Here rather than in `tests/attack_suite/`, and the reason is the job.** Minting
 this client requires the authorization server to dereference the document, and
-the policy condition admits `https` on `marcosfsousa.github.io` alone — so no
-locally served stand-in reaches the profile, and the assertion cannot be made
-without egress. `Attack suite (wire)` states of itself that *nothing it asserts
+that document's URL *is* the `clientId` — so a locally served copy is not a
+stand-in for this client, it is a different one, and #46's repair was found on
+this one. The profile would admit a local copy: `cimd-allow-permitted-domains`
+lists `localhost` and `127.0.0.1` beside the exhibit's origin, and the condition
+naming that origin belongs to the *other* policy. What cannot be served from
+inside the compose network is the identity under test, and that is what makes
+the assertion need egress. `Attack suite (wire)` states of itself that *nothing it asserts
 depends on a service outside this repository*, and that sentence is worth more
 than the cohesion of keeping the realm's refusals in one directory.
 `Authorization code flow` already fetches this document, and already runs the

@@ -72,12 +72,12 @@ def _clients() -> Iterator[str]:
     `tests/conformance/test_the_realm_refuses_the_provisioned_client_too.py`.
     They are not asserted *here* because minting that client requires the
     authorization server to dereference the document from
-    `marcosfsousa.github.io` — the policy condition admits that origin and no
-    other, so no local stand-in reaches the profile — and `Attack suite (wire)`
-    states of itself that nothing it asserts depends on a service outside this
-    repository. `Authorization code flow` already fetches the document and
-    already runs the preflight that names an outage before a refusal is read as
-    a regression.
+    `marcosfsousa.github.io` — and that document's URL *is* the `clientId`, so a
+    locally served copy would be a different client rather than a stand-in for
+    this one — and `Attack suite (wire)` states of itself that nothing it asserts
+    depends on a service outside this repository. `Authorization code flow`
+    already fetches the document and already runs the preflight that names an
+    outage before a refusal is read as a regression.
 
     **This is not a gap left open.** #46 is what it cost the last time: the
     SHA-256 pin was a per-client attribute, an attribute cannot reach a client
