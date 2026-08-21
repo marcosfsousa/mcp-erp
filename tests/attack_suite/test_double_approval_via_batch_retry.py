@@ -38,6 +38,8 @@ from scenarios import exercises
 
 import fixtures
 import rpc
+from mcp_erp.purchase_to_pay.reasons import ALREADY_DECIDED
+from refusal_records import refusal_body
 from requisitions import raised_by
 from tokens import mint
 
@@ -108,10 +110,11 @@ def test_a_retried_batch_answers_already_decided_for_every_item_and_mints_nothin
     """The scenario. Twice the same call, once the effect.
 
     The first call decides both rows and emits one order each. The second is
-    byte-for-byte the same request, and every item comes back `already_decided`
-    with the remedy `none` and both retry booleans false — because a decided row
-    is decided for everybody, and no person and no token makes it decidable
-    again.
+    byte-for-byte the same request, and every item comes back the whole of what
+    `already_decided` declares — because a decided row is decided for everybody,
+    and no person and no token makes it decidable again. What that reason says a
+    client should do about it is the record's to state and this reads it, so the
+    sentence cannot go stale against a mapping that moved.
 
     The count afterwards is the assertion the wire cannot make: two orders, one
     per requisition, unchanged by the retry.
@@ -130,14 +133,7 @@ def test_a_retried_batch_answers_already_decided_for_every_item_and_mints_nothin
     ]
 
     assert retried["isError"] is True
-    assert retried["structuredContent"]["outcomes"] == [
-        {
-            "reason": "already_decided",
-            "remedy": "none",
-            "retry_identical_helps": False,
-            "retry_as_other_person_helps": False,
-        }
-    ] * len(batch)
+    assert retried["structuredContent"]["outcomes"] == [refusal_body(ALREADY_DECIDED)] * len(batch)
 
     assert fixtures.purchase_orders_for(*batch) == len(batch)
     for identifier in batch:

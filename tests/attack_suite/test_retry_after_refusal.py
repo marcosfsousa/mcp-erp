@@ -20,6 +20,14 @@ retrying identically starts to work. The other-person row's is the *field* — s
 `retry_as_other_person_helps` from a constant, and the answer stops being about
 this decision at all.
 
+**Every refusal body below is read from the record, never written out.** These
+three rows assert what a *stated remedy* is worth, so an expectation copied from
+ADR-0002 rather than read from it would go on passing after the mapping beneath
+it moved — a green row protecting nothing. `refusal_records.refusal_body` is that
+read, and it derives the four fields from the `Reason` rather than calling the
+renderer that produces them: the renderer is code under test here, and a suite
+calling it would assert only that layer 1 agrees with itself (#87).
+
 **Every row this module acts on is one it raised.** No fixture reload, because
 nothing here reads a seeded row: the separation edge needs a requisition whose
 submitter is the person about to be refused, and that is a row a test has to
@@ -40,7 +48,10 @@ import httpx2
 from scenarios import exercises
 
 import rpc
+from mcp_erp.authorization import ROLE_MISSING
+from mcp_erp.purchase_to_pay.reasons import ALREADY_DECIDED, SEGREGATION_OF_DUTIES
 from mcp_erp.transport.refusals import ROLE_DENIED_CODE
+from refusal_records import refusal_body
 from requisitions import raised_by
 from tokens import mint
 
@@ -129,12 +140,7 @@ def test_retry_after_role_denial() -> None:
     assert "www-authenticate" not in refused.headers
     error = rpc.error(refused)
     assert error["code"] == ROLE_DENIED_CODE
-    assert error["data"] == {
-        "reason": "role_missing",
-        "remedy": "administrator_grant",
-        "retry_identical_helps": False,
-        "retry_as_other_person_helps": False,
-    }
+    assert error["data"] == refusal_body(ROLE_MISSING)
 
     # The refusal's own claim, acted on: an identical call answers identically,
     # so a client that ignored the fields and retried gains nothing and loses
@@ -168,10 +174,9 @@ def test_retry_after_sod_denial_same_person() -> None:
 
     refused = _outcome(_decide(SUBMITTER, [his_own]))
 
-    assert refused["reason"] == "segregation_of_duties"
-    assert refused["retry_identical_helps"] is False
-    assert refused["retry_as_other_person_helps"] is True
+    assert refused == refusal_body(SEGREGATION_OF_DUTIES)
 
+    # `retry_identical_helps` rides in the body above; this is it made good.
     # Identical call, identical answer.
     assert _outcome(_decide(SUBMITTER, [his_own])) == refused
 
@@ -204,8 +209,7 @@ def test_retry_after_sod_denial_other_person() -> None:
     his_own = raised_by(SUBMITTER, BELOW_THRESHOLD)
 
     refused = _outcome(_decide(SUBMITTER, [his_own]))
-    assert refused["reason"] == "segregation_of_duties"
-    assert refused["retry_as_other_person_helps"] is True
+    assert refused == refusal_body(SEGREGATION_OF_DUTIES)
 
     decided = _outcome(_decide(COUNTERPARTY, [his_own]))
 
@@ -226,14 +230,14 @@ def test_the_field_says_no_when_a_different_person_would_not_help() -> None:
     is told so and is right to stop.
 
     One field, two refusals, two values — which is what *from the decision*
-    means, asserted rather than described.
+    means, asserted rather than described. The two values are carried by the two
+    records this module reads, and that they differ is
+    `tests/matrix/test_the_reason_mapping.py`'s to hold; what the pair of tests
+    holds is that the wire says each of them on the right refusal.
     """
     raised = raised_by(BYSTANDER, BELOW_THRESHOLD)
     assert _outcome(_decide(SUBMITTER, [raised]))["requisition"]["status"] == "approved"
 
     refused = _outcome(_decide(COUNTERPARTY, [raised]))
 
-    assert refused["reason"] == "already_decided"
-    assert refused["remedy"] == "none"
-    assert refused["retry_as_other_person_helps"] is False
-    assert refused["retry_identical_helps"] is False
+    assert refused == refusal_body(ALREADY_DECIDED)

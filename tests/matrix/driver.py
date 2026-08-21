@@ -48,6 +48,7 @@ from mcp_erp.purchase_to_pay import (
 )
 from mcp_erp.purchase_to_pay.fixtures import MATRIX, Row, read_matrix
 from mcp_erp.purchase_to_pay.reasons import REASONS as DOMAIN_REASONS
+from refusal_records import refusal_body
 from tokens import mint
 
 LISTING: Final = "tools/list"
@@ -261,8 +262,17 @@ def _refusal(row: Row, response: httpx2.Response) -> None:
     """A refused row, checked against the shape its reason record declares.
 
     The row states a reason; everything below is read off the record that reason
-    is, so a change to ADR-0002's mapping is a change in one declaration and not
-    in thirty-three expectations.
+    is, so a change to ADR-0002's mapping is a change in the declaration and not
+    in this function — however many refusing rows the table grows to.
+
+    **The claim is about this function and not about the repository.** ADR-0002's
+    mapping is still written out as literals in `tests/wire/`, where the modules
+    that keep them record why (#87), and once more as a table in
+    `test_the_reason_mapping.py` — which is not a copy but the assertion that the
+    declarations *are* ADR-0002's, in both directions over both declared sets.
+    What #87 settled is narrower: no suite asserting a refusal *body on the wire*
+    restates the mapping any more, except in `tests/wire/`, where the modules
+    that do argue for doing so.
 
     Raises:
         AssertionError: The wire took a shape the reason does not declare.
@@ -277,12 +287,12 @@ def _refusal(row: Row, response: httpx2.Response) -> None:
     if reason.denial_class is DenialClass.PROTOCOL_ERROR:
         error = rpc.error(response)
         assert error["code"] == -31010
-        assert error["data"] == _payload(reason)
+        assert error["data"] == refusal_body(reason)
         return
 
     result = rpc.result(response)
     assert result["isError"] is True, result
-    assert result["structuredContent"] == _payload(reason)
+    assert result["structuredContent"] == refusal_body(reason)
 
 
 def _challenge(row: Row, response: httpx2.Response, reason: Reason) -> None:
@@ -299,19 +309,3 @@ def _challenge(row: Row, response: httpx2.Response, reason: Reason) -> None:
     assert parameters["error"] == reason.value
     assert parameters["scope"] == ACTIONS[row.tool].scope
     assert parameters["resource_metadata"] == rpc.METADATA_URL
-
-
-def _payload(reason: Reason) -> dict[str, Any]:
-    """The four fields a structured refusal carries, read off the record.
-
-    Not imported from `mcp_erp.transport.refusals`, deliberately. That function
-    is the code under test: a suite calling it would assert that layer 1 agrees
-    with itself, where this asserts that what layer 1 rendered says what the
-    reason the two domains declared says.
-    """
-    return {
-        "reason": reason.value,
-        "remedy": reason.remedy.value,
-        "retry_identical_helps": reason.retry_identical_helps,
-        "retry_as_other_person_helps": reason.retry_as_other_person_helps,
-    }

@@ -1,4 +1,4 @@
-"""The suite's own invariants: the bijection, the floor, and the standing index.
+"""The suite's own invariants: the bijection, the floor, the standing index, and how a row asserts.
 
 `scenarios.yaml` declares a `meta` block, and a count kept where it can be read
 and not checked is what ADR-0011 caught drifting four times in one month. So
@@ -11,6 +11,13 @@ split across tickets.** Every asserting row has a test that declares it by name;
 every declaration names a row; every test in this directory declares something.
 Break any of the three and a defence can be deleted without a red check — which
 is the failure the report exists to make impossible, not a tidiness rule.
+
+**The fourth invariant is about how a row asserts rather than which row it is.**
+A refusal body written out beside a test is a copy of ADR-0002's mapping, and a
+defence whose expectation is a copy goes on passing after the declaration under
+it moves — green, and protecting nothing. #87 found them across this suite and
+`tests/wire/`; the ones here are gone, and
+:func:`~scenarios.restated_refusal_payloads` is what keeps them gone.
 
 **One row is exempt and the exemption is derived, not written down.**
 `threshold_split_evasion` asserts nothing, so it needs no test — and
@@ -228,6 +235,25 @@ def test_every_test_in_this_directory_declares_a_row() -> None:
     what a file happens to assert.
     """
     assert scenarios.tests_without_a_declaration() == ()
+
+
+# ─── How a row asserts ────────────────────────────────────────────────
+
+
+def test_no_refusal_body_in_this_directory_is_written_out() -> None:
+    """Every refusal a row asserts is read off the record, never written out beside it.
+
+    Not tidiness. A defence asserted against a copy of ADR-0002's mapping keeps
+    passing after the declaration under it changes — the suite stays green and
+    the thing it was protecting is gone. `refusal_records.refusal_body` derives
+    the body from the `Reason` instead, so the two disagree loudly.
+
+    What pins the values themselves is
+    `tests/matrix/test_the_reason_mapping.py`, which holds ADR-0002's table over
+    both declared sets in both directions. That is where a literal is the
+    assertion rather than a copy of one.
+    """
+    assert scenarios.restated_refusal_payloads() == ()
 
 
 def test_a_row_added_without_a_test_fails_the_drift_check() -> None:

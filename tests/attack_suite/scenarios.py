@@ -1,7 +1,7 @@
 """The canonical list, as this directory reads it, and the way a test declares a row.
 
 `docs/attack-suite/scenarios.yaml` is the single source of truth. This module is
-the only thing that parses it, and it does two jobs that have to agree:
+the only thing that parses it, and it does three jobs that have to agree:
 
 **It reads the rows**, so the invariants beside it assert against the file rather
 than against a restatement of it — the `meta` block's counts included, which is
@@ -13,6 +13,11 @@ are hand-written and declare which scenario they exercise by name, with a drift
 check asserting a bijection and the threshold row as its single declared
 exemption"* — and the marker is what makes the declaration mechanical rather than
 a sentence in a docstring that nothing reads.
+
+**It reads the assertions**, :func:`restated_refusal_payloads`, which is the one
+check here about how a row asserts rather than about which row it is. It shares
+the source walk with the declaration collector because both ask the same question
+of the same files, and a second `glob` would be a second answer to it.
 
 **The declarations are collected from the source, never by importing.** Importing
 this directory's modules from inside a test would run them a second time under a
@@ -54,6 +59,15 @@ it here — and a declaration written through an alias is not collected, which i
 a limitation stated out loud rather than defended against: every test in this
 directory writes `@exercises("row_name")` and the invariants refuse a test that
 does not.
+"""
+
+MAPPED_FIELDS: Final = frozenset({"remedy", "retry_identical_helps", "retry_as_other_person_helps"})
+"""The refusal-body fields ADR-0002 derives from the reason, as the wire keys them.
+
+Not `reason` itself, which names which rule fired rather than what the mapping
+says about it. Spelled here rather than read off `Reason`'s dataclass fields
+because these are *wire* keys — the record also carries `denial_class`, which
+decides the shape a refusal takes and never appears in a body.
 """
 
 INVARIANTS: Final = "test_the_suite_holds_together.py"
@@ -295,23 +309,98 @@ def declarations_naming_no_row(rows: Suite, declared: tuple[Declaration, ...]) -
     }
 
 
-def _tests_in(directory: Path) -> Iterator[tuple[Path, TestFunction]]:
-    """Every test function in every test module of a directory, in file and source order.
+def restated_refusal_payloads(directory: Path = HERE) -> tuple[str, ...]:
+    """Places in this directory that spell a refusal body out instead of reading it.
 
-    One walk, because both halves of the bijection ask the same question of the
-    same files and a second `glob` would be a second answer to *what counts as a
-    test here*.
+    A refusal body is four fields, and every one of them is stated once — in the
+    `Reason` the two layers declare. A test that writes any of them out again is
+    a second copy of ADR-0002's mapping, and the rows here assert a **defence**:
+    a defence whose expectation is a copy goes on passing after the declaration
+    beneath it changes, which is the one way a green attack suite can be lying.
+    `refusal_records.refusal_body` is the read that avoids it.
+
+    Two shapes, because #87 found the second only after counting the first:
+
+    - a **whole body**, a dictionary carrying both `reason` and `remedy`;
+    - a **field**, a subscript of any of the three that carry the mapping,
+      compared against anything.
+
+    `reason` alone is not matched. Naming which rule fired is what a row is *for*
+    — `answers[1]["reason"] == "not_found"` says the refusal came from the right
+    place and says nothing about its declared shape.
+
+    **The limits, out loud.** It reads `test_*.py` in this directory only, so
+    `scenarios.py` and any helper module escape it; it sees dictionary displays
+    and not `dict(reason=…)`; and it reads subscripts written with a literal key,
+    not one held in a variable. Each is a way to restate the mapping that this
+    would not catch, stated here rather than defended against — the same
+    narrowness `DECLARATION` records for the collector above.
+
+    `tests/wire/` is deliberately outside this: those literals are the
+    demonstration a reader opens the file for, and the modules that keep them say
+    so in their own docstrings (#87).
+
+    Args:
+        directory: Where the test modules live.
+
+    Returns:
+        ``module:line`` for each, in file and then source order.
+    """
+    return tuple(
+        f"{path.name}:{node.lineno}"
+        for path, tree in _modules_in(directory)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.expr) and (_is_whole_body(node) or _is_mapping_field(node))
+    )
+
+
+def _is_whole_body(node: ast.expr) -> bool:
+    """A dictionary display carrying both `reason` and `remedy`.
+
+    The two keys rather than all four, so that a body written out with a field
+    left off is caught as well as a complete one.
+    """
+    return isinstance(node, ast.Dict) and {"reason", "remedy"} <= {
+        key.value for key in node.keys if isinstance(key, ast.Constant)
+    }
+
+
+def _is_mapping_field(node: ast.expr) -> bool:
+    """A subscript naming one of the three fields the mapping decides.
+
+    `reason` is not among them: which rule fired is a row's own business, and the
+    three below are the ones ADR-0002 derives from it.
+    """
+    return (
+        isinstance(node, ast.Subscript)
+        and isinstance(node.slice, ast.Constant)
+        and node.slice.value in MAPPED_FIELDS
+    )
+
+
+def _modules_in(directory: Path) -> Iterator[tuple[Path, ast.Module]]:
+    """Every test module of a directory, parsed once, in file order.
+
+    One walk, because every check that reads the sources asks the same question
+    of the same files and a second `glob` would be a second answer to *what
+    counts as a test here*.
 
     **`rglob`, not `glob`**, so a subdirectory cannot hold a test the check never
     sees — pytest would collect it and this would not, which is the one asymmetry
     that makes a bijection claim untrue while every assertion in it passes.
+    """
+    for path in sorted(directory.rglob("test_*.py")):
+        yield path, ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+
+def _tests_in(directory: Path) -> Iterator[tuple[Path, TestFunction]]:
+    """Every test function in every test module of a directory, in file and source order.
 
     Module-level definitions only. A nested helper named `test_…` is not
     collected by pytest either, so walking the whole tree would hold a
     declaration against something that never runs.
     """
-    for path in sorted(directory.rglob("test_*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for path, tree in _modules_in(directory):
         for node in tree.body:
             # `async def` too: nothing here is asynchronous today, and a test
             # that were would be invisible to the collector while pytest ran it

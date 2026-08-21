@@ -17,8 +17,14 @@ test to three of seven.
 same commit, for the same reason ADR-0003 wanted one test: two places asserting a
 mapping is two places for it to disagree with itself.
 
-**The table below is the one place ADR-0002's mapping is written as an
-expectation.** Everything else in the repository reads it off the records.
+**The table below is where ADR-0002's mapping is checked against the
+declarations**, and it is the only place that comparison is made. It is not the
+only place the mapping is written down: `tests/wire/test_approve_requisition.py`
+and `tests/wire/test_record_invoice.py` spell refusal bodies out as literals, so
+a change to a remedy or a retry boolean reddens them too. That is a cost each of
+those modules records and accepts — a suite that exists to show what the wire
+looks like shows nothing if the body is a lookup. Every other suite reads the
+body off the records (#87).
 """
 
 from mcp_erp.authorization import REASONS as AUTHORIZATION_REASONS
