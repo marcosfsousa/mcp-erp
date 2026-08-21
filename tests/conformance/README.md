@@ -73,6 +73,38 @@ this directory's and that directory collects its declarations out of its own
 source. It needs Keycloak and not GitHub Pages: the redirect it reads is a real
 refusal from a real realm, handed to a flow that discovered the other one.
 
+## The third module, and why a realm refusal is asserted here
+
+`test_the_realm_refuses_the_provisioned_client_too.py` keeps two of the attack
+suite's realm properties — the SHA-256 challenge-method pin and the absence of
+direct access grants — against the client that suite cannot reach.
+
+Both of the files that assert those properties read their clients out of
+`keycloak/import/mcp-erp-realm.json` and cover the five it declares. This
+directory's client is declared nowhere: it is provisioned at runtime from the
+hosted document, and its `clientId` is that document's URL.
+
+That gap shipped a defect once already.
+[#46](https://github.com/marcosfsousa/mcp-erp/issues/46) found the sixth client
+accepting `plain`, because the pin was a per-client attribute and an attribute
+cannot reach a client the realm does not contain. The repair was a second client
+policy conditioned on the access type; deleting it today leaves every assertion
+in both of those files green and puts the authorization endpoint back to
+answering `plain` with a login form. This module is what goes red instead.
+
+It is here rather than in `tests/attack_suite/` because of the job. Minting this
+client needs the authorization server to dereference the document, and the policy
+condition admits `https` on `marcosfsousa.github.io` and nothing else — so no
+locally served stand-in reaches the profile, and there is no way to make the
+assertion without egress. `Attack suite (wire)` says of itself that nothing it
+asserts depends on a service outside this repository, and that sentence is worth
+keeping. This job already fetches the document, and already runs the preflight
+that names an outage first.
+
+`tests/authorization/test_realm.py`'s `_clients` carries the boundary in full:
+which invariants can be asserted of a client with no file, which cannot, and why
+reading the stamped attribute back through the admin API is not one of them.
+
 ## Running it
 
 ```

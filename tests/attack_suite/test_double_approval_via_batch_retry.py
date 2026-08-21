@@ -155,9 +155,28 @@ def test_a_partly_decided_batch_retries_into_one_answer_per_item() -> None:
     decidable; here the item that was refused for its own reasons is still
     refused for them, and nothing about the retry made it decidable or made the
     others decidable again.
+
+    **The count at the end is one, and that rests on a fact about `matrix.yaml`
+    rather than on anything this call did.** `purchase_orders_for` counts every
+    order against the identifiers, seeded ones included, so a CC-4200 fixture
+    whose `given` names an approver would arrive with an order already beside it
+    and make the total two. Adding that row turns this test red, and `assert
+    2 == 1` on a batch-retry scenario points a reader at the batch path, which is
+    the one place the defect would not be. So the assumption is asserted first,
+    in its own words.
     """
     decidable = raised_by(SUBMITTER, AMOUNT)
     foreign = fixtures.identifiers_in("CC-4200")
+
+    seeded = fixtures.purchase_orders_for(*foreign)
+    assert seeded == 0, (
+        "this row assumes every CC-4200 fixture is undecided, and the purchase order "
+        f"table already holds {seeded} against that set. Nothing about the batch path "
+        "changed: docs/decision-matrix/matrix.yaml grew a CC-4200 row whose `given` "
+        "names an approver, and the count at the end of this test would have gone up "
+        "with it. Move that row to another cost centre, or give this scenario a "
+        "partition of its own."
+    )
 
     batch = [decidable, *sorted(foreign)]
     first = _decide(APPROVER, batch)
