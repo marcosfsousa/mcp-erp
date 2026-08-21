@@ -71,10 +71,12 @@ AMOUNT = "480.00"
 
 @pytest.fixture(scope="module", autouse=True)
 def requisitions() -> Iterator[None]:
-    """Start from the generated fixtures, with the descendant tables cleared.
+    """Start from the committed rendering, so this module knows where it began.
 
-    This module writes — it raises rows and decides them — so it must know where
-    it began. Module-scoped for the reason every suite beside it states.
+    It writes — it raises rows and decides them — and `fixtures.load()` deletes
+    all three tables and re-inserts the rendering, which resets the starting
+    state rather than emptying anything. Module-scoped for the reason every suite
+    beside it states.
     """
     fixtures.load()
     yield

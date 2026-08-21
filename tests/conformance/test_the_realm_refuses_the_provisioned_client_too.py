@@ -13,9 +13,10 @@ per-client attribute and a per-client attribute cannot reach a client the realm
 does not contain. `keycloak/README.md` calls it *the fifth* and this file calls
 it *the sixth*: the realm declared four authored clients when #46 was written and
 declares five now, so the ordinal moves and the client does not. It is named
-rather than numbered everywhere below. The repair was a second `pkce-enforcer` policy
-conditioned on `client-access-type: public`, which is the one thing every client
-here has in common — and until this module, **nothing asserted the repair.**
+rather than numbered everywhere below. The repair was a second policy —
+`proof-key-for-code-exchange`, carrying the `pkce-enforcer` executor — conditioned
+on `client-access-type: public`, which is the one thing every client here has in
+common. Until this module, **nothing asserted the repair.**
 Deleting that policy leaves all forty assertions in the two files above green
 and puts the authorization endpoint back to answering `plain` with a login form.
 

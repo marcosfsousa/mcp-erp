@@ -163,8 +163,11 @@ def stream(
     The handshake era's standalone `GET` stream stays open by design, so a caller
     that read it would wait for a timeout and then assert against an exception.
     This yields the response once its status and headers have arrived and closes
-    it on the way out — which is all `get_stream_removed`'s control needs, and it
-    is the only thing in this repository that opens a stream at all.
+    it on the way out — which is all `get_stream_removed`'s control needs. It is
+    the only stream **this module** opens, and the only one any suite opens
+    deliberately; `conformance_client.py` meets the protocol package's own `GET`
+    leg and lifts the read timeout off it in `_opens_a_stream`, which is a stream
+    arriving from a dependency rather than one built here.
 
     A context manager rather than a function, because the connection has to be
     closed and the caller is the only one who knows when it is done looking.

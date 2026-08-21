@@ -7,11 +7,19 @@ this one holds layer 3's half and the decision matrix to theirs. Both are run by
 re-render catches a hand-edited rendering, and a test catches a loader that
 stopped refusing.
 
-**A falsifier per refusal, which is the point of the file.** #81 found eight
-checks whose docstrings named a refusal the code did not make, and a promise with
-no falsifier is how that happens: the `Raises:` list is prose until something
-feeds it the input it names. So every refusal `read_organisation` and
-`read_matrix` declare has a case here that should be rejected, asserted rejected.
+**A falsifier per refusal, for the refusals here.** #81 found eight checks whose
+docstrings named a refusal the code did not make, and a promise with no falsifier
+is how that happens: the `Raises:` list is prose until something feeds it the
+input it names. Six of those promises are fed below — three of the four
+`read_organisation` makes about a key, and, three ways, the one `read_matrix`
+makes about a row's per-tool expectation.
+
+**That is not the whole of either `Raises:` list, and this file does not claim
+it is.** `read_organisation`'s duplicate-subject refusal has no case here, and
+neither do the shape and value refusals `_given` and `_expect` make — a missing
+fixture field, a status outside the vocabulary, an amount that is not decimal. A
+refusal with no case here is a promise still unfed; adding the input it names is
+the standing way to close one, and it belongs in this file when somebody does.
 
 **Not in `tests/matrix/`.** That directory is driven from the table in its
 entirety and its invariants file says so — it asserts the parser's refusals by
@@ -83,9 +91,10 @@ def test_a_per_tool_expectation_on_the_wrong_tool_is_refused() -> None:
 def test_a_permitted_row_omitting_its_own_tools_expectation_is_refused() -> None:
     """The other direction, and the one that makes a row assert only its decision.
 
-    Three tools own a per-tool key, and a permitted row on one of them that
-    states none has said the call goes through and nothing about what came back
-    — which is the assertion this table exists instead of.
+    Two tools own a per-tool key — `list_requisitions` and `submit_requisition`
+    — and so does the listing, which is not one. A permitted row on any of the
+    three that states none has said the call goes through and nothing about what
+    came back, which is the assertion this table exists instead of.
     """
     with pytest.raises(ValueError, match=r"expects \['tools'\], and row 'a_row' states \[\]"):
         read_matrix(_matrix_text(tool="tools/list", expect={}))

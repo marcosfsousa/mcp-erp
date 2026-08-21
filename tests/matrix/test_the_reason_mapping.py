@@ -3,7 +3,10 @@
 ADR-0003 asked for *"exactly one dedicated test"*: rows state a `reason` and
 nothing else, wire shape and remedy and both retry booleans are derived from it,
 and the derivation is checked in one place so that changing the mapping is a
-one-line change rather than a sweep through thirty-three expectations.
+one-line change rather than a sweep through every expectation the table carries.
+How many that is lives in `matrix.yaml`'s `meta` block and is asserted against
+the rows by `test_the_matrix_holds_together.py`, which is why it is not written
+out here.
 
 **It lives here rather than in `tests/authorization/`** because the union has two
 halves and only one of them survives ejection. Layer 2 declares three reasons and

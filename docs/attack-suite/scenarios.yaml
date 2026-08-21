@@ -471,8 +471,14 @@ scenarios:
         the obligation is ADR-0007's per-client realm pin.
     normative_strength: null
     removal: >-
-      Clear the per-client challenge-method pin **and** the `pkce-enforcer`
-      client policy in the realm file. Either alone still refuses.
+      Clear the per-client challenge-method pin **and** the
+      `proof-key-for-code-exchange` client policy in the realm file. Either alone
+      still refuses for the five clients the realm file declares, which is what
+      this row's own test loops over. It is not true of the client the realm
+      provisions from the hosted identity document: that one carries no
+      attributes, so the policy is the whole of its refusal and clearing the
+      policy alone is enough. That half is performed in
+      tests/conformance/test_the_realm_refuses_the_provisioned_client_too.py.
     status: asserted
     floor: false
     note: >-
@@ -485,15 +491,16 @@ scenarios:
       attribute cannot reach a client the realm does not contain — its
       conformance client is provisioned from a hosted document and carries no
       attributes, so it accepted `plain` and accepted no challenge at all — and
-      added a `pkce-enforcer` client policy conditioned on
-      `client-access-type: public`. Both are live, so clearing either one leaves
-      the other refusing, and a removal naming only the attribute would be a
-      deletion somebody could perform with nothing to show for it.
-      REMOVAL HALVED 2026-08-21 by #85. *Either alone still refuses* holds for
-      THE FIVE CLIENTS THE REALM FILE DECLARES, which is what this row's test
-      loops over. The policy half alone is falsifiable against the client
-      provisioned from the hosted identity document, and that client is in no
-      file — so clearing the policy leaves every assertion in
+      added a `proof-key-for-code-exchange` client policy conditioned on
+      `client-access-type: public`, carrying the `pkce-enforcer` executor. Both
+      are live, so clearing either one leaves the other refusing, and a removal
+      naming only the attribute would be a deletion somebody could perform with
+      nothing to show for it.
+      REMOVAL HALVED 2026-08-21 by #85, and the removal above says so since #80.
+      *Either alone still refuses* holds for THE FIVE CLIENTS THE REALM FILE
+      DECLARES, which is what this row's test loops over. The policy half alone
+      is falsifiable against the client provisioned from the hosted identity
+      document, and that client is in no file — so clearing the policy leaves every assertion in
       tests/attack_suite/ green. #85 wrote that falsifier, in
       tests/conformance/test_the_realm_refuses_the_provisioned_client_too.py,
       because minting that client needs egress and the attack suite job takes

@@ -370,7 +370,10 @@ def fixtures_for(matrix: Matrix) -> tuple[Fixture, ...]:
 
 
 _HYDRATES: Final = frozenset({get_requisition.NAME, approve_requisition.NAME, record_invoice.NAME})
-"""The three tools that act against a named row, and so the only ones a fixture serves.
+"""The tools that act against a named row, and so the only ones a fixture serves.
+
+``get_requisition``, ``approve_requisition`` and ``record_invoice`` — three of the
+five, and not the three another sentence in this package means by the phrase.
 
 Stated as the calls that **do** hydrate rather than as the calls that do not, so
 that every member is a name layer 3 owns and none is written out as a literal.

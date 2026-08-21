@@ -156,11 +156,14 @@ buy sensitivity to the deletion, and they cost nothing against the code as it is
 
 @pytest.fixture(scope="module", autouse=True)
 def requisitions() -> Iterator[None]:
-    """Start from the generated fixtures, with the purchase orders cleared.
+    """Start from the committed rendering, so this module knows where it began.
 
-    This module writes twice over — a row raised, then decided — so it must know
-    where it began. The loader clears `purchase_order` before `requisition`,
-    which is what makes the orders this module mints the only ones in the table.
+    It writes twice over — a row raised, then decided — and `fixtures.load()`
+    deletes from the leaf inward and re-inserts, so what is on the table when the
+    first test runs is the rendering and not whatever a previous module left. The
+    rendering's own six purchase orders are there throughout; the orders this
+    module mints are the ones it names, which is why every assertion below counts
+    orders **for an identifier** rather than counting the table.
     """
     fixtures.load()
     yield

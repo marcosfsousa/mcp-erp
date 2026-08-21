@@ -73,9 +73,10 @@ record does not exist — a null would say it exists and is empty. The requisiti
 is always there, so a caller learns the state their own call produced without a
 second read, and a rejection is not a result with nothing in it.
 
-The row description is shared with the three tools that answer with a
-requisition, so the tool that *changes* a row's status cannot describe that row
-differently from the tools that read it.
+The row description is :data:`mcp_erp.purchase_to_pay.requisition.ROW_SCHEMA`,
+shared with every other tool that answers with a requisition, so the tool that
+*changes* a row's status cannot describe that row differently from the tools that
+read it or from the one that raises it.
 """
 
 OUTCOMES_KEY: Final = "outcomes"

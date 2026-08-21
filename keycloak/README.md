@@ -54,6 +54,18 @@ then runs `start --optimized --import-realm`. `compose.yaml` mounts this
 directory over the copy baked into the image, from the same committed path, so
 editing a realm file and restarting shows the change immediately.
 
+**Editing the `Dockerfile` needs `--build`, and nothing tells you otherwise.**
+`compose.yaml` pins `image: mcp-erp-keycloak:26.7.1` beside its `build:` context,
+so Compose builds when that tag is absent and reuses it on every run after —
+a changed `Dockerfile` then runs the stale image silently:
+
+```
+docker compose up --build
+```
+
+A realm file needs no rebuild, because it is mounted rather than baked. That is
+the whole of the difference between the two kinds of edit.
+
 Everything is discarded on `docker compose down`: the database is in memory, so
 every boot re-imports from these files and mints **fresh signing keys**. That is
 the point rather than a limitation — it makes *Keycloak is a pure function of
@@ -266,10 +278,15 @@ $ uv run python tests/tokens.py ingrid.holm erp.decide
 granted     erp.decide openid
 ```
 
-Rafael Costa holds `invoice_clerk` and neither deciding role, so the scope is
-silently omitted and the flow succeeds — conformant, per RFC 6749 §3.3, and the
-reason ADR-0012 left the `scope` response parameter as an open verification
-item. Ingrid Holm holds `unlimited_approver` and **not** `approver`, and still
+Rafael Costa holds `invoice_clerk` and neither deciding role, so `erp.decide` is
+dropped from the grant and the flow succeeds without complaint — conformant, per
+RFC 6749 §3.3, and the reason ADR-0012 left the `scope` response parameter as an
+open verification item. **The narrowing is announced rather than silent**: §3.3
+has the authorization server state the granted `scope` whenever it differs from
+the request, and the `granted` and `declined` columns above are read straight off
+that response. What a caller does not get is an error.
+
+Ingrid Holm holds `unlimited_approver` and **not** `approver`, and still
 receives `erp.decide`: that is why the mapping lists both roles, and gating on
 `approver` alone would have made the above-threshold branch she exists for
 unreachable.
@@ -386,11 +403,15 @@ clients — each states its own lists, and the decoy still carries somebody else
 audience — and the policy condition above is what keeps *any* client the realm
 provisions to identifiers from one origin.
 
-**`offline_access` is deliberately absent from that second list.** Keycloak
-advertises the scope in `scopes_supported` in every realm, and SEP-2207 has a
-client append it to the request when it declares `refresh_token`. No Person in
-the Cast holds the `offline_access` role, and Keycloak does **not** narrow an
-unentitled one away the way a role scope mapping narrows `erp.decide` — it
+**`offline_access` is not on that second list, and leaving it off is not what
+stops it.** Keycloak advertises the scope in `scopes_supported` in every realm,
+and SEP-2207 has a client append it to the request when it declares
+`refresh_token`. The client the executor provisions comes back carrying
+`offline_access` in its own `optionalClientScopes` whatever the realm defaults
+name — #46 found that by reading the created client — so the list is not the
+control here. The role is: no Person in the Cast holds `offline_access`, and
+Keycloak does **not** narrow an unentitled one away the way a role scope mapping
+narrows `erp.decide` — it
 refuses the token request outright with *Offline tokens not allowed for the user
 or client*. `tests/conformance_client.py`'s `GRANT_TYPES` carries the finding and
 what the client does about it.
@@ -412,16 +433,18 @@ votes on `PRE_AUTHORIZATION_REQUEST` and **abstains on every other event**, whil
 like enforcement and enforcing nothing. **A profile is only as reachable as its
 policy's condition, and conditions are per-event.**
 
-So the pin is a second policy, bound to what is actually true of every client
-here rather than to a name:
+So the pin is a second policy — `proof-key-for-code-exchange`, which is the name
+of both the profile and the policy that binds it, with `pkce-enforcer` as the
+executor inside — bound to what is actually true of every client here rather than
+to a name:
 
 ```json
 { "condition": "client-access-type", "configuration": { "type": ["public"] } }
 ```
 
 `ClientAccessTypeCondition` votes on any context that carries a resolved client,
-which covers both events `pkce-enforcer` handles. Every client in this realm is
-public, so the pin now holds for the four in this file, for the fifth that is
+which covers both events the `pkce-enforcer` executor handles. Every client in
+this realm is public, so the pin now holds for the four in this file, for the fifth that is
 not, and for any sixth — and `auto-configure` stamps `S256` onto the provisioned
 client as well, so the attribute and the policy agree rather than one standing in
 for the other.

@@ -1,4 +1,4 @@
-"""The refusal contract, across all three live tools at once.
+"""The refusal contract, across `get_requisition`, `list_requisitions` and `submit_requisition`.
 
     A resource **named** in the request is refused, never omitted.
     A resource **discovered** by listing is omitted, never refused.
@@ -12,8 +12,11 @@ them: **one identifier, two tools, and the two answers a caller gets.**
 `submit_requisition` is the third tool and it names no resource, so neither half
 governs it directly. What it contributes is the row: a caller raises one, and
 the pair above is then asserted about a row this run created rather than only
-about seeded ones. That is also the only place all three tools appear in one
-sequence, which is what makes *holds across all three* a thing to point at.
+about seeded ones. That is also the only place the three appear in one sequence,
+which is what makes *holds across all of them* a thing to point at. The exhibit
+declares five tools, and the other two are `approve_requisition` and
+`record_invoice`, each with a module of its own here — so *all three* means the
+three this module drives and never the tool set.
 
 **Where this lives, since #43 wrote `matrix.yaml`.** This is the seam *between*
 two tools rather than a row about either: neither attack-suite row says that the
@@ -140,7 +143,7 @@ def test_a_row_that_never_existed_is_refused_by_name_like_any_other() -> None:
 
 
 def test_a_submitted_row_is_then_named_and_discovered_by_its_submitter() -> None:
-    """All three tools in one sequence, on a row this run created.
+    """All three of this module's tools in one sequence, on a row this run created.
 
     The write is the only one of the three that names no resource, so it is what
     puts a row into the contract rather than what the contract governs. Its

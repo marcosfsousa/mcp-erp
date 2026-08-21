@@ -11,10 +11,10 @@ Imports nothing from :mod:`mcp_erp.transport`.
 
 What the composition root needs is re-exported here. The tool declarations —
 name, schemas, description — are re-exported **as modules rather than
-flattened**, one module per tool, because three tools declaring five
-module-level names each would otherwise turn every one of them into a prefixed
-name. Each module's ``Action`` is called ``ACTION``, so the tool's identity is
-the module's and never repeated inside it.
+flattened**, one module per tool, because every tool declares the same five
+module-level names, and flattening them into one namespace would turn every one
+of them into a prefixed name. Each module's ``Action`` is called ``ACTION``, so
+the tool's identity is the module's and never repeated inside it.
 
 :mod:`~mcp_erp.purchase_to_pay.organisation` is **deliberately absent** below.
 It is a generator with a ``__main__`` entry point, and importing it here would

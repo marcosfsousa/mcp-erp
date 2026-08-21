@@ -26,7 +26,9 @@ how an expectation is checked.
 derived from the `Reason` record the two layers declare — there is no lookup
 table anywhere in `src/`, and the one this suite builds is built *out of* the two
 declared sets rather than beside them. So changing ADR-0002's mapping is a change
-in one declaration, not in thirty-three expectations.
+in one declaration, not in every expectation the table carries. The row count is
+`meta`'s and is asserted against the rows there; it is not restated here, because
+a number in prose is a number nothing checks.
 
 ## What lives here besides the rows
 
