@@ -1,0 +1,536 @@
+Under-scoped: the tool is absent from the listing
+
+1 of 2
+──────────────────────────────────────────────────────────────────────────────
+
+POST /mcp HTTP/1.1
+accept: application/json, text/event-stream
+accept-encoding: gzip, deflate
+authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJiT0tKbXFqWUZlcVBFOFFjaXBPMjlRWGFhenloMHZrQ29lYU9XWS1RT3U4In0.eyJleHAiOjE3ODcyNjA4MzcsImlhdCI6MTc4NzI2MDUzNywianRpIjoib25ydGFjOmZmMTViMjZlLWQzZjctNTI3My1mMjg4LWU2NWJkMmM0NjM5MiIsImlzcyI6Imh0dHA6Ly9rZXljbG9hazo4MDgxL3JlYWxtcy9tY3AtZXJwIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwL21jcCIsInN1YiI6InRvbWFzLXdlYmVyIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoibWNwLWNvbmZvcm1hbmNlIiwic2lkIjoiMFJsdDhWU0QxSjVTNC04ZDhHZ2V5RjJOIiwic2NvcGUiOiJvcGVuaWQgZXJwLndyaXRlIGVycC5yZWFkIn0.zGmMBQnDXF0RxKYf5o9-deCkcqmdlCcDZIEVhzy-yJDE9kaEGOX_xfrkhv969geLUGmK7uX_Wes8TD-E_9ez-qagi6D8DYTFSLbtbGhxl6A5f25OL5hoBv05KfDBgXWQ5LPhG2jZuOi6fXNGz0kHFZRdD-W72t662FQ1oK9iq5MHn6OyHhd2EWNZ7QbXH8DznNTca2SKwj-1Bhd6EtEpY0G4gOVzffa4sWTOvzC-7QpQROM1pQ9ShJZTz-nNqgNUko3I5jzXQSUELI-rqqTpguJif5bJEL5SMbINua_6ILKpSiX3t_zedVODqkCP_WAaXwEyZGv3JU0yG2_R1lyatg
+connection: keep-alive
+content-length: 246
+content-type: application/json
+host: localhost:8080
+mcp-method: tools/list
+mcp-protocol-version: 2026-07-28
+user-agent: python-httpx2/2.12.0
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientCapabilities": {},
+      "io.modelcontextprotocol/clientInfo": {
+        "name": "mcp-erp-suite",
+        "version": "0"
+      }
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+connection: keep-alive
+content-length: 5359
+content-type: application/json
+date: Thu, 20 Aug 2026 21:15:37 GMT
+server: nginx/1.29.4
+x-served-by: 172.19.0.4:8080
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "cacheScope": "private",
+    "resultType": "complete",
+    "tools": [
+      {
+        "description": "List the purchase requisitions the caller may see. Which rows come back is decided per caller and is not a filter the caller sets.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "name": "list_requisitions",
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "requisitions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "cost_centre": {
+                    "type": "string"
+                  },
+                  "vendor": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "amount": {
+                    "type": "string"
+                  },
+                  "currency": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "submitted_by": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "status": {
+                    "enum": [
+                      "submitted",
+                      "approved",
+                      "rejected"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "cost_centre",
+                  "vendor",
+                  "amount",
+                  "currency",
+                  "description",
+                  "submitted_by",
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "requisitions"
+          ],
+          "additionalProperties": false
+        },
+        "title": "List requisitions"
+      },
+      {
+        "description": "Fetch one purchase requisition by its identifier. An identifier the caller may not see and an identifier that does not exist answer identically, so a refusal here says nothing about whether the row exists.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "name": "get_requisition",
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "requisition": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "cost_centre": {
+                  "type": "string"
+                },
+                "vendor": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                },
+                "amount": {
+                  "type": "string"
+                },
+                "currency": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "submitted_by": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                },
+                "status": {
+                  "enum": [
+                    "submitted",
+                    "approved",
+                    "rejected"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "cost_centre",
+                "vendor",
+                "amount",
+                "currency",
+                "description",
+                "submitted_by",
+                "status"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "requisition"
+          ],
+          "additionalProperties": false
+        },
+        "title": "Get requisition"
+      },
+      {
+        "description": "Raise a purchase requisition against a vendor. It is charged to the caller's own cost centre, which the server supplies and no argument can change.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "vendor": {
+              "enum": [
+                "Bauer Facility Services",
+                "Meridian Cloud Services",
+                "Nordwind Office Supplies",
+                "Talbot Print and Signage"
+              ]
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,9})(\\.[0-9]{1,2})?$"
+            },
+            "currency": {
+              "enum": [
+                "EUR"
+              ]
+            },
+            "description": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "vendor",
+            "amount",
+            "currency",
+            "description"
+          ],
+          "additionalProperties": false
+        },
+        "name": "submit_requisition",
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "requisition": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "cost_centre": {
+                  "type": "string"
+                },
+                "vendor": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                },
+                "amount": {
+                  "type": "string"
+                },
+                "currency": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "submitted_by": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                },
+                "status": {
+                  "enum": [
+                    "submitted",
+                    "approved",
+                    "rejected"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "cost_centre",
+                "vendor",
+                "amount",
+                "currency",
+                "description",
+                "submitted_by",
+                "status"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "requisition"
+          ],
+          "additionalProperties": false
+        },
+        "title": "Submit requisition"
+      },
+      {
+        "description": "Record the invoice for one approved purchase order. Recording requires a role the server resolves for itself, and nobody may record the invoice for a purchase order they approved. An order takes exactly one invoice: an order already invoiced cannot be invoiced again.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "name": "record_invoice",
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "purchase_order": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "requisition": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                },
+                "approved_by": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                },
+                "status": {
+                  "enum": [
+                    "open",
+                    "invoiced"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "requisition",
+                "approved_by",
+                "status"
+              ],
+              "additionalProperties": false
+            },
+            "invoice": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "purchase_order": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                },
+                "recorded_by": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "id",
+                "purchase_order",
+                "recorded_by"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "purchase_order",
+            "invoice"
+          ],
+          "additionalProperties": false
+        },
+        "title": "Record invoice"
+      }
+    ],
+    "ttlMs": 299838,
+    "_meta": {
+      "io.modelcontextprotocol/serverInfo": {
+        "name": "mcp-erp",
+        "title": "mcp-erp",
+        "version": ""
+      }
+    }
+  }
+}
+
+2 of 2
+──────────────────────────────────────────────────────────────────────────────
+
+POST /mcp HTTP/1.1
+accept: application/json, text/event-stream
+accept-encoding: gzip, deflate
+authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJiT0tKbXFqWUZlcVBFOFFjaXBPMjlRWGFhenloMHZrQ29lYU9XWS1RT3U4In0.eyJleHAiOjE3ODcyNjA4MzcsImlhdCI6MTc4NzI2MDUzNywianRpIjoib25ydGFjOmZmMTViMjZlLWQzZjctNTI3My1mMjg4LWU2NWJkMmM0NjM5MiIsImlzcyI6Imh0dHA6Ly9rZXljbG9hazo4MDgxL3JlYWxtcy9tY3AtZXJwIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwL21jcCIsInN1YiI6InRvbWFzLXdlYmVyIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoibWNwLWNvbmZvcm1hbmNlIiwic2lkIjoiMFJsdDhWU0QxSjVTNC04ZDhHZ2V5RjJOIiwic2NvcGUiOiJvcGVuaWQgZXJwLndyaXRlIGVycC5yZWFkIn0.zGmMBQnDXF0RxKYf5o9-deCkcqmdlCcDZIEVhzy-yJDE9kaEGOX_xfrkhv969geLUGmK7uX_Wes8TD-E_9ez-qagi6D8DYTFSLbtbGhxl6A5f25OL5hoBv05KfDBgXWQ5LPhG2jZuOi6fXNGz0kHFZRdD-W72t662FQ1oK9iq5MHn6OyHhd2EWNZ7QbXH8DznNTca2SKwj-1Bhd6EtEpY0G4gOVzffa4sWTOvzC-7QpQROM1pQ9ShJZTz-nNqgNUko3I5jzXQSUELI-rqqTpguJif5bJEL5SMbINua_6ILKpSiX3t_zedVODqkCP_WAaXwEyZGv3JU0yG2_R1lyatg
+connection: keep-alive
+content-length: 329
+content-type: application/json
+host: localhost:8080
+mcp-method: tools/call
+mcp-name: approve_requisition
+mcp-protocol-version: 2026-07-28
+user-agent: python-httpx2/2.12.0
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "approve_requisition",
+    "arguments": {
+      "ids": [
+        "req_0004"
+      ],
+      "decision": "approve"
+    },
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientCapabilities": {},
+      "io.modelcontextprotocol/clientInfo": {
+        "name": "mcp-erp-suite",
+        "version": "0"
+      }
+    }
+  }
+}
+
+HTTP/1.1 403 Forbidden
+connection: keep-alive
+content-length: 0
+date: Thu, 20 Aug 2026 21:15:37 GMT
+server: nginx/1.29.4
+www-authenticate: Bearer error="insufficient_scope", error_description="the token does not carry 'erp.decide', required by 'approve_requisition'", scope="erp.decide", resource_metadata="http://localhost:8080/.well-known/oauth-protected-resource/mcp"
+x-served-by: 172.19.0.5:8080

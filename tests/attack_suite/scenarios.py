@@ -6,6 +6,9 @@ the only thing that parses it, and it does two jobs that have to agree:
 **It reads the rows**, so the invariants beside it assert against the file rather
 than against a restatement of it — the `meta` block's counts included, which is
 what map constraint `#12` asks of a derived number kept where it can be read.
+Since #92 it is also what `scenario_table.py` renders the write-up's table from, which is
+why :class:`Scenario` carries the whole row rather than the fields an assertion
+reads.
 
 **It carries the declaration**, :func:`exercises`, which every test in this
 directory applies to say which row it falsifies. ADR-0010 fixed that shape — *"tests
@@ -78,31 +81,51 @@ title and the table cannot come apart quietly.
 
 @dataclass(frozen=True, slots=True)
 class Scenario:
-    """One row of the canonical list, with the fields the invariants read.
+    """One row of the canonical list, whole.
 
-    Deliberately not the whole row. The citation, the prevention line and the
-    notes are prose for a reader and nothing here asserts against them; parsing
-    them into fields would invite a test that checks a sentence's shape, which is
-    the kind of assertion that fails on a reworded note and means nothing when it
-    passes.
+    **It used to be deliberately partial**, on the ground that nothing asserted
+    against the citation or the prose and that parsing them would invite a test
+    checking a sentence's shape. That ground moved with #92: `scenario_table.py` renders
+    this file into the write-up, ADR-0014 makes that rendering committed and
+    diff-checked, and a renderer needs the row. Nothing here asserts against the
+    prose still — the invariants beside this module read the same fields they
+    always did.
 
     Attributes:
         name: The stable identifier a test declares. Never reworded.
         basis: `clause`, `adr` or `seam`.
+        prevents: One line: the attack this stops.
+        citation: The citation block verbatim, key by key. Carried as a mapping
+            rather than parsed into fields because its shape varies by basis and
+            by what was harvestable — nineteen rows quote a clause, fifteen name
+            a decision, and seven of the quotes are elided. A renderer that
+            walked named fields would drop a key nobody had told it about; one
+            that walks the mapping cannot.
         normative_strength: The keyword the quoted sentence carries, or ``None``
             for the two bases that quote no normative sentence at all.
         status: `asserted` or `documented`.
         floor: Whether the row may ever be downgraded to `documented`.
         removal: The deletion that makes the attack succeed, or ``None`` on the
             one row that prevents nothing.
+        note: What the row asserts and how it splits from its neighbours, or
+            ``None``.
+        history: How the row was narrowed or corrected, or ``None``. **Separate
+            from `note` deliberately**, and the reason is a rendering: a note
+            recording a *withdrawn* claim still contains the claim's words, and
+            a rendered cell carrying them can be skimmed as an assertion.
+            `row_probe_indistinguishable` is the row that found it.
     """
 
     name: str
     basis: str
+    prevents: str
+    citation: Mapping[str, str]
     normative_strength: str | None
     status: str
     floor: bool
     removal: str | None
+    note: str | None
+    history: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,17 +212,25 @@ def read_suite(text: str) -> Suite:
     for entry in document["scenarios"]:
         if not isinstance(entry, dict):
             raise ValueError(f"a scenario must be a mapping, got {entry!r}")
-        missing = [key for key in ("name", "basis", "status", "floor") if key not in entry]
+        missing = [
+            key
+            for key in ("name", "basis", "prevents", "citation", "status", "floor")
+            if key not in entry
+        ]
         if missing:
             raise ValueError(f"{entry.get('name', entry)!r} is missing {', '.join(missing)}")
         rows.append(
             Scenario(
                 name=str(entry["name"]),
                 basis=str(entry["basis"]),
+                prevents=str(entry["prevents"]),
+                citation={str(key): str(value) for key, value in entry["citation"].items()},
                 normative_strength=_optional(entry.get("normative_strength")),
                 status=str(entry["status"]),
                 floor=bool(entry["floor"]),
                 removal=_optional(entry.get("removal")),
+                note=_optional(entry.get("note")),
+                history=_optional(entry.get("history")),
             )
         )
 
@@ -348,8 +379,9 @@ def _declared_by(function: TestFunction) -> tuple[str, ...]:
 def _optional(value: object) -> str | None:
     """A YAML scalar as a string, keeping `null` as ``None``.
 
-    `normative_strength` and `removal` are both deliberately nullable — the first
-    on every `adr` and `seam` row, the second on the one row that prevents
-    nothing — so an empty string here would erase a distinction the table makes.
+    Four fields are deliberately nullable and an empty string would erase what
+    each absence means: `normative_strength` on every `adr` and `seam` row,
+    `removal` on the one row that prevents nothing, and `note` and `history` on
+    every row that has nothing of that kind to record.
     """
     return None if value is None else str(value)

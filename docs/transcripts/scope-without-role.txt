@@ -1,0 +1,63 @@
+Scope without role: a protocol error where a 403 would lie
+
+1 of 1
+──────────────────────────────────────────────────────────────────────────────
+
+POST /mcp HTTP/1.1
+accept: application/json, text/event-stream
+accept-encoding: gzip, deflate
+authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJiT0tKbXFqWUZlcVBFOFFjaXBPMjlRWGFhenloMHZrQ29lYU9XWS1RT3U4In0.eyJleHAiOjE3ODcyNjA3OTYsImlhdCI6MTc4NzI2MDQ5NiwianRpIjoib25ydGFjOjI0YTc3Yjc4LTZkYTEtMjk2Mi1mYmRlLTQ0NjUwNDVjYWRkNCIsImlzcyI6Imh0dHA6Ly9rZXljbG9hazo4MDgxL3JlYWxtcy9tY3AtZXJwIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwL21jcCIsInN1YiI6InByaXlhLXJhbWFuIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoiaHR0cHM6Ly9tYXJjb3Nmc291c2EuZ2l0aHViLmlvL21jcC1lcnAvY2xpZW50cy9jb25mb3JtYW5jZS8xLmpzb24iLCJzaWQiOiJSQWZFdUpkZ0llaUlZa3QzZ2s0ZVRFQWQiLCJzY29wZSI6ImVycC53cml0ZSBlcnAucmVhZCBlcnAuZGVjaWRlIn0.ASdEQo9XJpH_PoFV_Qahkbe-efEcewqDQXmB2ZQ6lAdPWumu1OJO_7C4TeoDMvAvbREUdI3e6zU7wh8LL3ZpFE3kMYYppyDJDWSqaVKV1RIqDWpo0lpNp0mnJM4FwSC6en7FmHSWqVv4LY5pDnCR_LXNbJe9NNm_5v_0RAP30yDrKaShuU8EfdeNo92gVlGNAWtoUsct3W4XzBFBNm5k4dwz7TDaF7GXa43lVE6Of0LwMECYd2PAkFnzN5w6atPCAoQA8awYiG0iyIm0DlTEPM_0lN1UCkNeXG0bEH-uggCxiMGsykh_97x2rZAwaalJhyb8Oh-g5ccp5Efun4ZJTg
+connection: keep-alive
+content-length: 323
+content-type: application/json
+host: localhost:8080
+mcp-method: tools/call
+mcp-name: approve_requisition
+mcp-protocol-version: 2026-07-28
+user-agent: python-httpx2/2.12.0
+
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "approve_requisition",
+    "arguments": {
+      "ids": [
+        "req_9999"
+      ],
+      "decision": "approve"
+    },
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientInfo": {
+        "name": "mcp",
+        "version": "0.1.0"
+      },
+      "io.modelcontextprotocol/clientCapabilities": {}
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+connection: keep-alive
+content-length: 203
+content-type: application/json
+date: Thu, 20 Aug 2026 21:14:57 GMT
+server: nginx/1.29.4
+x-served-by: 172.19.0.4:8080
+
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "error": {
+    "code": -31010,
+    "message": "role_missing",
+    "data": {
+      "reason": "role_missing",
+      "remedy": "administrator_grant",
+      "retry_identical_helps": false,
+      "retry_as_other_person_helps": false
+    }
+  }
+}

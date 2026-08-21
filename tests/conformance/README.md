@@ -167,3 +167,42 @@ response's own `scope` key as it passes.
 refuses an unentitled `offline_access` at the token endpoint outright rather than
 omitting it from the grant. `conformance_client.GRANT_TYPES` carries that
 finding and what this client does about it.
+
+## One added call, and why it duplicates something twice proven
+
+`approve_requisition`, presented with Priya Raman's **earned** token, is refused
+`-31010`. `tests/matrix/` and `tests/wire/` both prove that refusal already, on a
+token we minted for ourselves; this one uses a token a human consented to at a
+login screen, which is the only path to it a reader cannot call circular. ADR-0014
+§*The gating job performs the centrepiece* is where the duplication is argued,
+and it also fixes an inconsistency the capture rule would otherwise have: the
+beat's transcript now comes out of a run the merge gate protects.
+
+The identifier it names is the one no row carries, and that is the assertion
+rather than a shortcut. ADR-0006 fixes the gate order and the role step is ahead
+of anything that reads a row, so a caller holding `erp.decide` and no deciding
+role is refused before the resource is looked at. Naming a real fixture would
+make this leg depend on a seeded database the `Authorization code flow` job does
+not load; naming the absent identifier makes it depend on the order instead,
+which is the property.
+
+## It also writes three of the walkthrough's captured transcripts
+
+ADR-0014 makes the walkthrough's wire exchanges **captured artifacts** — a run
+writes them, the write-up includes them, and a check refuses a diff — and three
+of the six beats need a token consented to at a login screen: the flow
+completing, `tools/list` answered for two earned tokens, and the refusal above.
+
+**This suite writes those three because it is the only thing that can.** Keycloak
+remembers a grant per Person and client, so a second process performing the same
+flows would post one form where these posted two, and the transcript would record
+the difference. `tests/capture.py` writes the other three, which need no consent
+screen and no ordering; `tests/transcripts.py` is what the two share, and
+[`docs/transcripts/README.md`](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/transcripts/README.md)
+says what the mask covers and why the committed tokens are not secrets.
+
+**Committing is not an assertion.** `transcripts.keep` rewrites a file only when
+the masked forms differ, and the verdict is a `git status` in the job that ran
+this. What this suite asserts is that each beat **found** its exchanges — a
+selector that matched nothing would commit an empty transcript over a good one,
+which is the one failure a diff check cannot see.

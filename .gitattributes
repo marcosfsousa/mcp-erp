@@ -25,3 +25,10 @@ public/clients/**/*.json -text
 src/mcp_erp/authorization/data/*.json -text
 src/mcp_erp/purchase_to_pay/data/*.json -text
 keycloak/import/*.json -text
+
+# The captured transcripts, on the same argument one step further out. A run
+# re-captures them, masks both sides and rewrites a file only when the masked
+# forms differ — so the comparison is byte for byte over what the mask left, and
+# a checkout that converted line endings would rewrite every one of them on a
+# machine rather than on a change. `docs/transcripts/README.md` carries the rest.
+docs/transcripts/*.txt -text

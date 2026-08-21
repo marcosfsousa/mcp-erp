@@ -190,8 +190,18 @@ jobs:
       # records why a flow never reaches the wait it asserts on. The files are
       # named rather than collected, because `testpaths` is the whole of
       # `tests/` and most of it needs Compose.
+      #
+      # `tests/test_transcripts.py` joins them with #92, and it is the same
+      # shape a third time: the transcript mask is a pure function of text, and
+      # a mask that dropped `sub` — or that replaced everything and so compared
+      # two identical documents forever — is an ordinary Python defect. The job
+      # that captures against a running stack cannot see either failure, because
+      # both of them make a capture pass.
       - name: The flow drivers' Docker-free halves
-        run: uv run pytest tests/test_tokens.py tests/test_conformance_client.py
+        run: |
+          uv run pytest tests/test_tokens.py \
+                        tests/test_conformance_client.py \
+                        tests/test_transcripts.py
 
   layer-boundaries:
     name: Layer boundaries
@@ -293,6 +303,26 @@ jobs:
           uv run python -m mcp_erp.purchase_to_pay.organisation
           uv run python -m mcp_erp.purchase_to_pay.fixtures
 
+      # Three further renderings, added by #92, and the reason they are here
+      # rather than in a job of their own is this job's own diagnosis: *what is
+      # committed is not what the source renders*. Two read a canonical table and
+      # write the write-up's half of it — map constraint `4` has said since the
+      # charting session that the decision matrix is "one source rendering into
+      # both tests and the write-up", and the tests half was the only half built.
+      # The third writes the root README's one embedded proof out of a committed
+      # transcript, which ADR-0014 requires be "included from the captured set,
+      # never retyped".
+      #
+      # **None of the three needs Compose**, which is what lets this job hold
+      # them: they read committed files and write committed files, exactly like
+      # the three above. Capturing the transcripts *does* need a running stack,
+      # and that half is `Authorization code flow`'s.
+      - name: Re-render the tables and the README's embedded proof
+        run: |
+          uv run python tests/matrix/matrix_table.py
+          uv run python tests/attack_suite/scenario_table.py
+          uv run python tests/capture.py --include
+
       # `git status --porcelain` rather than `git diff --exit-code`, because a
       # rendering that is missing entirely comes back as an untracked file and a
       # diff would report nothing. Both cases are the same defect: what is
@@ -309,10 +339,21 @@ jobs:
           # authored edit as a rendering that drifted from the seed — the one
           # diagnosis this job exists to give, handed out for the one thing it
           # is not. So the rendered file is named exactly.
+          #
+          # The three #92 added are named exactly, on the same argument
+          # `keycloak/import/` is: `docs/decision-matrix/` and
+          # `docs/attack-suite/` hold the hand-authored canonical tables beside
+          # the rendered ones, and `README.md` is prose with one included region
+          # in it. Naming a directory or the whole tree would report an authored
+          # edit as a rendering that drifted, which is the one diagnosis this job
+          # exists to give handed out for the one thing it is not.
           drifted=$(git status --porcelain -- \
             src/mcp_erp/authorization/data \
             src/mcp_erp/purchase_to_pay/data \
-            keycloak/import/mcp-erp-users-0.json)
+            keycloak/import/mcp-erp-users-0.json \
+            docs/decision-matrix/matrix.md \
+            docs/attack-suite/scenarios.md \
+            README.md)
 
           if [ -n "${drifted}" ]; then
             echo "::error::A rendering no longer matches the source it is generated from."
@@ -321,12 +362,15 @@ jobs:
             echo
             echo "docs/organisation/seed.yaml is the source of truth for the"
             echo "organisation's three renderings, and docs/decision-matrix/matrix.yaml"
-            echo "for the fixtures. Edit the source and re-run the generators;"
-            echo "never edit a rendering by hand."
+            echo "for the fixtures. The two rendered tables come from"
+            echo "docs/decision-matrix/matrix.yaml and docs/attack-suite/scenarios.yaml;"
+            echo "the README's one embedded proof comes from docs/transcripts/."
+            echo "Edit the source and re-run the generators; never edit a"
+            echo "rendering, or the README's marked proof region, by hand."
             exit 1
           fi
 
-          echo "All four renderings match the sources they are generated from."
+          echo "All seven renderings match the sources they are generated from."
 
       # The invariants a diff cannot see: that the renderers are byte-stable,
       # that the two role columns stay independent, that realm membership and
@@ -953,8 +997,63 @@ jobs:
       - name: Bring the exhibit up
         run: docker compose up -d --build --wait
 
+      # It writes as well as asserts, since #92: three of ADR-0014's six captured
+      # beats need a token a Person consented to at a login screen, and Keycloak
+      # remembers a grant per Person and client — so a second process performing
+      # the same flows would post one form where these posted two, and the
+      # transcript would record the difference. The suite that earns the tokens
+      # is therefore the one that captures them.
       - name: The authorization code flow
         run: uv run pytest tests/conformance
+
+      # The three beats that need no consent screen, and so no ordering. It
+      # loads the fixtures itself: the rows Yusuf Demir must not see and the
+      # requisition Tomas Weber raised are what two of the three are about.
+      - name: Capture the beats a minted token performs
+        run: uv run python tests/capture.py
+
+      # THE DRIFT CHECK, AND WHY IT IS A `git status`
+      #
+      # Both writers above re-capture and then rewrite a committed file **only
+      # when the volatile-field mask says something substantive changed** —
+      # never because a token was minted again or a clock moved. So the verdict
+      # is the same one `Seed renders clean` gives its four renderings, and it
+      # means the same thing: what is committed is not what a run produces.
+      #
+      # `git status --porcelain` rather than `git diff --exit-code`, for the
+      # reason that job states: a capture that is missing entirely comes back as
+      # an untracked file, and a diff would report nothing.
+      #
+      # A step rather than a job. ADR-0013 holds job `name:` values and the
+      # ruleset's required contexts equal in both directions, so a step inside a
+      # job that already runs changes no context and needs no ruleset edit — and
+      # a job of its own would have to earn a second set of tokens through a
+      # second consent screen, which is the one thing this cannot do twice.
+      - name: Refuse a transcript the wire no longer produces
+        run: |
+          set -euo pipefail
+
+          drifted=$(git status --porcelain -- docs/transcripts)
+
+          if [ -n "${drifted}" ]; then
+            echo "::error::A captured transcript no longer matches what the wire says."
+            echo
+            echo "${drifted}"
+            echo
+            echo "The captures are committed verbatim and compared under a mask;"
+            echo "a diff here means something substantive changed, not that a"
+            echo "token was minted again. Re-run the capture locally against a"
+            echo "cold stack and commit what it writes:"
+            echo
+            echo "  docker compose down && docker compose up --wait"
+            echo "  uv run pytest tests/conformance"
+            echo "  uv run python tests/capture.py"
+            echo
+            echo "docs/transcripts/README.md says what the mask covers and why."
+            exit 1
+          fi
+
+          echo "All six captured transcripts match what the wire said."
 
       # The one place a reader of a red check needs more than the step name. The
       # flow spans four containers, and a refusal from Keycloak says why in its

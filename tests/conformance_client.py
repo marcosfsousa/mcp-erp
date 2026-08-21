@@ -101,6 +101,7 @@ from tokens import (
     redirect_error,
     scope_set,
 )
+from transcripts import Exchange, snapshot
 
 REPO = Path(__file__).parents[1]
 
@@ -496,8 +497,9 @@ class Flow(httpx2.Auth):
     What it wraps is the package's own `OAuthClientProvider`, which performs
     discovery, the Client Identity Metadata Document path, Proof Key for Code
     Exchange and the token exchange. What it adds is a browser that is not one —
-    :meth:`_open` posts the login form and the consent form — and one reading
-    taken off the wire on the way past.
+    :meth:`_open` posts the login form and the consent form — one reading taken
+    off the wire on the way past, and, since #92, the whole conversation kept on
+    :attr:`exchanges` for the transcripts ADR-0014 commits.
 
     **The `scope` response parameter is read here because it is unreadable
     afterwards.** RFC 6749 §3.3 puts a `MUST` on the authorization server to send
@@ -532,6 +534,37 @@ class Flow(httpx2.Auth):
 
         self.reported: str | None = None
         """The token response's own `scope` parameter, verbatim, or `None`."""
+
+        self.exchanges: list[Exchange] = []
+        """Every exchange this flow saw, in the order it saw them.
+
+        **Snapshots rather than the live objects**, and that is not tidiness:
+        `httpx2` reuses one `Request` across an authenticated retry — the auth
+        flow sets `Authorization` on the very request the `401` came back from —
+        so a record holding the object would render a credential that request
+        never carried. Found by reading a capture that showed exactly that.
+
+        ADR-0014 makes the captured transcripts an artifact class of their own —
+        *"a run writes them, a committed copy is what the write-up includes, and
+        a check refuses a diff"* — and this is the record they are written from.
+        It travels on the auth object for the reason :attr:`posted` and
+        :attr:`reported` do: the auth object is the entire difference between
+        this client and a pre-minted token, so what a run needs to say about the
+        flow has to travel on it or :func:`connect` grows a second parameter.
+
+        It spans **both** of this module's clients. The form posts arrive through
+        :meth:`_seen`, and everything the package sends — discovery, the token
+        exchange, and every protocol request afterwards — arrives through
+        :meth:`async_auth_flow`, which an `httpx2.Auth` is invited into once per
+        request. So the record is the whole conversation rather than the half
+        this module happens to build itself.
+
+        Bodies are read on the way past, except an event stream's. Nothing
+        assertable depends on the record, so a beat the selectors miss is a
+        transcript that does not get written rather than a run that fails —
+        which is why `tests/conformance/test_authorization_code_flow.py` asserts
+        that each beat found its exchanges before it commits one.
+        """
 
         self.wallet = Wallet()
         self._timeout = timeout
@@ -621,12 +654,32 @@ class Flow(httpx2.Auth):
 
         while True:
             response = yield outbound
+            await self._seen(response)
             await self._record(response)
 
             try:
                 outbound = await inner.asend(response)
             except StopAsyncIteration:
                 return
+
+    async def _seen(self, response: httpx2.Response) -> None:
+        """Read what came back and keep it on :attr:`exchanges`, or keep it unread.
+
+        **The stream is excluded structurally, not by knowing which request was
+        which.** Reading a `text/event-stream` buffers until the server closes
+        it, which is a hang rather than a failure — the same hazard
+        :meth:`_record` gates on and the same gate, one media type rather than
+        the token response's. This server never opens one, for the reason
+        :data:`TIMEOUT` records; the gate is here so that stays a fact about the
+        era rather than a thing this method assumes.
+
+        A response that arrives already read is left alone: `aread` caches, so
+        the second call is the first one's bytes.
+        """
+        if not response.headers.get("content-type", "").startswith(EVENT_STREAM_MEDIA_TYPE):
+            await response.aread()
+
+        self.exchanges.append(snapshot(response))
 
     async def _record(self, response: httpx2.Response) -> None:
         """Keep the `scope` parameter off a token response, and read nothing else.
@@ -672,6 +725,13 @@ class Flow(httpx2.Auth):
             follow_redirects=False,
             timeout=self._timeout,
             transport=_reaching_the_issuer(),
+            # The other half of :attr:`exchanges`. A response hook rather than a
+            # recording transport, because a transport sees a request after the
+            # cookie jar has read its host and before the redirect policy has
+            # seen the answer — this module already carries one transport that
+            # rewrites at that altitude, and a second object there would be a
+            # second place the address story lives.
+            event_hooks={"response": [self._seen]},
         ) as http:
             page = await _get(http, rebase(authorization_url))
             _keep_the_session_over_plain_http(http)

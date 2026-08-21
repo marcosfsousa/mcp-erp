@@ -1,0 +1,78 @@
+# Captured transcripts
+
+Six wire exchanges, written by a run and committed verbatim. They are the
+evidence half of the walkthrough [ADR-0014](../adr/0014-the-walkthrough-is-the-write-up-and-the-image-is-never-the-proof.md)
+specified: the tables render from their sources, the prose is hand-written, and
+these are captured — **a run writes them, the write-up includes them, and a check
+refuses a diff.**
+
+Nothing here is edited by hand. `Seed renders clean` and `Authorization code
+flow` both re-derive from this directory, and a hand-edited file is a red check
+rather than a surprise in a document.
+
+| File | What it shows |
+| --- | --- |
+| [`the-flow-completes.txt`](the-flow-completes.txt) | A client registered nowhere in the realm identifies itself by a document GitHub Pages serves, a person logs in and consents, the code is redeemed, and the token reaches a tool. |
+| [`tools-list-for-two-tokens.txt`](tools-list-for-two-tokens.txt) | The same endpoint answering two earned tokens with different tool sets. The root README's one embedded proof is derived from this file. |
+| [`scope-without-role.txt`](scope-without-role.txt) | Priya Raman's consented `erp.decide` meeting a server that holds her no deciding role: `-31010`, where a `403` would tell a caller to fetch a token that cannot exist. |
+| [`under-scoped-tool-absent.txt`](under-scoped-tool-absent.txt) | A token without `erp.decide`: `approve_requisition` is not in the listing, and calling it anyway is answered with a challenge naming the scope. |
+| [`segregation-of-duties.txt`](segregation-of-duties.txt) | Every authorization gate passed, and the domain refusing anyway because the approver raised the requisition himself. |
+| [`row-scoped-not-found.txt`](row-scoped-not-found.txt) | Another cost centre's row and an identifier no row carries, answered byte for byte the same. |
+
+The first three are earned through a consent screen and are written by
+`tests/conformance/test_authorization_code_flow.py`; the last three are written
+by `tests/capture.py`. `tests/transcripts.py` is what they share.
+
+## The committed bearer tokens are not secrets
+
+Every transcript carries a real access token, and that is deliberate — a reader
+can decode one and check `aud` and `scope` against what the write-up claims,
+which a placeholder would make impossible.
+
+They are unverifiable by anyone, anywhere. The realm is a throwaway local one
+that re-imports from committed files into an in-memory database on every boot and
+**mints fresh signing keys each time**, the tokens expire five minutes after they
+are issued, and they are issued to People whose shared password is committed as
+`not-a-secret-demo-password`. There is no deployment. Direct Access Grants are
+disabled on every client, and `password_grant_refused` is the assertion of it.
+
+## What the check masks, and what it must not
+
+A re-capture cannot be compared byte for byte, because a fresh run mints a fresh
+token. So the check masks the volatile fields on **both** sides and compares; the
+file changes only when something substantive changed.
+
+**Masked:** the bearer, identity and refresh tokens; `iat`, `exp`, `auth_time`,
+`jti`, `sid` and Keycloak's `session_state`; the realm's per-boot key identifier;
+the tool listing's `ttlMs`, which is the presented token's remaining lifetime;
+`date`, `content-length` and the gateway's `x-served-by`; the session cookies;
+and every query-string or form parameter that is not on a named stable list —
+which is what covers the authorization code, `state`, the code challenge and its
+verifier, and Keycloak's own per-attempt identifiers.
+
+**Never masked:** `sub`, `aud`, `iss`, the granted scopes, the ordinal
+identifiers, list ordering, error codes and refusal shapes. Everything the
+exhibit claims is on this side of the line.
+
+Two things are **canonicalised rather than masked**, and both are the
+specification's own reading: JSON object members are compared in sorted order,
+because RFC 8259 defines an object as unordered, and a scope set is compared
+sorted, because RFC 6749 §3.3 says *"the order of values does not matter"*. Their
+values survive; only an order that carries no meaning does not. Keycloak
+advertises the same scope set in a different order on each boot, and without this
+a required check would go red on a difference the specification says is not one.
+
+`tests/transcripts.py` holds the mask, and `tests/test_transcripts.py` is what
+asserts that it covers each of these and none of those.
+
+## Two steps are envelopes rather than bodies
+
+The login page and the consent screen are rendered as their media type and
+nothing more. They are tens of kilobytes of markup carrying a fresh session
+identifier per attempt, and ADR-0014 assigns them to a different artifact class
+anyway: **the consent screen ships as a screenshot, beside the transcript that
+proves what it claims.** What a transcript owes those two steps is the envelope.
+
+JSON bodies are the wire's, re-serialised one member per line so that both a
+reader and the mask can see the structure. Every key, value and ordering is what
+came back.

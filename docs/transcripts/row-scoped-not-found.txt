@@ -1,0 +1,145 @@
+Row scoping: another partition's row and no row at all, byte for byte
+
+1 of 2
+──────────────────────────────────────────────────────────────────────────────
+
+POST /mcp HTTP/1.1
+accept: application/json, text/event-stream
+accept-encoding: gzip, deflate
+authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJiT0tKbXFqWUZlcVBFOFFjaXBPMjlRWGFhenloMHZrQ29lYU9XWS1RT3U4In0.eyJleHAiOjE3ODcyNjA3OTgsImlhdCI6MTc4NzI2MDQ5OCwianRpIjoib25ydGFjOjg4MzRkMGVjLWE4ZjktMjlhNi1iODkzLTYzM2JiYTlkYWQ4MSIsImlzcyI6Imh0dHA6Ly9rZXljbG9hazo4MDgxL3JlYWxtcy9tY3AtZXJwIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwL21jcCIsInN1YiI6Inl1c3VmLWRlbWlyIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoibWNwLWNvbmZvcm1hbmNlIiwic2lkIjoiN0dXaHJ3U3UtTEZCa05sSWhWZEVjMmhhIiwic2NvcGUiOiJvcGVuaWQgZXJwLnJlYWQifQ.lodG1yagjo4wXWcT-3abSB8ESbESlZ1K3AFGw_N50bHpv2mjM4QBNFNaeUKeMG-PnZsgou7Kpv1otrRBB-yBC_UFAG2f9--niaqcAQxh0yN1xNFpmtqUTrIQVRN8IHJv3MvAOAVKfYnClhWkd7uTzgCz_iU-Q89x1EeT7wWr2-_VzfB7A7ieD5C-3BEH5EpJVyGmkARsju0UvmVm1J_iRZaI8pKjCwwFXbRBs3z4_IIg1rBROfWRk377izRt4t7kYyQX6-2ze9jkuAqZt_gnp6VRL9MjxNrJAn-TC1w7bELBZcq5ejIC9x8a1FmskHdEw5TUcDCdxoW1a9XCx9V4EQ
+connection: keep-alive
+content-length: 301
+content-type: application/json
+host: localhost:8080
+mcp-method: tools/call
+mcp-name: get_requisition
+mcp-protocol-version: 2026-07-28
+user-agent: python-httpx2/2.12.0
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "get_requisition",
+    "arguments": {
+      "id": "req_0002"
+    },
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientCapabilities": {},
+      "io.modelcontextprotocol/clientInfo": {
+        "name": "mcp-erp-suite",
+        "version": "0"
+      }
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+connection: keep-alive
+content-length: 472
+content-type: application/json
+date: Thu, 20 Aug 2026 21:14:58 GMT
+server: nginx/1.29.4
+x-served-by: 172.19.0.4:8080
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "text": "{\n  \"reason\": \"not_found\",\n  \"remedy\": \"none\",\n  \"retry_as_other_person_helps\": false,\n  \"retry_identical_helps\": false\n}",
+        "type": "text"
+      }
+    ],
+    "isError": true,
+    "resultType": "complete",
+    "structuredContent": {
+      "reason": "not_found",
+      "remedy": "none",
+      "retry_identical_helps": false,
+      "retry_as_other_person_helps": false
+    },
+    "_meta": {
+      "io.modelcontextprotocol/serverInfo": {
+        "name": "mcp-erp",
+        "title": "mcp-erp",
+        "version": ""
+      }
+    }
+  }
+}
+
+2 of 2
+──────────────────────────────────────────────────────────────────────────────
+
+POST /mcp HTTP/1.1
+accept: application/json, text/event-stream
+accept-encoding: gzip, deflate
+authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJiT0tKbXFqWUZlcVBFOFFjaXBPMjlRWGFhenloMHZrQ29lYU9XWS1RT3U4In0.eyJleHAiOjE3ODcyNjA3OTgsImlhdCI6MTc4NzI2MDQ5OCwianRpIjoib25ydGFjOjg4MzRkMGVjLWE4ZjktMjlhNi1iODkzLTYzM2JiYTlkYWQ4MSIsImlzcyI6Imh0dHA6Ly9rZXljbG9hazo4MDgxL3JlYWxtcy9tY3AtZXJwIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwL21jcCIsInN1YiI6Inl1c3VmLWRlbWlyIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoibWNwLWNvbmZvcm1hbmNlIiwic2lkIjoiN0dXaHJ3U3UtTEZCa05sSWhWZEVjMmhhIiwic2NvcGUiOiJvcGVuaWQgZXJwLnJlYWQifQ.lodG1yagjo4wXWcT-3abSB8ESbESlZ1K3AFGw_N50bHpv2mjM4QBNFNaeUKeMG-PnZsgou7Kpv1otrRBB-yBC_UFAG2f9--niaqcAQxh0yN1xNFpmtqUTrIQVRN8IHJv3MvAOAVKfYnClhWkd7uTzgCz_iU-Q89x1EeT7wWr2-_VzfB7A7ieD5C-3BEH5EpJVyGmkARsju0UvmVm1J_iRZaI8pKjCwwFXbRBs3z4_IIg1rBROfWRk377izRt4t7kYyQX6-2ze9jkuAqZt_gnp6VRL9MjxNrJAn-TC1w7bELBZcq5ejIC9x8a1FmskHdEw5TUcDCdxoW1a9XCx9V4EQ
+connection: keep-alive
+content-length: 301
+content-type: application/json
+host: localhost:8080
+mcp-method: tools/call
+mcp-name: get_requisition
+mcp-protocol-version: 2026-07-28
+user-agent: python-httpx2/2.12.0
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "get_requisition",
+    "arguments": {
+      "id": "req_9999"
+    },
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientCapabilities": {},
+      "io.modelcontextprotocol/clientInfo": {
+        "name": "mcp-erp-suite",
+        "version": "0"
+      }
+    }
+  }
+}
+
+HTTP/1.1 200 OK
+connection: keep-alive
+content-length: 472
+content-type: application/json
+date: Thu, 20 Aug 2026 21:14:58 GMT
+server: nginx/1.29.4
+x-served-by: 172.19.0.5:8080
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "text": "{\n  \"reason\": \"not_found\",\n  \"remedy\": \"none\",\n  \"retry_as_other_person_helps\": false,\n  \"retry_identical_helps\": false\n}",
+        "type": "text"
+      }
+    ],
+    "isError": true,
+    "resultType": "complete",
+    "structuredContent": {
+      "reason": "not_found",
+      "remedy": "none",
+      "retry_identical_helps": false,
+      "retry_as_other_person_helps": false
+    },
+    "_meta": {
+      "io.modelcontextprotocol/serverInfo": {
+        "name": "mcp-erp",
+        "title": "mcp-erp",
+        "version": ""
+      }
+    }
+  }
+}

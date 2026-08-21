@@ -131,3 +131,33 @@ as the fallback ADR-0005 priced.
 Two rows are slower than the rest and both are deliberate: `token_expired` waits
 out a real ten-second token rather than a fake clock, and every row mints through
 a real authorization code flow.
+
+## `scenario_table.py`, which renders the write-up's table
+
+`scenarios.yaml` has always said that *"the write-up's table renders from it"*,
+and #92 built the renderer on ADR-0014's decision. It writes
+[`docs/attack-suite/scenarios.md`](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/attack-suite/scenarios.md)
+and runs under `Seed renders clean`, because it reads a committed file and writes
+a committed file and needs no Compose.
+
+It reads the table through `scenarios.py`, which is still the only thing that
+parses it — so a renderer and a drift check cannot come to disagree about what a
+row says. That is why `Scenario` now carries the whole row rather than the fields
+an assertion reads; nothing here asserts against the prose still.
+
+**The citation is walked rather than destructured.** Its shape varies by basis and
+by what was harvestable, so the renderer takes the keys it knows in a fixed order
+and prints anything it does not know under its own name. On a table whose whole
+value is that its citations are real, silently dropping the next key would be the
+worst way to fail.
+
+**`history` renders apart from `note`, and that is what the field is for.** A note
+recording a *withdrawn* claim still contains the claim's words, and a rendered
+cell carrying them can be skimmed as an assertion.
+`row_probe_indistinguishable` is the row that found it — #12 caught the note
+claiming timing indistinguishability it had already retracted, and left the split
+for whoever built the renderer.
+
+```
+uv run python tests/attack_suite/scenario_table.py
+```

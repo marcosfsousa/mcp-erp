@@ -399,6 +399,41 @@ rediscover.
   that claimed `MUST` on a paraphrase would be the exact overclaim the register
   exists to prevent. — #44, ADR-0010
 
+- **The first captured transcript showed a credential the request never carried.**
+  `httpx2` reuses one `Request` object across an authenticated retry — the auth
+  flow sets `Authorization` on the very request the `401` came back from — so a
+  record holding the live object renders the token onto the unauthenticated call
+  that provoked the challenge. Found by reading the artifact, not by a failing
+  assertion, and it is the argument for a capture being a *snapshot*: an
+  observation that keeps a reference is an observation of the object's future.
+  — #92
+
+- **The mask's hardest job was telling `code` from `code`.** A JSON-RPC error's
+  `"code": -31010` is the exhibit's most load-bearing number and an authorization
+  response's `code=…` is the most volatile string in the flow. Nothing but the
+  shape each sits in distinguishes them, so the rules are structural: JSON is
+  masked by key against a deny-list, and a query string or form body by an
+  allow-list of the parameters that are stable. The allow-list also covers a
+  dependency's internals nobody here should have to enumerate —
+  `session_code`, `tab_id`, `execution`, `client_data` — and catches the fifth
+  one too. — #92, ADR-0014
+
+- **Canonicalisation is not masking, and the exhibit needed the distinction to be
+  able to check itself.** Keycloak builds `scope` and `scopes_supported` from an
+  unordered collection, so two boots of one realm advertise the same set in two
+  orders — and ADR-0014 puts granted scopes firmly on the *stable* side, which
+  must survive the mask. The resolution is the specifications' own: RFC 6749
+  §3.3 says a scope set's order does not matter and RFC 8259 defines a JSON
+  object as unordered, so both are compared sorted. The values are all still
+  there; what is gone is an order that was never information. — #92
+
+- **Two writers, one artifact directory, and the reason is a consent screen.**
+  Keycloak remembers a grant per Person and client, so the three beats that need
+  a consented token can only be captured by the run that earns them — a second
+  process would post one form where the first posted two and the transcript
+  would record it. What looks like an ownership smell is a property of the thing
+  being recorded. — #92
+
 ---
 
 ## Findings
