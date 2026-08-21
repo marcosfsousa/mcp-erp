@@ -58,7 +58,38 @@ TIMEOUT = 30.0
 
 
 def _clients() -> Iterator[str]:
-    """Every client the realm declares, in the order the file declares them."""
+    """Every client the realm **declares**, in the order the file declares them.
+
+    Not every client it runs, and the difference is load-bearing rather than
+    pedantic. The realm provisions a sixth at runtime from a hosted Client
+    Identity Metadata Document — its `clientId` is the document's URL and no file
+    here names it — so the two loops below say *every client* and mean *every
+    client with a file*.
+
+    **What that leaves uncovered is covered elsewhere, deliberately.** Both
+    properties these rows assert hold of the provisioned client too, and both are
+    asserted of it by
+    `tests/conformance/test_the_realm_refuses_the_provisioned_client_too.py`.
+    They are not asserted *here* because minting that client requires the
+    authorization server to dereference the document from
+    `marcosfsousa.github.io` — and that document's URL *is* the `clientId`, so a
+    locally served copy would be a different client rather than a stand-in for
+    this one — and `Attack suite (wire)` states of itself that nothing it asserts
+    depends on a service outside this repository. `Authorization code flow`
+    already fetches the document and already runs the preflight that names an
+    outage before a refusal is read as a regression.
+
+    **This is not a gap left open.** #46 is what it cost the last time: the
+    SHA-256 pin was a per-client attribute, an attribute cannot reach a client
+    the realm does not contain, and the sixth client arrived accepting `plain`
+    while every assertion in this file stayed green. `pkce_downgrade_plain`'s
+    removal names both halves of the pin for that reason, and the second half is
+    falsifiable only over there.
+
+    `tests/authorization/test_realm.py`'s own `_clients` carries the fuller
+    boundary — which invariants can and cannot be asserted of a client with no
+    file, and why a stored attribute is not one of them.
+    """
     document = json.loads((fixtures.REPO / REALM_FILE).read_text(encoding="utf-8"))
     for client in document["clients"]:
         yield str(client["clientId"])

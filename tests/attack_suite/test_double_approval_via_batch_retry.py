@@ -155,9 +155,35 @@ def test_a_partly_decided_batch_retries_into_one_answer_per_item() -> None:
     decidable; here the item that was refused for its own reasons is still
     refused for them, and nothing about the retry made it decidable or made the
     others decidable again.
+
+    **The count at the end is one, and one is not something this call guarantees.**
+    `purchase_orders_for` counts every order standing against the identifiers,
+    seeded ones included, so the literal `1` is really *the order this batch
+    minted, plus however many the foreign partition arrived carrying*. Today it
+    carries none. A fixture there whose `given` names an approver arrives with an
+    order beside it and makes the total two, and `assert 2 == 1` on a batch-retry
+    scenario sends a reader to the batch path, which is the one place the defect
+    would not be.
+
+    So the property this scenario needs is asked for first, the way every
+    scenario here asks for what it needs — **a foreign partition with no orders
+    standing in it**, which is a property rather than a row. That is also the
+    premise stated exactly: a *rejected* fixture is decided and still mints no
+    order, so it would not disturb the count and is not what the guard excludes.
     """
     decidable = raised_by(SUBMITTER, AMOUNT)
     foreign = fixtures.identifiers_in("CC-4200")
+
+    standing = fixtures.purchase_orders_for(*foreign)
+    assert standing == 0, (
+        f"this scenario needs a foreign partition with no purchase orders in it, and "
+        f"CC-4200 arrived carrying {standing}. Nothing about the batch path is implied: "
+        f"the count asserted at the end of this test is the order this batch minted plus "
+        f"whatever the partition already held, so it moves with the fixtures. The usual "
+        f"cause is a new CC-4200 row in docs/decision-matrix/matrix.yaml whose `given` "
+        f"names an approver. Move that row to another cost centre, or give this scenario "
+        f"a partition of its own."
+    )
 
     batch = [decidable, *sorted(foreign)]
     first = _decide(APPROVER, batch)

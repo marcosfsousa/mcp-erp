@@ -105,6 +105,41 @@ a layer.** ADR-0013's prohibition is on a directory named `transport/` or
 here drives real HTTP against Compose like the three suites beside it~~.
 Recorded as an amendment to ADR-0013 by #37.
 
+**~~One assertion~~ ~~Two assertions~~ ~~Four assertions~~ Seven assertions here
+are not over HTTP** — one since #41, one since #85, two since #37 that no count
+ever carried, and three since #82. They are **not one kind**: the four #85
+counted are three, set out below, and #82's three are described in their own
+section further down. Amended by #85 and #82, which landed the same day.
+
+The second is `test_two_simultaneous_decisions_on_one_requisition_mint_one_order`
+reading `purchase_order` directly through `fixtures.purchase_orders_for`. *One
+order was minted* is the half of ADR-0002's promise the wire cannot answer: a
+refused item carries no order, so a response cannot tell *no second order* from
+*a second order it was not shown*, and ADR-0002 cut every read tool that
+demonstrated no authorization behaviour, so there is no tool to ask. The fold's
+exception below is a property with **no altitude**; this one has an altitude and
+no *tool* — the assertion is about what the call did to the rows behind it, and
+the rows behind it are reachable only one layer down.
+
+The precedent for the credential is ADR-0003's, which took a suite holding a
+database password over a test-only reset route on a server whose whole subject is
+authorization, and `tests/attack_suite/` has read the same table on the same
+terms since #41.
+
+The third and fourth are `test_the_gateway_runs_a_single_worker` reading
+`gateway/nginx.conf` and `compose.yaml` off the checkout. Those are a
+**precondition on the instrument**, not a claim about the subject: `worker_processes 1`
+is what makes the round-robin assertion beside it measure affinity rather than
+merely stay green, and nginx answers no request reporting its worker count.
+`docker compose exec gateway nginx -T` would, at the price of a docker invocation
+in a suite that otherwise speaks only HTTP — so the committed file is read
+instead, on the same terms as the seed's rendering checks.
+
+**That file has said so in its own docstring since #37; the count above it never
+did.** Which is why the number moves twice in one edit. The first two exceptions
+were found by writing them, and a count maintained only when someone writes a new
+exception cannot see one that was already there — this one was found by counting.
+
 **One assertion here is not over HTTP, since #41.** *Layer 1 contains no
 reference to the tool name, nor to which argument is the batch* is the negative
 guarantee the fold had to be built without breaking, and it is not reachable at

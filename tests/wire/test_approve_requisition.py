@@ -24,7 +24,11 @@ Six things arrive here that no earlier tool could reach.
   an accident, and `test_marketing_has_nobody_who_can_approve_above_the
   _threshold` is what makes it matter.
 - **A terminal state.** A second decision on a decided requisition answers
-  `already_decided` and mints nothing.
+  `already_decided` and mints nothing — and, since #85, a decision that is not
+  *second* but simultaneous answers the same way. The guard is the predicate
+  riding in the `UPDATE` rather than a check against a row read a moment ago, so
+  a suite whose second caller always arrives second cannot tell the two apart.
+  That is the one assertion here that needs more than one caller in flight.
 - **Both entry points, and the batch is what makes that structural.**
   `decide_call` runs once ahead of the items and `decide_item` runs per item.
   Not tidiness: a caller-level refusal is a `-31010` protocol error, which
@@ -67,7 +71,9 @@ and named no others, so the rest stayed where they are and `tests/wire/README.md
 records what a later ticket has to decide.
 """
 
+import threading
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx2
@@ -77,6 +83,7 @@ import fixtures
 import requisitions as raising
 import rpc
 from requisitions import raised_by
+from rpc import TIMEOUT
 from tokens import mint
 
 TOOL = "approve_requisition"
@@ -114,6 +121,36 @@ MARKETING = "mei.tanaka"
 Which makes CC-4300 a centre that can raise a requisition above the threshold and
 contains nobody who can decide it. ADR-0003 §The capability holes are deliberate
 put that hole there on purpose.
+"""
+
+PERMITTED = "permitted"
+"""What a decision that went through is called where a reason would otherwise be.
+
+Not a value the wire carries. A permit answers with the records it produced and
+carries no `reason` at all, so this is the stand-in that lets a permit and a
+refusal be sorted into one list — which is what keeps an assertion about *which
+two answers came back* from also having to say which thread got which.
+"""
+
+SIMULTANEOUS_ATTEMPTS = 12
+"""How many times the race below is driven, and why the number is measured.
+
+The barrier releases both callers together, and that is not the same as either
+one landing inside the other's window: each thread still builds its client and
+connects after the release, and that slack is where a lost race gets missed.
+
+**Measured against the deletion rather than guessed at.** Driven 60 times with
+the terminal check moved out of the write, the pair came apart **32 times** — a
+hit rate near one attempt in two. Twelve attempts put the chance of a run missing
+all of them under one in eight thousand, and cost about two seconds: a row raised
+and decided over the loopback is cheap, which is the only reason a number this
+size is affordable.
+
+**Twelve attempts are not twelve chances to flake.** Under the guard as written
+the pair is deterministic — one permit and one `already_decided`, every time —
+and the only thing that varies is which caller wins. That is why the assertion is
+written over a sorted pair rather than over a first and a second. The attempts
+buy sensitivity to the deletion, and they cost nothing against the code as it is.
 """
 
 
@@ -159,6 +196,53 @@ def _decide_all(
         {"ids": identifiers, "decision": decision},
         token=mint(username, ["erp.decide"]).access_token,
     )
+
+
+def _decided_simultaneously(token: str, identifier: str) -> list[dict[str, Any]]:
+    """Two `approve_requisition` calls for one row, released from a barrier together.
+
+    Threads rather than a coroutine pair, because everything above this line
+    speaks the synchronous helper and a second HTTP stack in the suite would be a
+    second set of timeout and redirect defaults to keep honest. `rpc.call_tool`
+    opens its own client per call, so the two share nothing but the token.
+
+    The barrier is the whole mechanism. Both threads block until the second one
+    arrives, so the pair is dispatched from one release rather than from whichever
+    thread the scheduler started first. Its timeout is the suite's, so a partner
+    that never arrives fails here instead of hanging the job.
+
+    Args:
+        token: Minted once by the caller. Both threads present the same one, and
+            neither mints inside the window.
+        identifier: The row both callers decide.
+
+    Returns:
+        Both `structuredContent` payloads, in no meaningful order — a permit
+        carries the records it produced and a refusal carries a reason, and which
+        thread got which is the thing under test rather than an expectation.
+
+    Raises:
+        AssertionError: Either call answered with something that is not a tool
+            result. Raised out of the worker and re-raised here by `.result()`,
+            because an exception swallowed in a thread is a race that passes.
+        threading.BrokenBarrierError: A partner never arrived within `TIMEOUT`.
+            This is the case the paragraph above names, and it surfaces the same
+            way — out of `barrier.wait()` in the worker, through `.result()`.
+    """
+    barrier = threading.Barrier(2, timeout=TIMEOUT)
+
+    def decide() -> dict[str, Any]:
+        """One of the pair, blocked until the other is ready to send too."""
+        barrier.wait()
+        result = rpc.result(
+            rpc.call_tool(TOOL, {"ids": [identifier], "decision": "approve"}, token=token)
+        )
+        payload: dict[str, Any] = result["structuredContent"]
+        return payload
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        running = [pool.submit(decide) for _ in range(2)]
+        return [future.result() for future in running]
 
 
 def _answers(
@@ -448,6 +532,62 @@ def test_a_second_decision_on_a_decided_requisition_is_refused() -> None:
     assert _refused(APPROVER, identifier, "reject")["reason"] == "already_decided"
     assert _status(SUBMITTER, identifier) == "approved"
     assert first["purchase_order"]["status"] == "open"
+
+
+def test_two_simultaneous_decisions_on_one_requisition_mint_one_order() -> None:
+    """The same terminal state, with the two callers genuinely in flight together.
+
+    **The test above cannot make this claim and never could.** It sends the
+    second decision after the first has answered, which exercises the row's
+    terminal state and not the thing that makes the terminal state hold. The
+    repository's own words for the difference: *"a check against that row is a
+    check against what was true when it was read: two callers deciding the same
+    requisition at once would both pass it"* — so the guard is the predicate
+    riding in the `UPDATE`, and a suite whose second caller always arrives second
+    answers the same way whether the guard is there or not.
+
+    **What it falsifies, stated as the deletion, and confirmed by performing it.**
+    Move the terminal check out of the write and into a read of the row before it
+    — the shape the docstring calls a race two callers both pass — and **26**
+    sequential assertions across this file and `double_approval_via_batch_retry`
+    stay green while this one goes red. Dropping the predicate outright is a
+    different deletion, and the sequential ones already turn **five** tests red on
+    it; this is the one nothing else sees. Both were run rather than reasoned
+    about, which is what `scenarios.yaml` asks of a recorded removal and what
+    ADR-0009 found the confirm-by-hand rule exists to catch.
+
+    **The word is asserted, and that is the load-bearing half.** A lost race does
+    not mint a second order even without the predicate: `purchase_order.
+    requisition_id` is `UNIQUE`, so the schema refuses the insert and the loser
+    gets `-32603` where ADR-0002 promised a reason. Over the 60 attempts that
+    measured :data:`SIMULTANEOUS_ATTEMPTS`, the count was **one every single
+    time** and the word was wrong in 32 of them — so a falsifier that checked only
+    the count would have called the deletion green on all sixty. The count is
+    asserted anyway, because it is what says the second guard is still there.
+
+    **One token, minted before either thread starts.** `tokens.mint` caches in a
+    plain dict, so two threads reaching a cold key would each perform a whole
+    authorization code flow and reach the tool endpoint hundreds of milliseconds
+    apart — which is the sequential test again, with threads around it.
+
+    **Here and not in `tests/matrix/`, by that directory's own dividing rule:**
+    *a matrix row asserts the decision; these files additionally assert what the
+    call did.* What is asserted here is the order the pair minted and the status
+    the row reads back as, which is an effect and not a `(principal x tool x
+    resource -> expected)` row — there is no expectation about a caller in it at
+    all, because both callers are the same person holding the same token.
+    """
+    token = mint(APPROVER, ["erp.decide"]).access_token
+
+    for attempt in range(SIMULTANEOUS_ATTEMPTS):
+        identifier = raised_by(SUBMITTER, "480.00")
+
+        answers = _decided_simultaneously(token, identifier)
+        reasons = sorted(answer.get("reason", PERMITTED) for answer in answers)
+
+        assert reasons == ["already_decided", PERMITTED], (attempt, answers)
+        assert fixtures.purchase_orders_for(identifier) == 1, (attempt, answers)
+        assert _status(SUBMITTER, identifier) == "approved", attempt
 
 
 def test_a_rejection_is_equally_terminal_and_emits_no_purchase_order() -> None:

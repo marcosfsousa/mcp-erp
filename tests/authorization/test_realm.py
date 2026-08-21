@@ -612,7 +612,43 @@ def _read(path: Path) -> dict[str, Any]:
 
 
 def _clients(document: dict[str, Any]) -> list[dict[str, Any]]:
-    """Every client a realm document declares."""
+    """Every client a realm document **declares**, which is not every client it runs.
+
+    The realm provisions a sixth from a hosted Client Identity Metadata Document
+    whose `clientId` is that document's URL. It is a real client of this realm and
+    it is in no file, so nothing here can reach it and nothing here should try:
+    every assertion in this module reads committed bytes, which is what makes the
+    module Docker-free and what lets the ejection job run it.
+
+    **What can be asserted of a client with no file, and where.** Anything the
+    running realm exposes as a *refusal* — the SHA-256 pin and the absence of
+    direct access grants are both asserted over the wire by
+    `tests/conformance/test_the_realm_refuses_the_provisioned_client_too.py`,
+    which lives there because minting that client needs the authorization server
+    to dereference the document and therefore needs egress.
+
+    **What cannot.** Three kinds, and the boundary is a statement rather than an
+    omission:
+
+    * **Anything about the set of clients.** `test_the_five_clients_exist` is a
+      claim about what the file contains, and a sixth client the file does not
+      contain neither breaks it nor is covered by it.
+    * **Anything about a *named* client.** The decoy's foreign audience, the
+      lookalike's case-variant scope, the probe's ten-second override — each
+      exists to make one refusal reachable, and the provisioned client is not
+      that client.
+    * **Anything whose only evidence is a stored field.** `auto-configure`
+      stamps `pkce.code.challenge.method` onto the provisioned client, so the
+      attribute *is* there and could be read back through the admin API. Reading
+      it would assert that Keycloak stored what Keycloak wrote. ADR-0007's caveat
+      is that the pin is per client and the metadata is realm-wide, so what a row
+      may assert is the refusal — #46 was found by a flow stopping, not by a
+      field being wrong.
+
+    Realm-wide properties are not on either list, because they are not per-client
+    at all: token lifespan and refresh rotation are asserted of the realm here and
+    hold for every client it runs, provisioned ones included.
+    """
     clients: list[dict[str, Any]] = document.get("clients", [])
     return clients
 
