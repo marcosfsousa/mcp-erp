@@ -204,12 +204,21 @@ jobs:
       # repositories. The Compose job cannot hold it either — the helper only
       # runs when that job is already red, so a helper that printed the wrong
       # diff would be read as the diagnosis of whatever broke.
+      #
+      # `tests/test_walkthrough.py` is the fifth, added by #93, and it is the
+      # only one here whose subject is a **prose document**. The drift check
+      # above guards the transcript files against a run rewriting them; nothing
+      # guarded a quote inside the write-up, and Markdown has no transclusion.
+      # It reads two committed files and compares text, so no stack could make
+      # it truer — and a Compose job could not hold it, because a document that
+      # retyped a transcript is not a thing a capture can notice.
       - name: The flow drivers' Docker-free halves
         run: |
           uv run pytest tests/test_tokens.py \
                         tests/test_conformance_client.py \
                         tests/test_transcripts.py \
-                        tests/test_transcript_drift.py
+                        tests/test_transcript_drift.py \
+                        tests/test_walkthrough.py
 
   layer-boundaries:
     name: Layer boundaries
