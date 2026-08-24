@@ -21,6 +21,12 @@ paths are resolved here the way Compose resolves them, required to exist, and
 required to name somewhere the containers actually have: the `/tls` mount target
 the services declare.
 
+**The key is held as tightly as the value.** `compose.yaml` decides which
+entries exist and `tls.env` has to set every variable they read: a misspelling
+in the key rather than in the path is a named failure here, not an entry
+quietly dropped from what these tests look at. The selection is also held
+against `COVERED`, so it can shrink to nothing only by saying so.
+
 **It interpolates rather than matching literals.** Compose's `${VAR:-default}`
 is the mechanism the whole profile rests on — the default configuration is what
 the file says with nothing set, and the profile is what it says with `tls.env`
@@ -61,6 +67,28 @@ REPLICAS = ("server-1", "server-2")
 
 CERTIFICATES = "./keycloak/tls"
 """The profile's certificate directory, as every service names it on the host."""
+
+COVERED = frozenset(
+    {
+        ("keycloak", "MCP_TLS_KEYCLOAK_ENV"),
+        ("server-1", "MCP_TLS_SERVER_ENV"),
+        ("server-2", "MCP_TLS_SERVER_ENV"),
+    }
+)
+"""Every option-file entry these tests mean to be covering, service by variable.
+
+Not the enrolment mechanism — that is `compose.yaml`, read below, so an entry
+added there is checked without this set being edited. This is the ledger that
+keeps the checks from going quiet: a suite whose subject is *what the profile
+selects* can be reduced to a vacuous pass by anything that shrinks the selection,
+and every assertion below would still be green over an empty list. Both replicas
+appear because `x-server` gives them one text and a merge that stopped reaching
+one of them is the failure that text exists to prevent.
+
+Adding an entry to `compose.yaml` therefore fails here, once, with both sets
+printed. That is the intended cost: the row is a line of bookkeeping, and what it
+buys is that a *removed* entry can never read as nothing to check.
+"""
 
 SUBSTITUTION = re.compile(r"\$\{(\w+)(?::-([^}]*))?\}")
 """Compose's `${NAME}` and `${NAME:-default}`, which is all this file uses.
@@ -136,34 +164,56 @@ def _mount_target(services: dict[str, Any]) -> str:
     return targets.pop()
 
 
-def _selected_option_files(
-    services: dict[str, Any], profile: dict[str, str]
-) -> list[tuple[str, str, str]]:
-    """Every option file the profile selects: which service, which name, which path.
+def _option_file_entries(services: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Every interpolated `env_file` entry: which service, which name, which template.
 
-    An entry counts when its path is interpolated from a variable `tls.env` sets
-    — which is exactly what "the profile selects it" means, and is why this reads
-    `compose.yaml` rather than listing the two `MCP_TLS_*` names. A third one
-    added to the profile is enrolled by being written, not by this file being
-    remembered.
+    **Enrolment reads `compose.yaml` alone.** An entry counts when its path is
+    interpolated at all, and the variable it names is then something `tls.env`
+    has to set — asserted below rather than assumed. That is the whole of the
+    difference from the version this replaces, which enrolled an entry only when
+    its variable was a key of the profile: under that rule a typo in the *key* in
+    `tls.env`, rather than in its value, de-enrolled the entry instead of failing
+    it. Every test here stayed green while the resource server silently lost
+    `SSL_CERT_FILE` — this file's own subject, surviving one mutation of the
+    tests written to close it.
 
-    Paths come back as Compose resolves them: relative to the project directory,
-    which is the repository, and not to `tls.env`'s own directory.
+    A third entry is still enrolled by being written rather than by this file
+    being remembered; what changed is that a fourth *disappearing* is now a
+    failure rather than a smaller suite.
+
+    Templates come back uninterpolated, because who resolves them — and against
+    which environment — is the caller's question.
     """
-    selected: list[tuple[str, str, str]] = []
+    entries: list[tuple[str, str, str]] = []
     for name, service in sorted(services.items()):
         for entry in service.get("env_file", ()):
             template = entry["path"] if isinstance(entry, dict) else str(entry)
-            variables = [
-                match.group(1)
-                for match in SUBSTITUTION.finditer(template)
-                if match.group(1) in profile
-            ]
-            if not variables:
-                continue
-            selected.append((name, ", ".join(variables), _interpolate(template, profile)))
+            entries.extend(
+                (name, match.group(1), template) for match in SUBSTITUTION.finditer(template)
+            )
 
-    return selected
+    return entries
+
+
+def _selected_option_files(
+    services: dict[str, Any], profile: dict[str, str]
+) -> list[tuple[str, str, str]]:
+    """The same entries, resolved: which service, which name, which path.
+
+    Paths come back as Compose resolves them: relative to the project directory,
+    which is the repository, and not to `tls.env`'s own directory.
+
+    An entry whose variable the profile does not set is left out here **and**
+    reported by `test_the_profile_sets_every_variable_its_option_file_entries_read`,
+    which names the key. Resolving it anyway would send every test below chasing
+    `compose.yaml`'s default — a path that names nothing on purpose — and one
+    defect would light four tests with the wrong diagnosis on three of them.
+    """
+    return [
+        (service, variable, _interpolate(template, profile))
+        for service, variable, template in _option_file_entries(services)
+        if variable in profile
+    ]
 
 
 def _issuer(services: dict[str, Any], environment: dict[str, str]) -> str:
@@ -238,6 +288,51 @@ def test_the_profile_serves_tls_on_the_one_published_port(
 
     assert published == {options["KC_HTTPS_PORT"]}
     assert plain not in published
+
+
+def test_the_profile_sets_every_variable_its_option_file_entries_read(
+    services: dict[str, Any], profile: dict[str, str]
+) -> None:
+    """A key renamed, misspelled or deleted in `tls.env`, which used to cost nothing.
+
+    `compose.yaml` names each option file through a variable, and the profile is
+    the only thing that sets one. Miss the key and Compose falls back to the
+    default path — which names nothing, on purpose, and is marked
+    `required: false` — so the stack comes up with the option file unread. For
+    `MCP_TLS_SERVER_ENV` that is a resource server with no `SSL_CERT_FILE`
+    refusing every token as `invalid_token`, three services from the cause.
+
+    The message names the key, because a misspelling is diagnosed by seeing the
+    two spellings side by side and by nothing else.
+    """
+    entries = _option_file_entries(services)
+
+    assert entries, "compose.yaml interpolates no env_file path — the profile selects nothing"
+
+    unset = [
+        f"{variable} is read by {service}'s env_file entry in compose.yaml "
+        f"and is set nowhere in tls.env"
+        for service, variable, _ in entries
+        if variable not in profile
+    ]
+
+    assert not unset, "\n".join(unset)
+
+
+def test_the_entries_under_test_are_the_ones_this_file_covers(
+    services: dict[str, Any], profile: dict[str, str]
+) -> None:
+    """The selection, held against what these tests were written to cover.
+
+    Every assertion below iterates the selection, so every one of them passes
+    over an empty list — and the failure this file exists for is precisely one
+    that removes an entry from it. Set equality in both directions: an entry that
+    disappeared is a check that stopped happening, and an entry that arrived is a
+    check nobody decided to make.
+    """
+    assert {
+        (service, variable) for service, variable, _ in _selected_option_files(services, profile)
+    } == COVERED
 
 
 def test_every_option_file_the_profile_selects_is_there(
