@@ -3,6 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-08-24
 - **Ticket:** [#111 A string where a list belongs, and an authority the realm check never looks at](https://github.com/marcosfsousa/mcp-erp/issues/111)
+- **Amended:** 2026-08-24 — additive, by [#125](https://github.com/marcosfsousa/mcp-erp/issues/125). **The authored string is the canonical form of an issuer**, and the rule below is a comparison of authored strings rather than of parses. Three refusals are added, on *both* issuers rather than the second. See *The authored string is canonical, and the comparison above is of authored strings*. No decision here is reversed.
 - **Evidence:** [ADR-0005](0005-the-authorization-server-is-a-dependency-not-a-deliverable.md) §Deviations 2 and its option 6, [ADR-0011](0011-it-runs-on-the-readers-machine-and-the-deviation-is-ours.md) §*Deviation 2 is not closed here*, [ADR-0014](0014-the-walkthrough-is-the-write-up-and-the-image-is-never-the-proof.md) §(i) The TLS profile; [`tls.env`](../../tls.env), [`compose.yaml`](../../compose.yaml) §*One opt-in profile, and what it moves*; W3C Secure Contexts §3.1
 
 ## Question
@@ -41,6 +42,30 @@ A `tls_issuer` equal to `issuer` is not one realm reached two ways. `IdentitySee
 
 That is the defect in miniature. The realm name was doing two jobs: naming the realm for the user import, and standing in for *the same realm* when two identifiers were compared. It is adequate for the first and one segment wide for the second.
 
+### The authored string is canonical, and the comparison above is of authored strings
+
+*Added 2026-08-24 by [#125](https://github.com/marcosfsousa/mcp-erp/issues/125). Nothing above is reversed; this settles a question the decision above left implicit.*
+
+The rule above compares two issuers. It did not say **which form of them** — and the implementation compared `urlsplit` parses while `IdentitySeed.issuers` and `directory_entries` rendered the strings the seed authored. Those are not the same string. `urlsplit` strips ASCII whitespace from both ends of a URL, deletes every tab, carriage return and newline wherever they sit — including inside a host name — and folds the scheme to lower case. So `HTTPS://keycloak:8081/realms/mcp-erp`, or the same with a leading space, passed the guard as *the first under another scheme* and then keyed seven directory rows at an address the authorization server never mints. A protocol-relative `//keycloak:8081/realms/mcp-erp` went further: `urlsplit` gives it an empty scheme, which differs from `http`, so it passed as a legitimate second issuer.
+
+**The authored string is canonical. The loader never rewrites an issuer; it refuses one it would have to.**
+
+The reason is that this string has a second author. The directory is keyed by issuer and subject, and the `iss` claim it is matched against is minted by Keycloak from the string Keycloak was configured with — which `compose.yaml` builds from `MCP_KEYCLOAK_ORIGIN`, the same source the seed is held equal to. A loader that normalised would be holding a second opinion about that string which nothing on the token side shares, and the first time the two opinions differed — a trailing slash, a percent-encoded segment — normalising would *cause* the address-nothing-serves failure rather than close it. Refusing cannot: a seed that loads is a seed whose issuers are exactly what the author wrote and exactly what the directory renders.
+
+So `_refuse_an_issuer_the_parse_would_change` refuses three things, on **both** issuers, before the realm is taken from the first or the pair is compared:
+
+1. **No scheme.** Not an address any token names.
+2. **Any ASCII whitespace or ASCII control character, anywhere.** These are what the parse does not preserve.
+3. **A scheme not already in lower case.** Same reason.
+
+**The set stops exactly there, and the boundary is the criterion rather than taste.** A non-breaking space or a zero-width space in an issuer survives `urlsplit` untouched, so the guard and the renderings agree about it and nothing diverges — that issuer is simply wrong, which is a real defect but a different one, and it is not refused here. The rule is *what the parse would change*, which is why the list is three long and not four.
+
+**Both issuers, not the second.** The finding arrived as a second-issuer bug because that is where the comparison is, but a damaged **first** issuer is worse: `realm_of` waves it through, since a leading space leaves the last path segment intact, and every directory row in the file is then keyed at an address nothing serves with no comparison anywhere to catch it.
+
+**Ordering is part of the decision.** The canonical-form refusals run before `realm_of` and before the scheme comparison, so an author who writes `//keycloak:8081/realms/mcp-erp/` is told their issuer carries no scheme — the thing they typed — rather than that it names no realm in its last path segment, which is true, downstream, and about a different slip.
+
+The comparison in the decision above is unchanged in substance. `_but_for_the_scheme` still parses, because a second hand-rolled URL parser in this package is how the metadata document ends up describing an address the endpoint is not served at. What changes is why that is safe: the parse is now **faithful**, because its argument was refused first — not a defence against a schemeless issuer, which no longer arrives.
+
 ## Options considered
 
 1. **Reading 1, the last path segment** — the status quo. Rejected: it is the defect. Any authority with a `/realms/mcp-erp` on it passes.
@@ -49,6 +74,11 @@ That is the defect in miniature. The realm name was doing two jobs: naming the r
 4. **Compare against the one pair the profile can produce** — refuse anything but `http://` → `https://` on the same authority. Rejected as one specificity too far: it puts a scheme allow-list in a parser that has no opinion about schemes, and the seed is not the place that decides which two the profile uses.
 5. **Refuse nothing in the parser and assert the pair in `tests/test_tls_profile.py` instead**, where the seed and `compose.yaml` are already held equal. Rejected: that file asserts the *committed* seed against the *committed* configuration, so it never sees a seed an author is in the middle of writing, which is the moment the refusal is for. It stays as the second altitude, unchanged.
 6. **Allow a list of issuers rather than a second one**, with the constraint dropped. Rejected: a list is a shape for a question nobody has asked, and every member of it would need this same rule or none.
+
+*Added 2026-08-24 by [#125](https://github.com/marcosfsousa/mcp-erp/issues/125), against the canonical-form section.*
+
+7. **Normalise instead of refusing** — take the `urlsplit` form as canonical, store it on `IdentitySeed`, and render it everywhere, so the guard and the renderings agree by construction. This is the symmetric fix and closes the divergence just as completely. Rejected: it makes the loader a second author of a string whose first author is Keycloak. The directory key has to be byte-equal to a claim minted from `MCP_KEYCLOAK_ORIGIN`, and normalising is only harmless while our normalisation and Keycloak's rendering agree on every input — which is an assumption with no test that could hold it, and whose first failure is silent. It would also put the committed seed and its renderings out of step for the first time, which is the property `Seed renders clean` exists to police. Refusing has neither cost: what loads is what was written.
+8. **One round-trip test** — refuse an issuer where `urlunsplit(urlsplit(issuer)) != issuer`, in place of the three named refusals. One rule instead of three, catching the same whitespace, control-character and scheme-case shapes. Rejected on the message: a round-trip failure can only report *this is not the form it parses to* and print two strings that, in the case that matters most — a tab inside a host name — are visually identical. It also delegates the definition of *canonical* to a standard-library function whose whitespace handling has moved across Python releases. It does not catch the protocol-relative issuer either, which round-trips clean and needs its own check under any option here.
 
 ## Consequences
 
@@ -59,3 +89,19 @@ That is the defect in miniature. The realm name was doing two jobs: naming the r
 **No derived artifact moves, and the walk was performed.** Map constraint `#12` enrols four: the map's constraints — this ADR amends none, and adds no standing rule — [`docs/normative-register.md`](../normative-register.md), which records deviations from and interpretations of normative statements, and this is a constraint on our own seed file rather than a reading of anybody's specification; [`docs/attack-suite/scenarios.yaml`](../attack-suite/scenarios.yaml), whose membership rule is ADR-0010's one row per clause this project enforces, and nothing here is reachable by a caller — the seed is not an input any request touches; and the write-up, which is still unwritten and inherits nothing.
 
 **Caveat.** The profile was not re-run under Docker for this decision. What was verified is that the committed seed parses, that every rendering is byte-identical, and that `tests/test_tls_profile.py` still holds the seed and `compose.yaml` equal — which is the claim the ADR rests on, since the strings it compares are the ones Compose interpolates.
+
+---
+
+*Consequences of the 2026-08-24 amendment by [#125](https://github.com/marcosfsousa/mcp-erp/issues/125).*
+
+**Three more seeds now fail that previously rendered.** An issuer at either position carrying no scheme, ASCII whitespace or an ASCII control character, or an upper-case scheme, fails at `read_identity_seed` naming the issuer, the offending character where there is one, and what the parse would have done to it. The committed seed is again unaffected: both its issuers are already the form they parse to, so no rendering moves and `Seed renders clean` sees no diff.
+
+**The first issuer gains refusals it never had.** Everything the decision above says about the second issuer was, until now, the *only* validation any issuer got beyond `realm_of`. A damaged first issuer had no comparison to fail against and no guard of its own.
+
+**One narrowing that #121 introduced is closed.** Removing the `realm_of` check on the second issuer removed, incidentally, the only place a tab or line ending inside a second issuer would have been noticed — `realm_of` splits on the raw string, so damage after the last `/` changed the realm name it derived and the seed failed for the wrong reason but did fail. The refusals here close that on purpose and at both issuers, which is wider than what was lost. Restoring the `realm_of` check was considered and is not done: it caught this by accident, at one position, and only when the damage fell in the last path segment.
+
+**What is deliberately still admitted.** An issuer carrying a query or a fragment, which **RFC 8414 §2** forbids of an issuer identifier; and non-ASCII whitespace or zero-width characters. Neither is a case where the guard and the renderings disagree, so neither is this defect. The first is a normative-register question if it is taken up at all, and taking it here would have put a specification reading inside a refusal set whose stated criterion is *what the parse would change*.
+
+**No derived artifact moves, and the walk was performed again for the amendment.** Map constraint `#12` now enrols five. The map's constraints — this amendment amends none and adds no standing rule, and it generates no rows, so nothing here needs a ceiling or an index. [`docs/normative-register.md`](../normative-register.md) — unchanged: this is a constraint on our own seed file, not a reading of a normative statement, and the one adjacent normative statement it touches (RFC 8414 §2's *no query or fragment*) is named above as **not** taken, so there is no interpretation to record. [`docs/attack-suite/scenarios.yaml`](../attack-suite/scenarios.yaml) — unchanged: the seed is not an input any request touches, and ADR-0010's membership rule is one row per clause reachable by a caller. [`docs/decision-matrix/matrix.yaml`](../decision-matrix/matrix.yaml) — unchanged: it is canonical for `(principal × tool × resource → expected)` and nothing here alters a principal, a tool or an expectation. The write-up — still unwritten; `docs/write-up-notes.md` gains no line, on the same ground the decision above took, and its ADR counts are a snapshot explicitly dated *Verified 2026-08-18* with the commands to re-derive them, so they are not an index this commit is obliged to move.
+
+**Caveat.** As above, the profile was not re-run under Docker. What was verified for the amendment is that the committed seed parses, that both renderings are byte-identical to the committed files, and that the refusals are red-capable — removing the guard fails thirteen cases in `tests/authorization/test_identity.py` and nothing else.

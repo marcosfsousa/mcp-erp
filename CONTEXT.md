@@ -43,6 +43,10 @@ _Avoid_: backwards-compatible server
 The party that authenticates a person and issues access tokens.
 _Avoid_: identity provider, IdP, AS, auth server, token service
 
+**Issuer**:
+The URL that identifies an Authorization server, carried in a token's `iss` claim and half of the key the Principal directory is read by. **Its canonical form is the string the Seed authors** — never a normalisation of it: the claim is minted from the string the authorization server was configured with, so the two are compared as bytes, and a loader that tidied one end of that comparison would be a second author of a string it does not own. A Seed issuer the URL parser would not preserve is refused where it is written (ADR-0015). One realm may answer to more than one Issuer; under this exhibit's opt-in TLS profile it answers to two, differing in scheme and nothing else.
+_Avoid_: identity provider URL, realm URL, issuer identifier, `iss` in prose (the claim key keeps its spelling in code)
+
 **Resource server**:
 This server in its token-validating capacity — the party that must reject tokens not audience-bound to it.
 _Avoid_: API server, backend

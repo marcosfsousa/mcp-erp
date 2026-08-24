@@ -27,7 +27,7 @@ at once — and nothing else. Type-checking every field is not on the list: that
 is what the seed's own shape and mypy are for, and a loader that grew a check
 per field would be a schema written twice. The rule is stated here so a review
 grades a proposed refusal against it rather than against taste, and
-:func:`read_identity_seed` lists the seven it currently makes.
+:func:`read_identity_seed` lists the ten it currently makes.
 
 **The renderings are byte-stable**: sorted keys, sorted rows, no generated
 identifiers, no timestamps. A Keycloak realm export emits all three of those by
@@ -170,6 +170,54 @@ class IdentitySeed:
         return (self.issuer, self.tls_issuer)
 
 
+def _refuse_an_issuer_the_parse_would_change(issuer: str) -> None:
+    """Refuse an issuer whose canonical form is not the one the seed authors.
+
+    **The authored string is the canonical one** (ADR-0015). Nothing here
+    rewrites an issuer, because the directory is keyed by issuer and subject and
+    the key has to be byte-equal to the ``iss`` claim the authorization server
+    mints — which is the string that server was configured with, not a
+    normalisation of it. A loader that tidied an issuer would be holding a
+    second opinion about that string which nothing on the token side shares.
+
+    So the divergence is closed from the other end: an issuer the parse would
+    not preserve is refused where it is written, rather than admitted by a
+    comparison of parses and then rendered raw. Three things are not preserved,
+    and the set stops exactly there — a character :func:`~urllib.parse.urlsplit`
+    carries through unchanged leaves the guard and the renderings agreeing,
+    which is a different defect from this one.
+
+    Raises:
+        ValueError: The issuer carries no scheme; carries ASCII whitespace or an
+            ASCII control character; or spells its scheme in other than lower
+            case.
+    """
+    parts = urlsplit(issuer)
+    if not parts.scheme:
+        raise ValueError(
+            f"issuer {issuer!r} carries no scheme: it is not an address any token "
+            "names, and the directory would hold every person at one nothing serves"
+        )
+    for character in issuer:
+        # `urlsplit` strips ASCII whitespace from both ends and deletes every
+        # tab, carriage return and newline wherever it sits — including inside
+        # the host, where the damage is invisible in the seed file. Named here
+        # rather than shown, because the repr is the only place a reader can see
+        # it at all.
+        if character.isascii() and (character.isspace() or not character.isprintable()):
+            raise ValueError(
+                f"issuer {issuer!r} carries {character!r}, which the parse does not "
+                "keep: the guard would compare one address and the directory hold "
+                "rows at another"
+            )
+    if parts.scheme != issuer[: len(parts.scheme)]:
+        raise ValueError(
+            f"issuer {issuer!r} spells its scheme in other than lower case, which the "
+            f"parse does not keep: it compares as {parts.scheme!r} and renders as "
+            f"{issuer[: len(parts.scheme)]!r}"
+        )
+
+
 def realm_of(issuer: str) -> str:
     """The realm an issuer names, which is its last path segment.
 
@@ -199,10 +247,18 @@ def realm_of(issuer: str) -> str:
 def _but_for_the_scheme(issuer: str) -> tuple[str, tuple[str, ...]]:
     """An issuer as the scheme it is reached by, and everything else it is.
 
-    Parsed rather than split on ``"://"``, so that an issuer carrying no scheme
-    at all has its whole self land in the second half instead of vanishing into
-    a separator that was never there — two schemeless issuers would otherwise
-    compare equal on nothing and pass.
+    **Faithful because its argument was refused first.** Both issuers have been
+    through :func:`_refuse_an_issuer_the_parse_would_change` by the time they
+    reach here, so the parse changes nothing and the halves compared below are
+    substrings of the strings the seed authors and the directory is keyed by.
+    That is the whole of why comparing parses is safe; it is not a defence
+    against a schemeless issuer, which no longer arrives.
+
+    Parsed rather than split on ``"://"`` even so, because a second hand-rolled
+    URL parser in this package is how the metadata document ends up describing
+    an address the endpoint is not served at — the same reason
+    :func:`mcp_erp.transport.configuration.path_of` gives for using the standard
+    library's split.
     """
     parts = urlsplit(issuer)
     return parts.scheme, (parts.netloc, parts.path, parts.query, parts.fragment)
@@ -211,36 +267,51 @@ def _but_for_the_scheme(issuer: str) -> tuple[str, tuple[str, ...]]:
 def read_identity_seed(text: str) -> IdentitySeed:
     """Parse the identity half of the seed, refusing what the realm would reject later.
 
-    Seven refusals, every one of them an instance of the rule this module's
+    Ten refusals, every one of them an instance of the rule this module's
     docstring states. Four are things an authorization server would reject a
     file for, later and further away: a subject sharing another's — also a
     directory key collision — a subject too long to be a realm identifier, a
     username sharing another's, and an issuer with no last path segment to take
     a realm name from, which :func:`realm_of` makes.
 
-    The other three nothing downstream would reject at all. A second issuer that
-    moves more than the scheme, and one that moves nothing, are both ADR-0015 —
-    the first renders seven directory rows at an address nothing serves, the
-    second renders every person twice under one key. And a role column that is
-    absent, ``null`` or one scalar rather than a list is a row that reads
-    correctly to a person and holds either no roles or one role per character.
+    The other six nothing downstream would reject at all. Three are the
+    canonical form of an issuer, taken on **both** of them before anything is
+    read off either, and they are
+    :func:`_refuse_an_issuer_the_parse_would_change`'s: no scheme, ASCII
+    whitespace or an ASCII control character, or a scheme spelled in other than
+    lower case. Two more are ADR-0015 on the relation between the pair — a
+    second issuer that moves more than the scheme renders seven directory rows
+    at an address nothing serves, and one that moves nothing renders every
+    person twice under one key. And a role column that is absent, ``null`` or
+    one scalar rather than a list is a row that reads correctly to a person and
+    holds either no roles or one role per character.
 
     The empty role list is **not** among them. It is the state ADR-0007 calls
     load-bearing — Priya Raman holds no server-side role — so a person with no
     roles parses, and a person with no ``roles`` key does not.
 
     Raises:
-        ValueError: A subject is empty or longer than :data:`SUBJECT_LIMIT`; two
-            people share a subject or a username; the issuer's last path segment
-            is empty; the second issuer is not the first under another scheme;
-            or a person states a role column that is absent, ``null`` or a
-            scalar.
+        ValueError: Either issuer is not in the canonical form ADR-0015 names; a
+            subject is empty or longer than :data:`SUBJECT_LIMIT`; two people
+            share a subject or a username; the issuer's last path segment is
+            empty; the second issuer is not the first under another scheme; or a
+            person states a role column that is absent, ``null`` or a scalar.
     """
     document = yaml.safe_load(text)
     issuer = str(document["issuer"])
-    realm = realm_of(issuer)
     authored = document.get("tls_issuer")
     tls_issuer = None if authored is None else str(authored)
+
+    # Before anything is read off an issuer, and for both of them. A string the
+    # parse would change is not yet an issuer, so asking it what realm it names
+    # or how it differs from its neighbour answers about a string the seed does
+    # not contain — and the author is told about a consequence of their slip
+    # instead of the slip.
+    for candidate in (issuer, tls_issuer):
+        if candidate is not None:
+            _refuse_an_issuer_the_parse_would_change(candidate)
+
+    realm = realm_of(issuer)
     if tls_issuer is not None:
         # ADR-0015. The profile changes how the realm is reached and not which
         # realm it is, nor where — `tls.env` moves one origin variable from

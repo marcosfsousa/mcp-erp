@@ -96,6 +96,14 @@
 # deviation carried deliberately: no certificate authority issues a certificate
 # for `keycloak:8081`, and a self-signed one makes certificate trust a setup
 # step for every third-party client.
+#
+# **Both issuers are taken exactly as written**, here and on the line below, and
+# ADR-0015 makes that a refusal too: an issuer carrying no scheme, an upper-case
+# scheme, or any space, tab or line ending is refused where it is written rather
+# than quietly tidied. The directory is keyed by this string and the token
+# carries the one the authorization server was configured with, so they have to
+# be the same bytes — and a stray space in a URL is invisible in a text editor
+# but is a directory nobody's token ever reaches.
 issuer: http://keycloak:8081/realms/mcp-erp
 
 # The same realm's identifier under the opt-in TLS profile, which exists because
