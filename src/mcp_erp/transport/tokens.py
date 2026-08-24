@@ -145,7 +145,8 @@ async def validate(token: str, *, key_set: KeySet, issuer: str, audience: str) -
     stays on the second branch and is refused ``issuer_mismatch``, which is a
     position rather than an oversight: the claim is there and it is not ours, and
     the caller's remedy is the same one a wrong string earns. Absence is the only
-    thing the first branch is about.
+    thing the first branch is about, and ``tests/wire/test_the_cause_a_refusal_names.py``
+    asserts both halves — a position nothing falsifies is a comment.
 
     Args:
         token: The credential from the ``Authorization`` header.

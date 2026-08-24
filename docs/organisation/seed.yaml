@@ -73,8 +73,12 @@
 #                    cost_centre  the one centre they hold. Layer 2 reads this
 #                                 as the partition, and that duplication is
 #                                 what the drift check polices.
-#                    roles        server-side, resolved per request
-#                    realm_roles  issuer-side, opaque to everything in `src/`
+#                    roles        server-side, resolved per request. A list,
+#                                 always — `roles: erp.read` is a string, and
+#                                 the loader refuses it rather than sorting it
+#                                 into one role per character
+#                    realm_roles  issuer-side, opaque to everything in `src/`,
+#                                 and a list on the same terms
 #                    exists_to    the branch this person makes reachable.
 #                                 Rendered nowhere: it is how a reviewer checks
 #                                 the cast against the rule that every member
@@ -101,7 +105,9 @@ issuer: http://keycloak:8081/realms/mcp-erp
 #
 # Two things about it belong here rather than there. **Only the scheme moves** —
 # the service name and the port are what resolve identically on both sides of the
-# container boundary, so they stay put. And **it renders into the principal
+# container boundary, so they stay put, and ADR-0015 makes that a refusal rather
+# than a convention: a second issuer moving anything else, or nothing at all,
+# fails at the line below. And **it renders into the principal
 # directory beside the default identifier**, because the directory is keyed by
 # issuer *and* subject: a profile whose issuer had no rows would refuse every
 # call with `role_missing` after passing every gate. It renders nowhere else. The

@@ -128,14 +128,18 @@ def test_a_person_renders_the_same_roles_at_every_issuer() -> None:
     drift, and a reader comparing two rows for one person would have no way to
     tell which the server was answering from.
     """
-    text = _seed_text(subject="somebody", roles=["a_server_role"])
-    both = read_identity_seed(text + "tls_issuer: https://elsewhere.example/realms/exhibit\n")
+    text = _seed_text(
+        subject="somebody",
+        roles=["a_server_role"],
+        issuer="http://issuer.example/realms/exhibit",
+    )
+    both = read_identity_seed(text + "tls_issuer: https://issuer.example/realms/exhibit\n")
 
     rows = json.loads(render_directory(both))
 
     assert [row["issuer"] for row in rows] == [
+        "http://issuer.example/realms/exhibit",
         "https://issuer.example/realms/exhibit",
-        "https://elsewhere.example/realms/exhibit",
     ]
     assert {row["subject"] for row in rows} == {"somebody"}
     assert all(row["roles"] == ["a_server_role"] for row in rows)
@@ -149,17 +153,65 @@ def test_a_seed_with_no_second_issuer_renders_one_row_per_person() -> None:
     assert len(json.loads(render_directory(only_one))) == 1
 
 
-def test_a_second_issuer_naming_another_realm_is_refused() -> None:
-    """The realm is the issuer's last path segment, and there is one realm here.
+@pytest.mark.parametrize(
+    ("moves", "second"),
+    [
+        # The realm name, which is what the check compared before ADR-0015 and
+        # the only thing it compared.
+        ("the realm", "http://issuer.example/realms/other"),
+        # The authority, which the check never looked at. It is the case the
+        # ticket named as the symptom, and the one a last-segment comparison
+        # and a whole-path comparison both admit.
+        ("the authority", "https://elsewhere.example/realms/exhibit"),
+        ("the port", "https://issuer.example:8443/realms/exhibit"),
+        # The path above the realm, which is legacy Keycloak's own shape and
+        # shares the last segment with the first issuer.
+        ("the path above the realm", "https://issuer.example/auth/realms/exhibit"),
+        # Nothing at all. Two identical identifiers are not one realm reached
+        # two ways; they are one reached once, rendered twice, and the
+        # directory would hold every person under a key it already holds them
+        # under.
+        ("nothing", "http://issuer.example/realms/exhibit"),
+    ],
+)
+def test_a_second_issuer_that_moves_more_than_the_scheme_is_refused(
+    moves: str, second: str
+) -> None:
+    """ADR-0015: the second identifier is the first with a different scheme.
 
-    Two identifiers ending in different segments would render a user import for
-    whichever the parser read first, and a directory holding rows for a realm
-    that was never imported.
+    Parameterised over what moves rather than asserted once, because every
+    weaker reading of *the same realm* — the last path segment, the whole path —
+    is green on some of these rows and red on others, and a single case would
+    not say which reading landed.
     """
-    text = _seed_text(subject="somebody") + "tls_issuer: https://issuer.example/realms/other\n"
+    text = (
+        _seed_text(subject="somebody", issuer="http://issuer.example/realms/exhibit")
+        + f"tls_issuer: {second}\n"
+    )
 
-    with pytest.raises(ValueError, match="realm"):
+    with pytest.raises(ValueError, match="scheme"):
         read_identity_seed(text)
+
+
+def test_a_second_issuer_that_moves_only_the_scheme_is_the_one_shape_admitted() -> None:
+    """The profile's own diff, stated as the positive case beside the refusals.
+
+    `tls.env` moves `MCP_KEYCLOAK_ORIGIN` from `http://keycloak:8081` to
+    `https://keycloak:8081` and nothing else, so this is the one seed the
+    committed configuration can produce.
+    """
+    text = (
+        _seed_text(subject="somebody", issuer="http://issuer.example/realms/exhibit")
+        + "tls_issuer: https://issuer.example/realms/exhibit\n"
+    )
+
+    parsed = read_identity_seed(text)
+
+    assert parsed.issuers == (
+        "http://issuer.example/realms/exhibit",
+        "https://issuer.example/realms/exhibit",
+    )
+    assert parsed.realm == "exhibit"
 
 
 def test_rendering_twice_produces_the_same_bytes(seed: IdentitySeed) -> None:
@@ -345,6 +397,46 @@ def test_a_person_stating_no_roles_at_all_fails_as_a_seed_defect(column: str, mi
     )
 
     with pytest.raises(ValueError, match=re.escape(f"'rolesless' states no {column!r}")):
+        read_identity_seed(text)
+
+
+@pytest.mark.parametrize(
+    ("column", "authored"),
+    [
+        # The string is the case that costs nothing to author and nothing to
+        # read back: YAML hands it over as a scalar, `sorted` walks it, and one
+        # role becomes one role per character.
+        ("roles", "    roles: erp.read\n    realm_roles: []\n"),
+        ("realm_roles", "    roles: []\n    realm_roles: approver\n"),
+        # The number is the same defect where the standard library does raise —
+        # as a `TypeError` from inside `sorted`, naming neither the person nor
+        # the column.
+        ("roles", "    roles: 3\n    realm_roles: []\n"),
+        ("realm_roles", "    roles: []\n    realm_roles: 3\n"),
+    ],
+)
+def test_a_role_column_authored_as_one_scalar_is_refused(column: str, authored: str) -> None:
+    """`roles: erp.read` is eight roles of one character each, and nothing raised.
+
+    The identity parsed, the directory got a row, and every call under it
+    refused `role_missing` — from a line of the seed that reads correctly to a
+    person. Both columns and both scalar kinds, because the loader reads them
+    through one helper and the string is the only one the standard library lets
+    through.
+    """
+    text = (
+        "issuer: https://issuer.example/realms/exhibit\n"
+        "password: not-a-secret\n"
+        "cost_centres: []\n"
+        "vendors: []\n"
+        "people:\n"
+        "  - name: A Person\n"
+        "    subject: scalar-roles\n"
+        "    username: a.person\n"
+        "    cost_centre: P-1\n" + authored
+    )
+
+    with pytest.raises(ValueError, match=re.escape(f"'scalar-roles' states {column!r} as one")):
         read_identity_seed(text)
 
 
