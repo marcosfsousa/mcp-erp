@@ -417,12 +417,12 @@ or client*. `tests/conformance_client.py`'s `GRANT_TYPES` carries the finding an
 what the client does about it.
 
 **A provisioned client inherits no PKCE pin either, and the pin could not be
-attached to the policy above.** The four authored clients each carry
+attached to the policy above.** Every authored client carries
 `"pkce.code.challenge.method": "S256"` as a client attribute, which is what makes
 them refuse `plain`. A client the executor creates carries no attributes of its
-own, so the fifth arrived accepting `plain` — and accepting a request with no
-`code_challenge` at all — while ADR-0007 claimed the method was pinned at the
-server for every client.
+own, so the one it provisioned arrived accepting `plain` — and accepting a
+request with no `code_challenge` at all — while ADR-0007 claimed the method was
+pinned at the server for every client.
 
 The obvious repair does not work, and the reason is worth stating because it
 generalises to every executor. Adding `pkce-enforcer` to the
