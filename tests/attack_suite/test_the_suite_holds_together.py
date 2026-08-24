@@ -442,6 +442,69 @@ def test_the_shapes_that_refusal_is_for(tmp_path: Path) -> None:
     )
 
 
+def test_the_refusal_is_a_rule_and_not_a_list_of_the_three(tmp_path: Path) -> None:
+    """The shapes nobody enumerated, which is the whole reason the rule is one.
+
+    The three above were found by asking *how could a test arrive unseen* and
+    writing down the answers. That question has no last answer, and a refusal
+    written as the list of answers so far is a hole with a bibliography: every
+    binding form Python has is another way in, and unpacking, `for`, `with … as`,
+    the walrus, an import under an `if` and a `def` under one are six that the
+    enumeration let through while reporting nothing at all.
+
+    So the check refuses what the *tree* marks as a binding rather than the forms
+    a reader thought of, and this is the assertion that says so — every name here
+    is one pytest actually collects, taken from a real `--collect-only` run, and
+    none of them appears in `runnable_but_unseen_in`'s docstring as a shape to
+    look for.
+
+    **The wildcard is the one that reports something else.** `from helper import
+    *` binds names that are in the other module, so there is no identifier on the
+    line; it is refused under :data:`scenarios.STAR` instead, which is a refusal
+    to read a second file rather than a failure to.
+    """
+    (tmp_path / "helper.py").write_text(
+        "def test_imported() -> None:\n    pass\n\n\ndef test_conditionally() -> None:\n    pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_every_other_way_in.py").write_text(
+        "import contextlib\nimport os\n\n\n"
+        "def _inner() -> None:\n    pass\n\n\n"
+        "test_unpacked, test_beside_it = _inner, _inner\n\n"
+        "for test_looped in (_inner,):\n    pass\n\n"
+        "with contextlib.nullcontext(_inner) as test_bound:\n    pass\n\n"
+        "if (test_walrus := _inner) is not None:\n    pass\n\n"
+        "if os.name:\n    from helper import test_conditionally\n\n"
+        "if os.name:\n\n    def test_under_a_branch() -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_star.py").write_text("from helper import *\n", encoding="utf-8")
+
+    assert _collected_by_pytest(tmp_path) == {
+        "test_every_other_way_in.py::test_unpacked",
+        "test_every_other_way_in.py::test_beside_it",
+        "test_every_other_way_in.py::test_looped",
+        "test_every_other_way_in.py::test_bound",
+        "test_every_other_way_in.py::test_walrus",
+        "test_every_other_way_in.py::test_conditionally",
+        "test_every_other_way_in.py::test_under_a_branch",
+        "test_star.py::test_imported",
+        "test_star.py::test_conditionally",
+    }
+    assert tuple(scenarios._tests_in(tmp_path)) == ()
+    assert scenarios.tests_without_a_declaration(tmp_path) == ()
+    assert scenarios.runnable_but_unseen_in(tmp_path) == (
+        "test_every_other_way_in.py::test_unpacked",
+        "test_every_other_way_in.py::test_beside_it",
+        "test_every_other_way_in.py::test_looped",
+        "test_every_other_way_in.py::test_bound",
+        "test_every_other_way_in.py::test_walrus",
+        "test_every_other_way_in.py::test_conditionally",
+        "test_every_other_way_in.py::test_under_a_branch",
+        f"test_star.py::{scenarios.STAR}",
+    )
+
+
 def _collected_by_pytest(directory: Path) -> set[str]:
     """What pytest, configured as this repo configures it, collects from a directory.
 

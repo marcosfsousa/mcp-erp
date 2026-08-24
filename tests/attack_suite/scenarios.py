@@ -81,6 +81,15 @@ row it does not falsify. Named here so the exemption is one string in one place
 instead of a rule about which files are exempt.
 """
 
+STAR: Final = "*"
+"""How the tree spells the alias of a wildcard import, and how a refusal names one.
+
+`from helper import *` binds whatever the other module exports, so there is no
+identifier on the line to report. :func:`runnable_but_unseen_in` refuses it under
+this name rather than resolving the other module — reading one file is what makes
+that check cheap and what keeps it from becoming an interpreter.
+"""
+
 DOCUMENTED: Final = "documented"
 ASSERTED: Final = "asserted"
 
@@ -300,7 +309,7 @@ def tests_without_a_declaration(directory: Path = HERE) -> tuple[str, ...]:
 
 
 def runnable_but_unseen_in(directory: Path = HERE) -> tuple[str, ...]:
-    """Shapes pytest would run here that :func:`_tests_in` cannot see.
+    """Module-scope bindings pytest would run here that :func:`_tests_in` cannot see.
 
     `pyproject.toml` narrows collection to `test_*.py`, no classes and `test_*`
     functions, so that what pytest runs and what the collector reads are the same
@@ -312,29 +321,42 @@ def runnable_but_unseen_in(directory: Path = HERE) -> tuple[str, ...]:
     broken silently — the failure `test_the_suite_holds_together.py` exists to
     make impossible.
 
-    Three ways in, all measured against a real `--collect-only` run under this
-    repo's own configuration (#112):
+    **One rule, not a list of shapes.** Every `test_*` name bound at module scope
+    is refused unless it is a ``def test_…`` :func:`_tests_in` itself read, and
+    every class written as a `unittest.TestCase` subclass is refused outright —
+    `_pytest/unittest.py` collects one by *type* before any name pattern is
+    consulted, so `python_classes` has no bearing on it and `unittest`'s own
+    loader then finds its methods by their `test` prefix rather than by
+    `python_functions`. Three ways in were measured against a real
+    `--collect-only` run (#112): that `TestCase`, a name bound by import, and one
+    bound by assignment. The rule covers those, and also unpacking, `for`,
+    `with … as`, the walrus, an import guarded by an `if` or a `try`, and a `def`
+    nested under either — none of which an enumeration written from the three
+    would have caught, and every one of which pytest runs.
 
-    - a **`unittest.TestCase` subclass**, which `_pytest/unittest.py` collects by
-      *type* before any name pattern is consulted, so `python_classes` has no
-      bearing on it and `unittest`'s loader then finds its methods by their own
-      `test` prefix rather than by `python_functions`;
-    - a **`test_*` name bound by import**, which is a function object in the
-      module namespace like any other;
-    - a **`test_*` name bound by assignment**, likewise.
+    Scope is what the tree marks: `def` and `class` bodies bind in a scope of
+    their own and are not descended, while `if`, `try`, `for`, `while`, `with`
+    and `match` are, because a binding under one of those is still a module-level
+    binding.
 
-    Refused rather than collected. Teaching :func:`_tests_in` to resolve imports
-    and assignments would make it an interpreter, and teaching it to walk class
-    bodies would make `@exercises` mean two things; nothing in this directory is
-    written in any of the three, so the cheaper and more honest rule is that they
-    do not appear.
+    **A wildcard import is refused under the name ``*``.** The names it binds are
+    in the other module and this reads one file, so there is nothing to report but
+    the line itself.
 
-    **Read as written, never resolved.** A base spelled `TestCase` or
-    `unittest.TestCase` matches and a subclass of a subclass does not; a name is
-    matched on the identifier the line binds. That is :data:`DECLARATION`'s rule
-    about aliases applied again — what the check accepts is what a reader can see
-    on the line — and it is sound here because the invariant is that none of
-    these shapes is present at all.
+    **The identifier is the boundary.** A name written into `globals()`, or bound
+    by `exec` or `setattr`, appears on no line as a name and is out of reach here.
+    Refusing what is *written* closes the hole worth closing; resolving what is
+    computed would make this an interpreter — the same reason :func:`_tests_in`
+    is not taught to follow an import, and the same reason it is not taught to
+    walk class bodies, which would make `@exercises` mean two things.
+
+    **Read as written, never resolved**, and erring toward refusal. A base spelled
+    `TestCase` or `unittest.TestCase` matches and a subclass of a subclass does
+    not; `test_payloads = (…)` is refused though pytest collects no tuple. That is
+    :data:`DECLARATION`'s rule about aliases applied again — what the check
+    accepts is what a reader can see on the line — and it is sound here because
+    the invariant is that none of these shapes is present at all, so a rename is
+    the whole remedy for a false positive.
 
     Args:
         directory: Where the test modules live.
@@ -345,36 +367,64 @@ def runnable_but_unseen_in(directory: Path = HERE) -> tuple[str, ...]:
     return tuple(
         f"{path.name}::{name}"
         for path, tree in _modules_in(directory)
-        for node in tree.body
-        for name in _runnable_but_unseen(node)
+        # `dict.fromkeys` rather than a set: a name rebound at module scope is one
+        # unseen test, reported once, and source order is what makes it findable.
+        for name in dict.fromkeys(_unseen_in(tree))
     )
 
 
-def _runnable_but_unseen(node: ast.stmt) -> tuple[str, ...]:
-    """The names one module-level statement binds that pytest would run unseen."""
+def _unseen_in(tree: ast.Module) -> Iterator[str]:
+    """The module-scope bindings of one module that :func:`_tests_in` did not read."""
+    read = {
+        id(node)
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        and node.name.startswith("test_")
+    }
+    for node in _at_module_scope(tree):
+        if id(node) not in read:
+            yield from _runnable_but_unseen(node)
+
+
+def _at_module_scope(node: ast.AST) -> Iterator[ast.AST]:
+    """Every node under one that runs at module scope, in source order.
+
+    Stops at `def` and `class`, whose bodies bind names in a scope of their own —
+    which is why :func:`_tests_in` reads `tree.body` and nothing deeper. Anything
+    else is descended, control flow included, because `if`, `try`, `for`, `while`
+    and `with` bind into the module's own namespace exactly as a bare statement
+    does.
+    """
+    for child in ast.iter_child_nodes(node):
+        yield child
+        if not isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            yield from _at_module_scope(child)
+
+
+def _runnable_but_unseen(node: ast.AST) -> tuple[str, ...]:
+    """The name one module-scope node binds, where pytest would run it unseen.
+
+    Three spellings of a binding and nothing else: the `class` statement, the
+    `import` alias, and an identifier the tree marks `Store` — which is one node
+    type for assignment, unpacking, `for`, `with … as`, the walrus and the
+    augmented forms, so none of those needs naming here.
+    """
     if isinstance(node, ast.ClassDef):
         return (node.name,) if any(_is_test_case(base) for base in node.bases) else ()
 
-    if isinstance(node, ast.Import | ast.ImportFrom):
-        return tuple(
-            alias.asname or alias.name
-            for alias in node.names
-            if (alias.asname or alias.name).startswith("test_")
-        )
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        # Reached only for a `def` :func:`_tests_in` did not read — one nested
+        # under an `if` or a `try`, which pytest runs and the collector never sees.
+        name = node.name
+    elif isinstance(node, ast.alias):
+        # `import a.b` binds `a`; `from x import *` binds names this cannot read.
+        name = node.asname or node.name.split(".", 1)[0]
+    elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+        name = node.id
+    else:
+        return ()
 
-    if isinstance(node, ast.Assign):
-        return tuple(
-            target.id
-            for target in node.targets
-            if isinstance(target, ast.Name) and target.id.startswith("test_")
-        )
-
-    if isinstance(node, ast.AnnAssign):
-        target = node.target
-        if isinstance(target, ast.Name) and target.id.startswith("test_"):
-            return (target.id,)
-
-    return ()
+    return (name,) if name == STAR or name.startswith("test_") else ()
 
 
 def _is_test_case(base: ast.expr) -> bool:

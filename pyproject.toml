@@ -134,13 +134,16 @@ testpaths = ["tests"]
 # `unittest.TestCase` subclass, which `_pytest/unittest.py` collects by *type*
 # before any name pattern is read and whose methods `unittest`'s own loader then
 # finds by their `test` prefix rather than by `python_functions` below; a
-# `test_*` name bound by import; and one bound by assignment.
+# `test_*` name bound by import; and one bound by assignment. Those three are
+# where the hole was found, not its extent — unpacking, `for`, `with … as`, the
+# walrus and an import under an `if` do the same thing, so what refuses them is a
+# rule about bindings rather than a list of the three.
 #
 # They are refused where they would do damage rather than everywhere. Only
 # `tests/attack_suite/` claims a bijection between its tests and a table, so only
-# there does an unseen test break a standing claim, and that module refuses all
-# three outright. Elsewhere under `tests/` such a test would simply run, which is
-# what pytest does with one and what no claim here contradicts.
+# there does an unseen test break a standing claim, and `scenarios.py` refuses
+# every such binding outright. Elsewhere under `tests/` such a test would simply
+# run, which is what pytest does with one and what no claim here contradicts.
 python_files = ["test_*.py"]
 python_classes = []
 python_functions = ["test_*"]
