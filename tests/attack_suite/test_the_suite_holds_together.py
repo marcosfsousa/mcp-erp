@@ -682,6 +682,101 @@ def test_the_flag_is_refused_wherever_it_is_written(tmp_path: Path) -> None:
     )
 
 
+def test_the_flag_is_read_from_every_shape_that_binds_it(tmp_path: Path) -> None:
+    """`=` is one spelling of a binding, and reading only that one repeats #127.
+
+    Each class here leaves `__test__` on itself without ever writing `__test__ =`,
+    and the assertion is a real `--collect-only` run: pytest collects all six, so
+    a check that reads the assignment alone clears six classes it runs. The
+    remedy is the one the module walk already uses — ask what the scope *binds*,
+    which is one `Store` identifier for the unpacking, the loop, the `with` and
+    the walrus, plus the `match` capture Python spells as a `str`.
+
+    `except … as __test__` is the shape deliberately left out, and it is here to
+    hold that out: Python deletes the name when the handler ends, so the class
+    carries no flag, pytest collects nothing, and silence is the right answer
+    rather than a gap.
+    """
+    (tmp_path / "test_bound_without_an_assignment.py").write_text(
+        "import contextlib\n\n\n"
+        "class TupleLeak:\n    __test__, _spare = True, 1\n\n"
+        "    def test_it(self) -> None:\n        pass\n\n\n"
+        "class ListLeak:\n    [__test__, _spare] = [True, 1]\n\n"
+        "    def test_it(self) -> None:\n        pass\n\n\n"
+        "class LoopLeak:\n    for __test__ in (True,):\n        pass\n\n"
+        "    def test_it(self) -> None:\n        pass\n\n\n"
+        "class ContextLeak:\n"
+        "    with contextlib.nullcontext(True) as __test__:\n        pass\n\n"
+        "    def test_it(self) -> None:\n        pass\n\n\n"
+        "class WalrusLeak:\n    _spare = (__test__ := True)\n\n"
+        "    def test_it(self) -> None:\n        pass\n\n\n"
+        "class MatchLeak:\n    match True:\n        case __test__:\n            pass\n\n"
+        "    def test_it(self) -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_taken_back.py").write_text(
+        "class HandlerLeak:\n    try:\n        raise ValueError\n"
+        "    except ValueError as __test__:\n        pass\n\n"
+        "    def test_it(self) -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+
+    assert _collected_by_pytest(tmp_path) == {
+        "test_bound_without_an_assignment.py::TupleLeak::test_it",
+        "test_bound_without_an_assignment.py::ListLeak::test_it",
+        "test_bound_without_an_assignment.py::LoopLeak::test_it",
+        "test_bound_without_an_assignment.py::ContextLeak::test_it",
+        "test_bound_without_an_assignment.py::WalrusLeak::test_it",
+        "test_bound_without_an_assignment.py::MatchLeak::test_it",
+    }
+    assert scenarios.runnable_but_unseen_in(tmp_path) == (
+        "test_bound_without_an_assignment.py::TupleLeak",
+        "test_bound_without_an_assignment.py::ListLeak",
+        "test_bound_without_an_assignment.py::LoopLeak",
+        "test_bound_without_an_assignment.py::ContextLeak",
+        "test_bound_without_an_assignment.py::WalrusLeak",
+        "test_bound_without_an_assignment.py::MatchLeak",
+    )
+
+
+def test_the_flag_written_off_is_read_off_only_where_the_value_is_written(
+    tmp_path: Path,
+) -> None:
+    """Which side each false refusal falls on, asserted rather than described.
+
+    Two classes pytest does not collect are refused anyway. `__test__ = 1` is
+    truthy but not `True`, and pytest enables collection on `is True` alone; a
+    class carrying the flag with no `test_*` method has nothing to run. Reading
+    either would mean modelling pytest's two opposed rules — `is True` to enable,
+    any falsey value to opt a `TestCase` out — and deciding which applies needs
+    the base resolved. So both are refused, and the cost is a rename.
+
+    `__test__ = False` is cleared, and only where the `False` is written against
+    the name: unpacked out of a tuple it is a binding with no readable value and
+    is refused like the rest.
+    """
+    (tmp_path / "test_refused_anyway.py").write_text(
+        "class TruthyLeak:\n    __test__ = 1\n\n"
+        "    def test_it(self) -> None:\n        pass\n\n\n"
+        "class EmptyLeak:\n    __test__ = True\n\n"
+        "    def helper(self) -> None:\n        pass\n\n\n"
+        "class UnpackedOff:\n    __test__, _spare = False, 1\n\n"
+        "    def test_it(self) -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_written_off.py").write_text(
+        "class OptedOut:\n    __test__ = False\n\n    def test_it(self) -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+
+    assert _collected_by_pytest(tmp_path) == set()
+    assert scenarios.runnable_but_unseen_in(tmp_path) == (
+        "test_refused_anyway.py::TruthyLeak",
+        "test_refused_anyway.py::EmptyLeak",
+        "test_refused_anyway.py::UnpackedOff",
+    )
+
+
 def test_a_class_pytest_cannot_reach_is_left_alone(tmp_path: Path) -> None:
     """The other direction, so the widening is a judgment and not a blanket refusal.
 

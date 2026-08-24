@@ -580,10 +580,21 @@ def _is_flagged_as_a_test(node: ast.ClassDef) -> bool:
     though, run over the class instead of the module, because `if os.name:
     __test__ = True` sets the flag exactly as a bare statement would.
 
-    `False` is `__test__`'s documented opt-out and is read as one. Anything else —
-    a name, a call, a flag decided at import — is refused rather than resolved,
-    which is the same bias as the suffix above and costs a rename when it is
-    wrong.
+    **The flag is read wherever the body binds it**, not only where the body
+    assigns it plainly. A first cut here matched `__test__` as the target of an
+    `=` and nothing else, which reproduced #127 one level down: `__test__, _ =
+    True, 1`, `for __test__ in (True,)`, `with … as __test__`, `(__test__ :=
+    True)` and `case __test__:` all leave the flag on the class and pytest
+    collects every one of them. So this asks :func:`_binds_the_flag` the same
+    question :func:`_runnable_but_unseen` asks of a module — *what does this
+    scope bind* — and the spellings stop needing to be enumerated.
+
+    `False` is `__test__`'s opt-out and is read as one, but **only where the
+    value is written against the name**: `__test__ = False` opts out, and a
+    binding with no value beside it — an unpacking, a loop, a capture — cannot
+    be read as one and is refused. Anything else written there — a name, a call,
+    a flag decided at import — is refused rather than resolved, which is the same
+    bias as the suffix above and costs a rename when it is wrong.
 
     **The flag set from outside the class is not this function's**, and is not
     missed: `Leak.__test__ = True` on the line below is a module-scope statement,
@@ -592,25 +603,52 @@ def _is_flagged_as_a_test(node: ast.ClassDef) -> bool:
     boundary :func:`runnable_but_unseen_in` draws at `exec` and `globals()` — the
     flag has to be an identifier on a line to be read.
     """
+    opted_out: set[int] = set()
     for statement in _at_the_scope_of(node):
-        if isinstance(statement, ast.Assign):
-            targets: list[ast.expr] = list(statement.targets)
-        elif isinstance(statement, ast.AnnAssign):
-            targets = [statement.target]
-        else:
-            continue
-        flagged = any(isinstance(target, ast.Name) and target.id == TEST_FLAG for target in targets)
-        if flagged and not _is_written_false(statement.value):
+        if isinstance(statement, ast.Assign) and _is_written_false(statement.value):
+            # Recorded by node identity rather than returned on, because the walk
+            # hands over the target itself further down and it must not then read
+            # as a bare binding. `__test__ = _x = False` writes off both.
+            opted_out.update(id(target) for target in statement.targets)
+        elif isinstance(statement, ast.AnnAssign) and _is_written_false(statement.value):
+            opted_out.add(id(statement.target))
+        elif _binds_the_flag(statement) and id(statement) not in opted_out:
             return True
     return False
+
+
+def _binds_the_flag(node: ast.AST) -> bool:
+    """Whether one node binds :data:`TEST_FLAG` into the scope it is written in.
+
+    The two spellings :func:`_runnable_but_unseen` reads for a module, asked here
+    of a class body: an identifier the tree marks `Store` — one node type for
+    assignment, unpacking, `for`, `with … as`, the walrus and the augmented forms
+    — and a `match` pattern's capture, which Python spells as a bare `str` on the
+    node and so has to be named separately.
+
+    **`except … as __test__` is deliberately not read.** It is the one binding
+    Python takes back, deleting the name when the handler ends, so the class
+    carries no flag and pytest collects nothing — measured, not reasoned from.
+    """
+    if isinstance(node, ast.Name):
+        return node.id == TEST_FLAG and isinstance(node.ctx, ast.Store)
+    if isinstance(node, ast.MatchAs | ast.MatchStar):
+        return node.name == TEST_FLAG
+    return isinstance(node, ast.MatchMapping) and node.rest == TEST_FLAG
 
 
 def _is_written_false(value: ast.expr | None) -> bool:
     """Whether a value is the literal `False`, and not merely something falsey.
 
-    `is False` rather than `not value`, which is pytest's own test for
-    :data:`TEST_FLAG` inverted: `__test__ = 0` is not an opt-out to pytest and is
-    not read as one here.
+    Narrower than either half of what pytest does, and on purpose. pytest turns
+    collection *on* with `safe_getattr(obj, "__test__", False) is True`
+    (`_pytest/python.py`), so `__test__ = 1` reaches nothing; and it turns a
+    `TestCase` *off* on any falsey value with `not getattr(cls, "__test__", True)`
+    (`_pytest/unittest.py`), so `__test__ = 0` is an opt-out there. Reading either
+    rule here would mean deciding which one applies, and that needs the base
+    resolved. So only a written `False` clears a class, and `__test__ = 1` is
+    refused though pytest would not collect it — a false refusal costing a rename,
+    which is the trade this whole check is built on.
     """
     return isinstance(value, ast.Constant) and value.value is False
 
