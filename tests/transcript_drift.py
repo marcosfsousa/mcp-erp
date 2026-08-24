@@ -20,13 +20,18 @@ that is nobody's capture. What it does not swallow is `git` itself failing, whic
 is a fact about the runner rather than about the exhibit; the step calls it with
 `|| true` so that even then the intended `exit 1` is what the job reports.
 
-**Which means the exit status is never what tells those apart.** `git show`
-exits 128 for a path `HEAD` does not hold *and* for one it holds and cannot
-read, so reading the number alone reports a corrupt object as a capture that was
-never committed — the loudest claim this helper can make, made about a committed
-file, inside the helper that exists to stop exactly that. Only `git`'s own
-stderr distinguishes them, so :data:`ABSENT` is what concludes "not in `HEAD`"
-and every other failure is raised as :exc:`GitFailed` carrying what `git` said.
+**Which means it never reads a failure as an answer.** `git show` exits 128 for
+a path `HEAD` does not hold *and* for one it holds and cannot read, and — this
+is the part that is not guessable — it prints the *same sentence* for both when
+the path is on disk, which every drifted capture is. So neither the exit status
+nor the message distinguishes them, and a helper that concludes "no committed
+copy" from either reports a corrupt repository as a capture that was never
+committed: the loudest claim available, made about a committed file, inside the
+helper that exists to stop exactly that. :func:`committed` therefore asks `git
+ls-tree`, whose exit status answers the question `git show` cannot, and raises
+:exc:`GitFailed` when `git` does not answer at all. :func:`main` prints that
+against the capture it concerns and exits non-zero, so one unreadable object
+costs the diagnosis for that capture and not for the others.
 
 That coupling is why this lives in `tests/` rather than in a workflow heredoc: it
 imports :func:`transcripts.mask`, so the diff it prints is the comparison that
@@ -36,7 +41,6 @@ was actually made rather than a second opinion about it.
 from __future__ import annotations
 
 import difflib
-import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,23 +58,6 @@ copy to diff against, so this prints the fact rather than raising on it.
 
 RENAMED: Final = " -> "
 """How `git status --porcelain` joins a rename's two paths, source first."""
-
-ABSENT: Final = re.compile(
-    r"^fatal: path '.*' (?:does not exist|exists on disk, but not) in 'HEAD'$",
-    re.MULTILINE,
-)
-"""The only two things `git show` says that mean `HEAD` does not hold that path.
-
-Two rather than one because `git` says which of them it is: a path that is not
-on disk either *does not exist in* `HEAD`, and the case this helper actually
-meets — a capture this run wrote, staged and not yet committed — *exists on
-disk, but not in* `HEAD`. Both were measured against the `git` on the runner
-rather than quoted from its documentation.
-
-Matched multi-line because a failing `git show` may print several `error:` lines
-before the `fatal:` one, and anchored at both ends so a path that contains the
-sentence cannot supply it.
-"""
 
 
 class GitFailed(RuntimeError):
@@ -139,39 +126,73 @@ def drifted() -> list[Entry]:
     return entries
 
 
+def asked(*arguments: str) -> subprocess.CompletedProcess[bytes]:
+    """One `git` invocation against the repository, its failure left to the caller."""
+    return subprocess.run(
+        ["git", *arguments],
+        capture_output=True,
+        check=False,
+        cwd=transcripts.REPO,
+    )
+
+
+def failure(argv: str, answer: subprocess.CompletedProcess[bytes]) -> GitFailed:
+    """A `GitFailed` carrying what `git` was asked, what it exited, and what it said."""
+    said = answer.stderr.decode("utf-8", errors="replace").rstrip()
+
+    return GitFailed(
+        f"`git {argv}` exited {answer.returncode}, so nothing is known about whether "
+        f"this capture is committed:\n{said}"
+    )
+
+
 def committed(path: str) -> str | None:
     """What `HEAD` holds at `path`, or `None` when `HEAD` holds nothing there.
+
+    Two invocations rather than one, because `git show` cannot answer this
+    question and `git ls-tree` can. Asked for a path it fails to resolve, `git
+    show` says *exists on disk, but not in `HEAD`* whenever the working tree has
+    that path — and it says the identical sentence when `HEAD` genuinely lacks
+    it and when a tree object it needs is unreadable. Measured, on `git
+    cat-file -e` and `git show` alike: delete the tree object under a committed
+    capture and the message is byte-for-byte the one a never-committed capture
+    produces. So no reading of `git show`'s stderr can tell those apart, and the
+    first draft of this fix, which tried, reported a corrupt repository as a
+    capture that was never committed — the bug it was written to remove.
+
+    `git ls-tree` separates all three: a path `HEAD` holds is exit 0 and a line,
+    a path it does not hold is exit 0 and no output, and a failure to read what
+    it needs is a non-zero exit. Its output is only tested for emptiness, never
+    parsed, so `core.quotePath` and C-style quoting of a non-ASCII path change
+    nothing here — and no message text is read, so a translated `git` is not a
+    consideration either.
 
     Args:
         path: The committed side's path, relative to the repository root.
 
     Returns:
-        The committed bytes as text, or `None` when `git` said `HEAD` does not
-        hold that path.
+        The committed bytes as text, or `None` when `git` answered that `HEAD`
+        does not hold that path.
 
     Raises:
-        GitFailed: When `git` failed for any other reason, carrying its exit
-            status and its stderr. Not returned as `None`, because a runner
-            whose `git` cannot read `HEAD` has told this helper nothing about
-            whether the capture is committed.
+        GitFailed: When `git` did not answer, carrying the invocation, its exit
+            status and its stderr. Never `None`, because a `git` that cannot
+            read `HEAD` has said nothing about whether the capture is committed.
     """
-    shown = subprocess.run(
-        ["git", "show", f"HEAD:{path}"],
-        capture_output=True,
-        check=False,
-        cwd=transcripts.REPO,
-    )
-    if shown.returncode == 0:
-        return shown.stdout.decode("utf-8")
+    listed = asked("ls-tree", "--name-only", "HEAD", "--", path)
+    if listed.returncode != 0:
+        raise failure(f"ls-tree --name-only HEAD -- {path}", listed)
 
-    said = shown.stderr.decode("utf-8", errors="replace")
-    if ABSENT.search(said):
+    if not listed.stdout.strip():
         return None
 
-    raise GitFailed(
-        f"`git show HEAD:{path}` exited {shown.returncode} without saying whether `HEAD` "
-        f"holds that path, so nothing here is a statement about the capture:\n{said.rstrip()}"
-    )
+    shown = asked("show", f"HEAD:{path}")
+    if shown.returncode != 0:
+        # `ls-tree` just said `HEAD` holds this path, so a `git show` that
+        # cannot produce it is a `git` failure with no second reading.
+        raise failure(f"show HEAD:{path}", shown)
+
+    return shown.stdout.decode("utf-8")
 
 
 def diff(entry: Entry) -> str:
@@ -217,11 +238,30 @@ def diff(entry: Entry) -> str:
 
 
 def main() -> int:
-    """Print every drifted capture's masked diff, and return 0 whatever they held."""
-    for entry in drifted():
-        print(diff(entry))
+    """Print every drifted capture's masked diff, and say whether `git` answered for all.
 
-    return 0
+    A `GitFailed` is printed against the capture it was raised for and the loop
+    goes on, because letting it out here would discard every later capture's
+    diff — measured at three drifted captures with only the first unreadable,
+    where the diagnosis for the other two is exactly what the reader still needs
+    and is still correct.
+
+    Returns:
+        0 when every entry was diagnosed, and 1 when `git` failed on any of
+        them. Non-zero rather than swallowed, so the failure is a fact about the
+        run and not only a line in its output; the step calls this with
+        `|| true`, so the `exit 1` the job reports remains the drift check's.
+    """
+    answered = True
+
+    for entry in drifted():
+        try:
+            print(diff(entry))
+        except GitFailed as failed:
+            answered = False
+            print(f"{entry.after}: {failed}")
+
+    return 0 if answered else 1
 
 
 if __name__ == "__main__":
