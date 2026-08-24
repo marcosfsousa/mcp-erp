@@ -668,6 +668,55 @@ jobs:
       - name: Build the images
         run: docker compose build
 
+      # THE OPT-IN TLS PROFILE, CREATED RATHER THAN SERVED
+      #
+      # `docker compose --env-file tls.env up` is a documented command that no
+      # runner had ever executed. The certificate service is the only service in
+      # a profile, nothing here selected it, and so two of the claims #115
+      # shipped rested on one measurement taken on one machine. This selects the
+      # profile, creates the service and stops there: minting a certificate and
+      # trusting it are the reader's own step, and a handshake is out of scope —
+      # a container that cannot be created is not.
+      #
+      # **A step rather than a job, which is ADR-0013's rule and not a shortcut.**
+      # Job `name:` values and the ruleset's required contexts are held equal in
+      # both directions, so a step changes no context and needs no ruleset edit.
+      # The diagnosis fits the row it lands in: *Server posture* reads "exposes,
+      # declares or **deploys** something other than what it should, with no
+      # caller's authorization involved", and a profile that cannot be brought up
+      # is a deployment defect with no caller in it.
+      #
+      # What it converts from author-measured to checked, of #115's four:
+      #
+      #   * **Item 4, one build for one tag** — its cold-start half.
+      #     `keycloak-certificate` carries `image:` and no `build:`, leaning on
+      #     the service above to build `mcp-erp-keycloak:26.7.1`. A runner starts
+      #     with no image cache, so a create that succeeds here is that claim: the
+      #     tag exists by the time the container is created, and a service whose
+      #     image another service builds is not pulled. That the tag is built
+      #     *once* rather than twice in parallel is the other half and is not
+      #     asserted — it is a property of the builder's output, not of anything
+      #     the created container carries.
+      #   * **Item 3, `command: []`** — in full. Overriding `entrypoint:` already
+      #     clears the image's `CMD`, so `generate.sh` never receives `start
+      #     --optimized --import-realm` as three positionals. The container is
+      #     asked rather than the file being read: empty either way it is
+      #     spelled, and the image's three arguments are what fails it.
+      #
+      # Removed again at the end, so the bring-up below starts from the state it
+      # has always started from.
+      - name: Create the TLS profile's certificate service
+        run: |
+          docker compose --env-file tls.env create keycloak-certificate
+          certificate=$(docker compose --env-file tls.env ps --all --quiet keycloak-certificate)
+          arguments=$(docker inspect --format '{{json .Config.Cmd}}' "$certificate")
+          echo "keycloak-certificate was created with Cmd=$arguments"
+          case "$arguments" in
+            "[]" | "null") ;;
+            *) echo "::error::the image's CMD reached generate.sh as arguments"; exit 1 ;;
+          esac
+          docker compose --env-file tls.env rm --force keycloak-certificate
+
       # `--wait` rather than a sleep or a poll written here, because every
       # readiness condition is already stated in `compose.yaml` and a second
       # definition of ready is a second thing that can be wrong. Those probes
