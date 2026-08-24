@@ -21,6 +21,9 @@ be asserting that the mask agrees with itself.
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
+import pytest
 
 import transcripts
 
@@ -30,6 +33,28 @@ A_TOKEN = (
     ".c2lnbmF0dXJlLXdoaWNoLWlzLW5vdC1yZWFs"
 )
 """A compact JSON Web Token, shaped like the ones the realm mints."""
+
+A_CAPTURE = """A beat
+
+1 of 1
+──────────────────────────────────────────────────────────────────────────────
+
+POST /mcp HTTP/1.1
+host: localhost:8080
+
+HTTP/1.1 200 OK
+date: Thu, 20 Aug 2026 21:34:54 GMT
+
+{
+  "sub": "priya-raman"
+}
+"""
+"""One rendered beat, small enough to read and carrying both sides of the mask.
+
+The `date` is what a second run moves on its own and the `sub` is what only a
+changed exhibit moves, so a test can tell :func:`transcripts.keep`'s two answers
+apart with a one-line edit either way.
+"""
 
 
 def masked(text: str) -> str:
@@ -224,6 +249,102 @@ def test_two_bodies_differing_only_in_member_order_compare_equal() -> None:
 def test_a_body_that_is_not_json_after_all_is_masked_rather_than_raising() -> None:
     """A malformed artifact should read as a diff, never as a stack trace."""
     assert A_TOKEN not in masked("{\n  not json at all " + A_TOKEN + "\n}")
+
+
+# ─── The shapes the parser has to recognise to reach a value at all ───────────
+
+
+def test_an_array_body_is_parsed_like_an_object_body() -> None:
+    """`json.dumps(indent=2)` puts either at column zero, and a beat may answer with a list.
+
+    Before #108 the parser opened on `{` alone, so an array body was never
+    parsed: its volatile members survived and its objects went unsorted, and
+    nothing said so until a beat returned one.
+    """
+    body = json.dumps([{"iat": 1787260158, "sub": "priya-raman"}], indent=2)
+    out = masked(body)
+
+    assert "1787260158" not in out
+    assert "priya-raman" in out
+
+
+def test_a_json_document_carried_inside_a_string_is_masked_as_a_document() -> None:
+    """A text content block carries its payload as a document inside a string.
+
+    A volatile value there is one no line-oriented rule can see, and the mask
+    descends into members rather than lines.
+    """
+    out = masked(json.dumps({"text": json.dumps({"iat": 1787260158, "id": "req_0001"})}, indent=2))
+
+    assert "1787260158" not in out
+    assert "req_0001" in out
+
+
+def test_a_string_that_is_not_a_document_is_left_exactly_as_it_was() -> None:
+    """The descent is for documents; ordinary prose and numeric strings are values."""
+    payload = {"amount": "1200.00", "description": "40 ergonomic desk chairs"}
+
+    assert masked(json.dumps(payload, indent=2)) == json.dumps(payload, indent=2, sort_keys=True)
+
+
+def test_an_elided_body_keeps_its_media_type_whole() -> None:
+    """`[text/html;charset=utf-8]` carries no space and no `: `, and is not a form.
+
+    The unqualified form pattern matched it and `_mask_query` rewrote it as a
+    query string, so the one elided body in the captured set read
+    `[text/html;charset=<masked>` — its closing bracket eaten by a mask that
+    thought `charset` was a parameter.
+    """
+    assert masked("[text/html;charset=utf-8]") == "[text/html;charset=utf-8]"
+
+
+def test_a_real_form_body_is_still_masked_by_parameter() -> None:
+    """The other side of the same rule: keeping the elision must not release a form."""
+    out = masked("state=6f2a&code_challenge=xyz&scope=openid")
+
+    assert out == f"state={transcripts.MASKED}&code_challenge={transcripts.MASKED}&scope=openid"
+
+
+# ─── `keep`, which is the drift check's whole mechanism ───────────────────────
+
+
+def test_the_same_capture_under_the_mask_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run that captured the same beat again leaves the committed bytes alone.
+
+    This is what makes `git status --porcelain -- docs/transcripts` a verdict
+    about the exhibit rather than about the minute the job ran in.
+    """
+    monkeypatch.setattr(transcripts, "COMMITTED", tmp_path)
+    path = tmp_path / f"beat{transcripts.SUFFIX}"
+    path.write_text(A_CAPTURE, encoding="utf-8")
+
+    assert transcripts.keep("beat", A_CAPTURE.replace("21:34:54", "22:11:07")) is False
+    assert path.read_text(encoding="utf-8") == A_CAPTURE
+
+
+def test_a_substantive_change_rewrites_the_committed_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The other direction, and the one a green check would be lying about."""
+    monkeypatch.setattr(transcripts, "COMMITTED", tmp_path)
+    path = tmp_path / f"beat{transcripts.SUFFIX}"
+    path.write_text(A_CAPTURE, encoding="utf-8")
+    fresh = A_CAPTURE.replace('"sub": "priya-raman"', '"sub": "tomas-weber"')
+
+    assert transcripts.keep("beat", fresh) is True
+    assert path.read_text(encoding="utf-8") == fresh
+
+
+def test_a_beat_with_no_committed_copy_is_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The missing-capture case, which is why the check is a `git status` and not a `git diff`."""
+    monkeypatch.setattr(transcripts, "COMMITTED", tmp_path / "nowhere")
+
+    assert transcripts.keep("beat", A_CAPTURE) is True
+    assert (tmp_path / "nowhere" / f"beat{transcripts.SUFFIX}").exists()
 
 
 # ─── The README's one embedded proof ──────────────────────────────────────────

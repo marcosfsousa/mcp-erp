@@ -72,8 +72,26 @@ values survive; only an order that carries no meaning does not. Keycloak
 advertises the same scope set in a different order on each boot, and without this
 a required check would go red on a difference the specification says is not one.
 
+The rules reach a value wherever it is: an object body, an array body, and a JSON
+document a beat carried inside a string — which is the shape an MCP text content
+block uses, and the one place a volatile value can hide from a rule that reads
+lines.
+
 `tests/transcripts.py` holds the mask, and `tests/test_transcripts.py` is what
 asserts that it covers each of these and none of those.
+
+## What a red check prints
+
+The step names the drifted file and then prints the diff **under this same
+mask**, so the output is the comparison the verdict made rather than a second
+opinion about it. `git diff` on the same drift leads with `date` and
+`x-served-by`, which are masked and played no part in the verdict, and a reader
+who trusts it concludes a clock moved.
+
+The drifted captures are also uploaded as a `drifted-transcripts` artifact, which
+is what lets someone re-run the mask with different rules after the rerun that
+overwrites them. `tests/transcript_drift.py` prints the diff and
+`tests/test_transcript_drift.py` holds it and the verdict in agreement.
 
 ## Two steps are envelopes rather than bodies
 

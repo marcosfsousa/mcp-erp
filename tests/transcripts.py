@@ -276,8 +276,27 @@ _REQUEST_LINE: Final = re.compile(r"^([A-Z]+) (\S+) (HTTP/[\d.]+)$")
 _HEADER_LINE: Final = re.compile(r"^([a-z0-9-]+): (.*)$")
 """A rendered header. Names are lower-cased and sorted by :func:`snapshot`."""
 
-_FORM_BODY: Final = re.compile(r"^[^\s:]+=\S*(&[^\s:]+=\S*)*$")
-"""A form-encoded body line, which carries no spaces and no `: ` — unlike the other two."""
+_FORM_BODY: Final = re.compile(r"^[^\s:\[]+=\S*(&[^\s:]+=\S*)*$")
+"""A form-encoded body line, which carries no spaces and no `: ` — unlike the other two.
+
+**A parameter name may not open with `[`, which is what keeps an elision out.**
+:func:`_body` renders a body it does not read as its bracketed media type, and
+`[text/html;charset=utf-8]` carries no space and no `: ` either — so the
+unqualified pattern matched it, `_mask_query` rewrote it as a query string, and
+the artifact's one elided body read `[text/html;charset=<masked>`, its closing
+bracket eaten by a mask that thought it was a value. `application/json` and
+`application/x-www-form-urlencoded` are the media types rendered in full, so no
+elision this can now miss is a form.
+"""
+
+_OPENS: Final = {"{": "}", "[": "]"}
+"""The body openers :func:`_body` produces at column zero, each with its closer.
+
+An array as well as an object, because `json.dumps(indent=2)` puts either at
+column zero and a beat is free to answer with a list. Before #108 only `{` was
+read, so an array body was never parsed: its members went unsorted, its volatile
+values unreplaced, and only the line-level token rule reached it.
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -440,6 +459,12 @@ def mask(text: str) -> str:
     Neither drops anything a beat claims. Everything else keeps the wire's order,
     including the result lists ADR-0003 gave a deterministic one.
 
+    **A body is an object or an array, and a member may be a document itself.**
+    Both follow from the same reading and #108 added both: `json.dumps(indent=2)`
+    puts either container at column zero, and an MCP text content block carries
+    its payload as a JSON document inside a string — where a rule that reads
+    lines cannot see it.
+
     Args:
         text: A rendered transcript, from either side.
 
@@ -448,17 +473,19 @@ def mask(text: str) -> str:
     """
     masked: list[str] = []
     held: list[str] | None = None
+    closes = ""
 
     for line in text.split("\n"):
         if held is not None:
             held.append(line)
-            if line == "}":
+            if line == closes:
                 masked.extend(_mask_document(held))
                 held = None
             continue
 
-        if line == "{":
+        if line in _OPENS:
             held = [line]
+            closes = _OPENS[line]
             continue
 
         request = _REQUEST_LINE.match(line)
@@ -658,8 +685,39 @@ def _masked(value: object) -> object:
         }
     if isinstance(value, list):
         return [_masked(member) for member in value]
+    if isinstance(value, str):
+        return _embedded(value)
 
     return value
+
+
+def _embedded(value: str) -> str:
+    """A string carrying a JSON document, masked as one — every other string untouched.
+
+    An MCP text content block carries its payload as a document *inside* a
+    string, so a volatile value there is one the structural rules cannot see:
+    :func:`_masked` descends into members, and this is a member whose text is
+    another document. Re-serialised the way :func:`_mask_document` re-serialises
+    a body — sorted, indented — because it is the same reading of the same
+    specification applied one level down.
+
+    Latent when #108 named it: every such block in the six committed captures
+    carries fixture data only. It becomes a required-check flake the first time a
+    beat answers with a volatile value inside one, and the masked diff would then
+    report it as substantive.
+    """
+    if not value.lstrip().startswith(("{", "[")):
+        return value
+
+    try:
+        document = json.loads(value)
+    except ValueError:
+        return value
+
+    if not isinstance(document, dict | list):
+        return value
+
+    return json.dumps(_masked(document), indent=2, ensure_ascii=False, sort_keys=True)
 
 
 def _canonical(name: str, value: object) -> object:
