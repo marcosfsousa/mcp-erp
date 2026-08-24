@@ -31,6 +31,11 @@ disturb another; the mint's high-water mark is the state that rule does not
 cover, because no row owns it and every row moves it. That module — and
 :func:`at_the_ceiling`, which only it calls — is the whole of the exception.
 
+*Amended again by #112.* :func:`at_the_ceiling` is a context manager and reloads
+on the way out, so the rows it writes are scoped to a `with` rather than to a
+caller's discipline. The exception is unchanged; what moved is that its cleanup
+is structural.
+
 **Nothing is looked up by identifier.** The identifiers are ordinal and the
 generator renumbers them when a row is inserted, so every suite here asks for a
 fixture by the **matrix row that owns it** or by the partition it sits in. That
@@ -41,6 +46,8 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
 from typing import Final, NamedTuple
@@ -172,9 +179,10 @@ submission. Nothing reaches four figures in a test run.
 
 **One module writes this value deliberately**, since #84: :func:`at_the_ceiling`
 puts a row here so that the next write is the one crossing into five figures,
-which is the only way to drive that boundary at all. It reloads before and after
-every one of its tests, so the absence this docstring promises holds everywhere
-else.
+which is the only way to drive that boundary at all. **The absence above is
+structural rather than a promise**: `at_the_ceiling` is a context manager and
+reloads on the way out however its block ends, so the value is present for one
+`with` and absent on either side of it.
 """
 
 ABSENT_ORDER: Final = "po_9999"
@@ -244,8 +252,9 @@ def load() -> None:
         connection.commit()
 
 
-def at_the_ceiling() -> None:
-    """Add one chain at ``9999`` to each of the three generated tables.
+@contextmanager
+def at_the_ceiling() -> Iterator[None]:
+    """Hold one chain at ``9999`` in each of the three generated tables, for one block.
 
     The mint derives the next identifier from the highest that exists, so this is
     the whole of what it takes to put a table one write away from five figures —
@@ -260,12 +269,20 @@ def at_the_ceiling() -> None:
     The identities on it are the requisition's own submitter, because no rule is
     ever applied to these rows — they exist to be the maximum and nothing else.
 
-    **It leaves all three of :data:`ABSENT_IDENTIFIER`, :data:`ABSENT_ORDER` and
-    :data:`ABSENT_INVOICE` present**, which is exactly the three values it writes.
-    The first two are documented as absent for a whole run, so a caller must
-    restore the tables with :func:`load` before any other module runs — see
-    `tests/wire/test_the_identifier_mint.py`, which is the only caller and
-    reloads between its own tests as well as after them.
+    **Inside the block all three of :data:`ABSENT_IDENTIFIER`,
+    :data:`ABSENT_ORDER` and :data:`ABSENT_INVOICE` are present**, which is
+    exactly the three values this writes, and the first two are documented as
+    absent for a whole run. **So the restore is the exit rather than the
+    caller's**: :func:`load` runs on the way out however the block ends, which is
+    what makes those docstrings' promise structural instead of a discipline the
+    one caller happens to keep. A failing assertion, an error raised mid-chain or
+    a `KeyboardInterrupt` all leave the tables as the rendering has them.
+
+    The reload is unconditional and not a rollback — this writes with its own
+    connection and commits, so there is no transaction left to undo, and
+    :func:`load` deletes before it inserts. That also means the block leaves
+    behind any row a test inside it wrote, which is the same wipe every other
+    suite takes and the reason nothing may look one up afterwards.
 
     These are not Fixtures in `CONTEXT.md`'s sense and no matrix row owns one.
     They are hand-written into generated tables, which is what #43 removed from
@@ -300,6 +317,11 @@ def at_the_ceiling() -> None:
             (ABSENT_INVOICE, ABSENT_ORDER, base.submitted_by),
         )
         connection.commit()
+
+    try:
+        yield
+    finally:
+        load()
 
 
 def owned_by(row: str) -> Row:

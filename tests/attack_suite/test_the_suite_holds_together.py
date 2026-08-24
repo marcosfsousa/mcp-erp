@@ -239,6 +239,30 @@ def test_every_test_in_this_directory_declares_a_row() -> None:
     assert scenarios.tests_without_a_declaration() == ()
 
 
+def test_nothing_here_runs_in_a_shape_the_collector_cannot_see() -> None:
+    """The third invariant's blind spot, closed by refusing the shapes that open it.
+
+    `pyproject.toml` narrows what pytest collects so that it and
+    :func:`~scenarios._tests_in` agree — but that narrowing reaches what is
+    *named*, and the collector reads a syntax tree while pytest reads a module
+    namespace. A `test_*` name that arrives without being written as a
+    module-level `def` runs unseen: it declares no row and the check above
+    reports nothing, which is the bijection broken silently.
+
+    Three arrivals, none of them closable from `pyproject.toml` and all three
+    measured (#112): a `unittest.TestCase` subclass, which pytest collects by
+    *type* whatever it is named; a `test_*` name bound by import; and one bound
+    by assignment. :func:`test_the_shapes_that_refusal_is_for` runs each and
+    shows what it costs.
+
+    **Refused rather than collected**, because the alternatives are worse:
+    resolving imports and assignments makes the collector an interpreter, and
+    walking class bodies makes `@exercises` mean two things. Nothing here is
+    written in any of the three.
+    """
+    assert scenarios.runnable_but_unseen_in() == ()
+
+
 # ─── How a row asserts ────────────────────────────────────────────────
 
 
@@ -345,6 +369,15 @@ def test_pytest_collects_exactly_what_the_collector_sees(tmp_path: Path) -> None
     to match — one declaration of *what counts as a test here* instead of two
     that must be kept equal.
 
+    **The narrowing reaches what is named, and this equality is only over that.**
+    A `test_*` name that never appears as a module-level `def` — a
+    `unittest.TestCase` method, a name bound by import, a name bound by
+    assignment — is in the module namespace pytest reads and not in the syntax
+    tree the collector reads, and no setting closes any of the three. So this
+    asserts the equality over the shapes settings decide, and
+    :func:`test_nothing_here_runs_in_a_shape_the_collector_cannot_see` refuses
+    the shapes they do not.
+
     **Asserted by running pytest, not by reading the setting.** Restating the
     three patterns here would be the second declaration the narrowing exists to
     avoid; what is checked instead is the equality itself, over a directory
@@ -363,6 +396,123 @@ def test_pytest_collects_exactly_what_the_collector_sees(tmp_path: Path) -> None
     assert _collected_by_pytest(tmp_path) == {
         f"{path.name}::{function.name}" for path, function in scenarios._tests_in(tmp_path)
     }
+
+
+def test_the_shapes_that_refusal_is_for(tmp_path: Path) -> None:
+    """The hole, run in all three of its shapes rather than described.
+
+    The `TestCase` is named for what it tests rather than for the framework,
+    which is what makes it worth refusing: it is collected by type, so the name
+    changes nothing and a reader checking `python_classes` would conclude the
+    opposite. The other two need no trick at all — a `test_*` name is a function
+    in the module namespace however it got there.
+
+    All three at once, because the claim is about the *set* the collector misses
+    and a file each would let one be closed while the others stayed open. What
+    the assertions say together is what a defence deleted without a red check
+    looks like: pytest runs three tests, the collector sees none of them, and the
+    *every test declares a row* check reports nothing at all.
+    """
+    (tmp_path / "test_a_test_case.py").write_text(
+        "import unittest\n\n\nclass CostCentreLeakage(unittest.TestCase):\n"
+        "    def test_it(self) -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "helper.py").write_text(
+        "def test_imported() -> None:\n    pass\n", encoding="utf-8"
+    )
+    (tmp_path / "test_alias.py").write_text(
+        "from helper import test_imported\n\n\n"
+        "def _inner() -> None:\n    pass\n\n\n"
+        "test_assigned = _inner\n",
+        encoding="utf-8",
+    )
+
+    assert _collected_by_pytest(tmp_path) == {
+        "test_a_test_case.py::CostCentreLeakage::test_it",
+        "test_alias.py::test_imported",
+        "test_alias.py::test_assigned",
+    }
+    assert tuple(scenarios._tests_in(tmp_path)) == ()
+    assert scenarios.tests_without_a_declaration(tmp_path) == ()
+    assert scenarios.runnable_but_unseen_in(tmp_path) == (
+        "test_a_test_case.py::CostCentreLeakage",
+        "test_alias.py::test_imported",
+        "test_alias.py::test_assigned",
+    )
+
+
+def test_the_refusal_is_a_rule_and_not_a_list_of_the_three(tmp_path: Path) -> None:
+    """The shapes nobody enumerated, which is the whole reason the rule is one.
+
+    The three above were found by asking *how could a test arrive unseen* and
+    writing down the answers. That question has no last answer, and a refusal
+    written as the list of answers so far is a hole with a bibliography: every
+    binding form Python has is another way in, and unpacking, `for`, `with … as`,
+    the walrus, an import under an `if` and a `def` under one are six that the
+    enumeration let through while reporting nothing at all.
+
+    So the check refuses what the *tree* marks as a binding rather than the forms
+    a reader thought of, and this is the assertion that says so — every name here
+    is one pytest actually collects, taken from a real `--collect-only` run, and
+    none of them appears in `runnable_but_unseen_in`'s docstring as a shape to
+    look for.
+
+    **The wildcard is the one that reports something else.** `from helper import
+    *` binds names that are in the other module, so there is no identifier on the
+    line; it is refused under :data:`scenarios.STAR` instead, which is a refusal
+    to read a second file rather than a failure to.
+
+    **The `match` capture is the one that needed naming.** Every other binding
+    here is an `ast.Name` the tree marks `Store`, which is what lets the rule be
+    one line; a capture pattern carries its name as a bare `str` on the node
+    instead, so a rule written over `Store` alone reads `case test_captured:` as
+    binding nothing while pytest collects it. It is in this list because that is
+    the shape a rule can miss while looking complete.
+    """
+    (tmp_path / "helper.py").write_text(
+        "def test_imported() -> None:\n    pass\n\n\ndef test_conditionally() -> None:\n    pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_every_other_way_in.py").write_text(
+        "import contextlib\nimport os\n\n\n"
+        "def _inner() -> None:\n    pass\n\n\n"
+        "test_unpacked, test_beside_it = _inner, _inner\n\n"
+        "for test_looped in (_inner,):\n    pass\n\n"
+        "with contextlib.nullcontext(_inner) as test_bound:\n    pass\n\n"
+        "if (test_walrus := _inner) is not None:\n    pass\n\n"
+        "if os.name:\n    from helper import test_conditionally\n\n"
+        "if os.name:\n\n    def test_under_a_branch() -> None:\n        pass\n\n"
+        "match _inner:\n    case test_captured:\n        pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_star.py").write_text("from helper import *\n", encoding="utf-8")
+
+    assert _collected_by_pytest(tmp_path) == {
+        "test_every_other_way_in.py::test_unpacked",
+        "test_every_other_way_in.py::test_beside_it",
+        "test_every_other_way_in.py::test_looped",
+        "test_every_other_way_in.py::test_bound",
+        "test_every_other_way_in.py::test_walrus",
+        "test_every_other_way_in.py::test_conditionally",
+        "test_every_other_way_in.py::test_under_a_branch",
+        "test_every_other_way_in.py::test_captured",
+        "test_star.py::test_imported",
+        "test_star.py::test_conditionally",
+    }
+    assert tuple(scenarios._tests_in(tmp_path)) == ()
+    assert scenarios.tests_without_a_declaration(tmp_path) == ()
+    assert scenarios.runnable_but_unseen_in(tmp_path) == (
+        "test_every_other_way_in.py::test_unpacked",
+        "test_every_other_way_in.py::test_beside_it",
+        "test_every_other_way_in.py::test_looped",
+        "test_every_other_way_in.py::test_bound",
+        "test_every_other_way_in.py::test_walrus",
+        "test_every_other_way_in.py::test_conditionally",
+        "test_every_other_way_in.py::test_under_a_branch",
+        "test_every_other_way_in.py::test_captured",
+        f"test_star.py::{scenarios.STAR}",
+    )
 
 
 def _collected_by_pytest(directory: Path) -> set[str]:

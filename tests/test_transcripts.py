@@ -95,6 +95,28 @@ def test_every_volatile_claim_the_decision_named_is_replaced() -> None:
         assert transcripts.MASKED in line, line
 
 
+def test_a_lifetime_counted_down_in_seconds_is_replaced() -> None:
+    """The token response's two countdowns, which cross a second boundary between runs.
+
+    `expires_in` and `refresh_expires_in` are `exp` restated as a countdown, the
+    same thing `ttlMs` is and masked for the same reason — Keycloak computes
+    what is left of a lifetime at the moment it answers, so a capture taken a
+    fraction of a second later reads 299 where the committed one reads 300.
+    Neither number is a claim these beats make: what the flow proves is that a
+    token came back, and its lifetime is the realm's configuration rather than
+    anything the wire decided here.
+
+    Found by `Authorization code flow` going red on a diff of exactly `300` →
+    `299` and `1800` → `1799`, on a branch that had touched neither the flow nor
+    the mask (#112). A drift check that fires on the clock is one a reader learns
+    to re-run rather than read.
+    """
+    body = json.dumps({"expires_in": 300, "refresh_expires_in": 1800}, indent=2)
+
+    for line in masked(body).split("\n")[1:-1]:
+        assert transcripts.MASKED in line, line
+
+
 def test_the_session_cookies_are_replaced_in_both_directions() -> None:
     """A cookie the server set, and the same cookie coming back."""
     rendered = masked("set-cookie: AUTH_SESSION_ID=abc; Path=/\ncookie: KC_RESTART=def")

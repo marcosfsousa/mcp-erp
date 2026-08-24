@@ -54,8 +54,10 @@ file changes only when something substantive changed.
 
 **Masked:** the bearer, identity and refresh tokens; `iat`, `exp`, `auth_time`,
 `jti`, `sid` and Keycloak's `session_state`; the realm's per-boot key identifier;
-the tool listing's `ttlMs`, which is the presented token's remaining lifetime;
-`date`, `content-length` and the gateway's `x-served-by`; the session cookies;
+the tool listing's `ttlMs`, which is the presented token's remaining lifetime,
+and the token response's `expires_in` and `refresh_expires_in`, which are the
+same countdown one entity along; `date`, `content-length` and the gateway's
+`x-served-by`; the session cookies;
 and every query-string or form parameter that is not on a named stable list —
 which is what covers the authorization code, `state`, the code challenge and its
 verifier, and Keycloak's own per-attempt identifiers.

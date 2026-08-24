@@ -379,6 +379,18 @@ class Unhurried(httpx2.AsyncBaseTransport):
     blocked on one, and :func:`connect` cancels the task on the way out — so an
     unbounded read cannot become a run that hangs.
 
+    **What it gives up, since a rule should state its cost beside its argument.**
+    The read wait is the only thing on this stream that would ever notice a peer
+    going away without saying so. A half-open connection — the server's process
+    gone, its host dropped, a middlebox having discarded the state — reads
+    exactly like a healthy quiet one, and with no wait nothing distinguishes
+    them: the stream stays open until the run ends, and a server-initiated
+    message sent over it is lost with no error raised anywhere. That is accepted
+    rather than mitigated, on the ground above — nothing is waiting on those
+    messages, so what is lost is a notification nobody read. It stops being
+    acceptable the day something here blocks on this stream, which is the change
+    that should bring this paragraph back up for argument.
+
     **This also has to supply the waits, not only adjust them.** `AsyncClient`
     resolves its timeout onto the request it is *handed* and onto no other:
     `send` stamps the extension once, and the requests an `httpx2.Auth` yields
