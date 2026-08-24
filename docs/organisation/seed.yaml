@@ -44,7 +44,10 @@
 # Layer 2's generator renders each column into its own artifact and **never
 # interprets an issuer-side role name**: `realm_roles` values are opaque
 # strings on their way to the realm, nothing in `src/` compares them to
-# `roles`, and no code path derives either column from the other.
+# `roles`, and no code path derives either column from the other. Priya's
+# second realm role, `offline_access`, is the plainest case of that — a name
+# with no server meaning whatever, held so one third-party client can complete
+# a flow, and carried through untouched.
 #
 #
 # FIELDS
@@ -154,11 +157,14 @@ people:
     username: priya.raman
     cost_centre: CC-4100
     roles: []
-    realm_roles: [approver]
+    realm_roles: [approver, offline_access]
     exists_to: >-
       Scope-only submit, and role_missing on approve. The one row where the two
       role columns diverge, so the realm can issue erp.decide to someone the
-      server refuses.
+      server refuses. Also the only holder of offline_access, which is not a
+      branch she makes reachable but a client she makes usable: Claude Code
+      requests that scope unconditionally and Keycloak refuses the token
+      outright without it. ADR-0007 §Token lifetimes carries the argument.
 
   - name: Tomas Weber
     subject: tomas-weber

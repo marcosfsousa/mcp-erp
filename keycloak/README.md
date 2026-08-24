@@ -409,12 +409,21 @@ and SEP-2207 has a client append it to the request when it declares
 `refresh_token`. The client the executor provisions comes back carrying
 `offline_access` in its own `optionalClientScopes` whatever the realm defaults
 name — #46 found that by reading the created client — so the list is not the
-control here. The role is: no Person in the Cast holds `offline_access`, and
-Keycloak does **not** narrow an unentitled one away the way a role scope mapping
-narrows `erp.decide` — it
+control here. The role is, and Keycloak does **not** narrow an unentitled one
+away the way a role scope mapping narrows `erp.decide` — it
 refuses the token request outright with *Offline tokens not allowed for the user
 or client*. `tests/conformance_client.py`'s `GRANT_TYPES` carries the finding and
 what the client does about it.
+
+*Amended 2026-08-24 by [#93](https://github.com/marcosfsousa/mcp-erp/issues/93).*
+This passage read *"no Person in the Cast holds `offline_access`"*. **One now
+does: Priya Raman, and only her.** Claude Code requests the scope
+unconditionally and offers no way to turn it off, so without the role the
+recording ADR-0008 calls the only non-circular evidence cannot be made at all.
+[ADR-0007 §Token lifetimes](../docs/adr/0007-the-realm-is-the-exhibit.md) argues
+it and prices it. Nothing above changes: the list is still not the control, the
+refusal is still outright rather than a narrowing, and it is still what every
+other Person in the Cast gets.
 
 **A provisioned client inherits no PKCE pin either, and the pin could not be
 attached to the policy above.** Every authored client carries

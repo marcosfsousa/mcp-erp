@@ -204,7 +204,7 @@ response's own `scope` key as it passes.
 **The behaviour is real but not general**, which the run also found. Keycloak
 refuses an unentitled `offline_access` at the token endpoint outright rather than
 omitting it from the grant. `conformance_client.GRANT_TYPES` carries that
-finding and what this client does about it.
+finding, what this client does about it, and the one Person #93 entitled.
 
 ## One added call, and why it duplicates something twice proven
 
