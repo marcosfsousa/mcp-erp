@@ -197,11 +197,19 @@ jobs:
       # two identical documents forever — is an ordinary Python defect. The job
       # that captures against a running stack cannot see either failure, because
       # both of them make a capture pass.
+      #
+      # `tests/test_transcript_drift.py` is the fourth, and the same shape once
+      # more: it holds the masked diff the drift check prints and the verdict
+      # `transcripts.keep` gives in agreement, over throwaway `git`
+      # repositories. The Compose job cannot hold it either — the helper only
+      # runs when that job is already red, so a helper that printed the wrong
+      # diff would be read as the diagnosis of whatever broke.
       - name: The flow drivers' Docker-free halves
         run: |
           uv run pytest tests/test_tokens.py \
                         tests/test_conformance_client.py \
-                        tests/test_transcripts.py
+                        tests/test_transcripts.py \
+                        tests/test_transcript_drift.py
 
   layer-boundaries:
     name: Layer boundaries
@@ -939,8 +947,13 @@ jobs:
     # repository publishes. This one fetches the published Client Identity
     # Metadata Document, which is public, so no credential exists to add; and the
     # containers fetch the same URL, because dereferencing it is what the
-    # authorization server is being asked to do. Every other outbound address is
-    # a container talking to a container.
+    # authorization server is being asked to do. The other outbound address is
+    # GitHub's own artifact service, which `Keep the drifted captures` reaches on
+    # a failed run: it authenticates with the runner's Actions runtime token
+    # rather than with `GITHUB_TOKEN`, so it adds a reach without adding a
+    # permission, and `contents: read` stays as it is. Named here because this
+    # file requires every job to state what it reaches. Every remaining address
+    # is a container talking to a container.
     runs-on: ubuntu-latest
     # Longer than the Docker-free jobs, because this one builds two images and
     # waits on four healthchecks before it asserts anything.
@@ -1040,6 +1053,10 @@ jobs:
             echo
             echo "${drifted}"
             echo
+            echo "What changed, under the same mask the check compared with:"
+            echo
+            uv run python tests/transcript_drift.py || true
+            echo
             echo "The captures are committed verbatim and compared under a mask;"
             echo "a diff here means something substantive changed, not that a"
             echo "token was minted again. Re-run the capture locally against a"
@@ -1054,6 +1071,23 @@ jobs:
           fi
 
           echo "All six captured transcripts match what the wire said."
+
+      # The masked diff above answers *what* changed under the rules the verdict
+      # used. This is what lets someone ask a different question afterwards: the
+      # drifted bytes themselves, kept past the rerun that overwrites them. #108
+      # is the case — a drift that a rerun of the same commit did not reproduce,
+      # whose only surviving artifact was a filename.
+      #
+      # `if: failure()` rather than a condition on the drift step, so a capture
+      # that half-wrote before the flow suite fell over is kept too. That is the
+      # one state in which nothing else in this job can say what the wire said.
+      - name: Keep the drifted captures
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: drifted-transcripts
+          path: docs/transcripts/
+          if-no-files-found: ignore
 
       # The one place a reader of a red check needs more than the step name. The
       # flow spans four containers, and a refusal from Keycloak says why in its
