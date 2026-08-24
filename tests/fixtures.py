@@ -179,10 +179,10 @@ submission. Nothing reaches four figures in a test run.
 
 **One module writes this value deliberately**, since #84: :func:`at_the_ceiling`
 puts a row here so that the next write is the one crossing into five figures,
-which is the only way to drive that boundary at all. The absence this docstring
-promises is **structural rather than promised**: `at_the_ceiling` is a context
-manager and reloads on the way out however its block ends, so the value is
-present for one `with` and absent on either side of it.
+which is the only way to drive that boundary at all. **The absence above is
+structural rather than a promise**: `at_the_ceiling` is a context manager and
+reloads on the way out however its block ends, so the value is present for one
+`with` and absent on either side of it.
 """
 
 ABSENT_ORDER: Final = "po_9999"

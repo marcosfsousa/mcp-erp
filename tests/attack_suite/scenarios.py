@@ -299,39 +299,82 @@ def tests_without_a_declaration(directory: Path = HERE) -> tuple[str, ...]:
     )
 
 
-def unittest_cases_in(directory: Path = HERE) -> tuple[str, ...]:
-    """`unittest.TestCase` subclasses in this directory — the one shape no setting narrows.
+def runnable_but_unseen_in(directory: Path = HERE) -> tuple[str, ...]:
+    """Shapes pytest would run here that :func:`_tests_in` cannot see.
 
-    Every other way a test could run without :func:`_tests_in` seeing it is
-    closed in `pyproject.toml`, which declines to collect it. This one cannot be:
-    `_pytest/unittest.py` collects a `TestCase` subclass **by type**, before any
-    name pattern is consulted, so `python_classes` has no bearing on it — and
-    `unittest`'s own loader then finds its methods by *their* `test` prefix
-    rather than by `python_functions`. A `TestCase` here would run, declare no
-    row, and be reported by nothing.
+    `pyproject.toml` narrows collection to `test_*.py`, no classes and `test_*`
+    functions, so that what pytest runs and what the collector reads are the same
+    set. That narrowing reaches everything **named** — but the collector reads
+    the syntax tree for a module-level ``def test_…``, and pytest reads the
+    module's *namespace*, so a `test_*` name that arrives any other way runs
+    unseen. Each such test declares no row while satisfying
+    :func:`tests_without_a_declaration`, which is the bijection's third direction
+    broken silently — the failure `test_the_suite_holds_together.py` exists to
+    make impossible.
 
-    So the shape is refused rather than collected. The alternative was to walk
-    class bodies for `@exercises`, which makes the declaration mean two things
-    for a shape nothing here is written in.
+    Three ways in, all measured against a real `--collect-only` run under this
+    repo's own configuration (#112):
 
-    **Matched on the base as written**, `TestCase` or `unittest.TestCase`, for
-    the reason :data:`DECLARATION` gives about aliases: what the check accepts is
-    what a reader can see on the line. A subclass of a subclass is not matched,
-    and neither is one built by `type()` — stated rather than defended against,
-    since the invariant this serves is about the shape being absent entirely.
+    - a **`unittest.TestCase` subclass**, which `_pytest/unittest.py` collects by
+      *type* before any name pattern is consulted, so `python_classes` has no
+      bearing on it and `unittest`'s loader then finds its methods by their own
+      `test` prefix rather than by `python_functions`;
+    - a **`test_*` name bound by import**, which is a function object in the
+      module namespace like any other;
+    - a **`test_*` name bound by assignment**, likewise.
+
+    Refused rather than collected. Teaching :func:`_tests_in` to resolve imports
+    and assignments would make it an interpreter, and teaching it to walk class
+    bodies would make `@exercises` mean two things; nothing in this directory is
+    written in any of the three, so the cheaper and more honest rule is that they
+    do not appear.
+
+    **Read as written, never resolved.** A base spelled `TestCase` or
+    `unittest.TestCase` matches and a subclass of a subclass does not; a name is
+    matched on the identifier the line binds. That is :data:`DECLARATION`'s rule
+    about aliases applied again — what the check accepts is what a reader can see
+    on the line — and it is sound here because the invariant is that none of
+    these shapes is present at all.
 
     Args:
         directory: Where the test modules live.
 
     Returns:
-        ``module::Class`` for each, in file and then source order.
+        ``module::name`` for each, in file and then source order.
     """
     return tuple(
-        f"{path.name}::{node.name}"
+        f"{path.name}::{name}"
         for path, tree in _modules_in(directory)
         for node in tree.body
-        if isinstance(node, ast.ClassDef) and any(_is_test_case(base) for base in node.bases)
+        for name in _runnable_but_unseen(node)
     )
+
+
+def _runnable_but_unseen(node: ast.stmt) -> tuple[str, ...]:
+    """The names one module-level statement binds that pytest would run unseen."""
+    if isinstance(node, ast.ClassDef):
+        return (node.name,) if any(_is_test_case(base) for base in node.bases) else ()
+
+    if isinstance(node, ast.Import | ast.ImportFrom):
+        return tuple(
+            alias.asname or alias.name
+            for alias in node.names
+            if (alias.asname or alias.name).startswith("test_")
+        )
+
+    if isinstance(node, ast.Assign):
+        return tuple(
+            target.id
+            for target in node.targets
+            if isinstance(target, ast.Name) and target.id.startswith("test_")
+        )
+
+    if isinstance(node, ast.AnnAssign):
+        target = node.target
+        if isinstance(target, ast.Name) and target.id.startswith("test_"):
+            return (target.id,)
+
+    return ()
 
 
 def _is_test_case(base: ast.expr) -> bool:

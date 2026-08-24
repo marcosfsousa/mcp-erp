@@ -239,22 +239,28 @@ def test_every_test_in_this_directory_declares_a_row() -> None:
     assert scenarios.tests_without_a_declaration() == ()
 
 
-def test_no_module_in_this_directory_is_written_as_a_test_case() -> None:
-    """The third invariant's blind spot, closed by refusing the shape that opens it.
+def test_nothing_here_runs_in_a_shape_the_collector_cannot_see() -> None:
+    """The third invariant's blind spot, closed by refusing the shapes that open it.
 
-    Every other escaping shape is closed by `pyproject.toml` declining to collect
-    it, so the equality below holds structurally. `unittest.TestCase` is the one
-    that cannot be: pytest's own plugin collects a subclass **by type**, and no
-    value of `python_classes` is consulted — so a `TestCase` here would run, and
-    :func:`~scenarios._tests_in` reads module-level `def test_…` and would not see
-    it. That is a test declaring no row, invisible to the check above.
+    `pyproject.toml` narrows what pytest collects so that it and
+    :func:`~scenarios._tests_in` agree — but that narrowing reaches what is
+    *named*, and the collector reads a syntax tree while pytest reads a module
+    namespace. A `test_*` name that arrives without being written as a
+    module-level `def` runs unseen: it declares no row and the check above
+    reports nothing, which is the bijection broken silently.
 
-    **Refused rather than collected.** Growing the collector to walk class bodies
-    would make `@exercises` mean two things — a decorator on a function and a
-    decorator on a method — for a shape nothing in `tests/` is written in and
-    nothing here wants. One declaration shape, and a check that says so.
+    Three arrivals, none of them closable from `pyproject.toml` and all three
+    measured (#112): a `unittest.TestCase` subclass, which pytest collects by
+    *type* whatever it is named; a `test_*` name bound by import; and one bound
+    by assignment. :func:`test_the_shapes_that_refusal_is_for` runs each and
+    shows what it costs.
+
+    **Refused rather than collected**, because the alternatives are worse:
+    resolving imports and assignments makes the collector an interpreter, and
+    walking class bodies makes `@exercises` mean two things. Nothing here is
+    written in any of the three.
     """
-    assert scenarios.unittest_cases_in() == ()
+    assert scenarios.runnable_but_unseen_in() == ()
 
 
 # ─── How a row asserts ────────────────────────────────────────────────
@@ -363,12 +369,14 @@ def test_pytest_collects_exactly_what_the_collector_sees(tmp_path: Path) -> None
     to match — one declaration of *what counts as a test here* instead of two
     that must be kept equal.
 
-    **There is a fourth, and it is not here.** A `unittest.TestCase` subclass is
-    collected by type rather than by name, so no setting narrows it away and this
-    equality cannot be made to hold over one. It is refused instead, by
-    :func:`test_no_module_in_this_directory_is_written_as_a_test_case`, and
-    :func:`test_a_test_case_is_what_that_refusal_is_for` is what shows the hole
-    it would open.
+    **The narrowing reaches what is named, and this equality is only over that.**
+    A `test_*` name that never appears as a module-level `def` — a
+    `unittest.TestCase` method, a name bound by import, a name bound by
+    assignment — is in the module namespace pytest reads and not in the syntax
+    tree the collector reads, and no setting closes any of the three. So this
+    asserts the equality over the shapes settings decide, and
+    :func:`test_nothing_here_runs_in_a_shape_the_collector_cannot_see` refuses
+    the shapes they do not.
 
     **Asserted by running pytest, not by reading the setting.** Restating the
     three patterns here would be the second declaration the narrowing exists to
@@ -390,27 +398,48 @@ def test_pytest_collects_exactly_what_the_collector_sees(tmp_path: Path) -> None
     }
 
 
-def test_a_test_case_is_what_that_refusal_is_for(tmp_path: Path) -> None:
-    """The hole, demonstrated in all three of its parts rather than described.
+def test_the_shapes_that_refusal_is_for(tmp_path: Path) -> None:
+    """The hole, run in all three of its shapes rather than described.
 
-    Named for what it tests rather than for the framework, which is the shape
-    that makes this worth refusing: `TestCase` is collected by type, so the name
-    changes nothing and a reader checking against `python_classes` would conclude
-    the opposite. Run against this module before the refusal above, this is what
-    a defence deleted without a red check looks like — pytest runs it, the
-    collector cannot see it, and the *every test declares a row* check reports
-    nothing at all.
+    The `TestCase` is named for what it tests rather than for the framework,
+    which is what makes it worth refusing: it is collected by type, so the name
+    changes nothing and a reader checking `python_classes` would conclude the
+    opposite. The other two need no trick at all — a `test_*` name is a function
+    in the module namespace however it got there.
+
+    All three at once, because the claim is about the *set* the collector misses
+    and a file each would let one be closed while the others stayed open. What
+    the assertions say together is what a defence deleted without a red check
+    looks like: pytest runs three tests, the collector sees none of them, and the
+    *every test declares a row* check reports nothing at all.
     """
     (tmp_path / "test_a_test_case.py").write_text(
         "import unittest\n\n\nclass CostCentreLeakage(unittest.TestCase):\n"
         "    def test_it(self) -> None:\n        pass\n",
         encoding="utf-8",
     )
+    (tmp_path / "helper.py").write_text(
+        "def test_imported() -> None:\n    pass\n", encoding="utf-8"
+    )
+    (tmp_path / "test_alias.py").write_text(
+        "from helper import test_imported\n\n\n"
+        "def _inner() -> None:\n    pass\n\n\n"
+        "test_assigned = _inner\n",
+        encoding="utf-8",
+    )
 
-    assert _collected_by_pytest(tmp_path) == {"test_a_test_case.py::CostCentreLeakage::test_it"}
+    assert _collected_by_pytest(tmp_path) == {
+        "test_a_test_case.py::CostCentreLeakage::test_it",
+        "test_alias.py::test_imported",
+        "test_alias.py::test_assigned",
+    }
     assert tuple(scenarios._tests_in(tmp_path)) == ()
     assert scenarios.tests_without_a_declaration(tmp_path) == ()
-    assert scenarios.unittest_cases_in(tmp_path) == ("test_a_test_case.py::CostCentreLeakage",)
+    assert scenarios.runnable_but_unseen_in(tmp_path) == (
+        "test_a_test_case.py::CostCentreLeakage",
+        "test_alias.py::test_imported",
+        "test_alias.py::test_assigned",
+    )
 
 
 def _collected_by_pytest(directory: Path) -> set[str]:

@@ -79,8 +79,7 @@ def requisitions() -> Iterator[None]:
 
     Function-scoped, for the reason the module docstring gives: the high-water
     mark is what this module moves, so one test's leftovers are the next one's
-    subject — every test here submits, and a row minted by one shifts what the
-    next mints from.
+    subject — a row minted by one shifts what the next mints from.
 
     **Not what restores the ceiling rows.** `fixtures.at_the_ceiling` is a
     context manager and reloads on its own way out, so `req_9999` and `po_9999`

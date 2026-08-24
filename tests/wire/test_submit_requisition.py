@@ -89,12 +89,12 @@ def _written(username: str) -> dict[str, Any]:
 def test_the_declaration_takes_no_cost_centre() -> None:
     """The input schema is the assertion, because the absence is the design.
 
-    Why `additionalProperties: false` is on every schema in this package, and why
-    it is a disclosure rule rather than an enforcement point, is argued in
-    `mcp_erp.purchase_to_pay`'s own docstring — the convention is on every schema
-    in that package and asserted from several suites in this directory, so the
-    argument belongs where it is applied rather than beside one of the
-    assertions (#112). This is the sharp case that argument is written from.
+    Why `additionalProperties: false` is on every schema in `purchase_to_pay`,
+    and why it is a disclosure rule rather than an enforcement point, is argued
+    in that package's own docstring. The convention is applied there and asserted
+    from several suites in this directory, so the argument belongs where it is
+    applied rather than beside one of the assertions (#112) — this is the sharp
+    case it is written from.
 
     What this test adds is the pairing: it asserts the **declaration**, and
     :func:`test_sending_the_forbidden_property_anyway_does_not_move_the_row`
