@@ -201,6 +201,13 @@ VOLATILE_CLAIMS: Final = frozenset(
         # `Server posture` asserts about it is that it is bounded by the token,
         # and that is not a claim any of these beats makes.
         "ttlMs",
+        # The token response's two countdowns, which are `ttlMs`'s argument one
+        # entity along: Keycloak computes what is left of each lifetime at the
+        # moment it answers, so a capture taken a fraction of a second later
+        # reads 299 where the committed one reads 300. The lifetimes themselves
+        # are the realm's configuration and no beat here claims either.
+        "expires_in",
+        "refresh_expires_in",
         # Tokens are masked by :data:`_JWT` wherever they appear; naming the keys
         # as well costs nothing and keeps the set readable as the set ADR-0014
         # wrote down.
