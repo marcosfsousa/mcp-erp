@@ -462,6 +462,13 @@ def test_the_refusal_is_a_rule_and_not_a_list_of_the_three(tmp_path: Path) -> No
     *` binds names that are in the other module, so there is no identifier on the
     line; it is refused under :data:`scenarios.STAR` instead, which is a refusal
     to read a second file rather than a failure to.
+
+    **The `match` capture is the one that needed naming.** Every other binding
+    here is an `ast.Name` the tree marks `Store`, which is what lets the rule be
+    one line; a capture pattern carries its name as a bare `str` on the node
+    instead, so a rule written over `Store` alone reads `case test_captured:` as
+    binding nothing while pytest collects it. It is in this list because that is
+    the shape a rule can miss while looking complete.
     """
     (tmp_path / "helper.py").write_text(
         "def test_imported() -> None:\n    pass\n\n\ndef test_conditionally() -> None:\n    pass\n",
@@ -475,7 +482,8 @@ def test_the_refusal_is_a_rule_and_not_a_list_of_the_three(tmp_path: Path) -> No
         "with contextlib.nullcontext(_inner) as test_bound:\n    pass\n\n"
         "if (test_walrus := _inner) is not None:\n    pass\n\n"
         "if os.name:\n    from helper import test_conditionally\n\n"
-        "if os.name:\n\n    def test_under_a_branch() -> None:\n        pass\n",
+        "if os.name:\n\n    def test_under_a_branch() -> None:\n        pass\n\n"
+        "match _inner:\n    case test_captured:\n        pass\n",
         encoding="utf-8",
     )
     (tmp_path / "test_star.py").write_text("from helper import *\n", encoding="utf-8")
@@ -488,6 +496,7 @@ def test_the_refusal_is_a_rule_and_not_a_list_of_the_three(tmp_path: Path) -> No
         "test_every_other_way_in.py::test_walrus",
         "test_every_other_way_in.py::test_conditionally",
         "test_every_other_way_in.py::test_under_a_branch",
+        "test_every_other_way_in.py::test_captured",
         "test_star.py::test_imported",
         "test_star.py::test_conditionally",
     }
@@ -501,6 +510,7 @@ def test_the_refusal_is_a_rule_and_not_a_list_of_the_three(tmp_path: Path) -> No
         "test_every_other_way_in.py::test_walrus",
         "test_every_other_way_in.py::test_conditionally",
         "test_every_other_way_in.py::test_under_a_branch",
+        "test_every_other_way_in.py::test_captured",
         f"test_star.py::{scenarios.STAR}",
     )
 

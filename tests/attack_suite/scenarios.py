@@ -337,7 +337,10 @@ def runnable_but_unseen_in(directory: Path = HERE) -> tuple[str, ...]:
     Scope is what the tree marks: `def` and `class` bodies bind in a scope of
     their own and are not descended, while `if`, `try`, `for`, `while`, `with`
     and `match` are, because a binding under one of those is still a module-level
-    binding.
+    binding. A comprehension and a `lambda` have a scope of their own too and are
+    descended anyway — refusing `[test_x for test_x in …]`, which binds nothing
+    outside the brackets. That is the same bias as the paragraph below, taken
+    rather than spending a scope table on a name nobody writes.
 
     **A wildcard import is refused under the name ``*``.** The names it binds are
     in the other module and this reads one file, so there is nothing to report but
@@ -393,7 +396,15 @@ def _at_module_scope(node: ast.AST) -> Iterator[ast.AST]:
     which is why :func:`_tests_in` reads `tree.body` and nothing deeper. Anything
     else is descended, control flow included, because `if`, `try`, `for`, `while`
     and `with` bind into the module's own namespace exactly as a bare statement
-    does.
+    does. Two things descended here do *not*: a comprehension and a `lambda`. They
+    are left in on the bias :func:`runnable_but_unseen_in` states — a refusal
+    costs a rename and a miss costs a silent bijection break — rather than because
+    they belong.
+
+    **What this does not reach is a name bound from inside a scope it stopped
+    at**: `global test_x` in a function the module calls binds one, and the
+    `global` is written where this does not look. Following it means deciding
+    which functions run at import, which is the interpreter this is not.
     """
     for child in ast.iter_child_nodes(node):
         yield child
@@ -404,10 +415,12 @@ def _at_module_scope(node: ast.AST) -> Iterator[ast.AST]:
 def _runnable_but_unseen(node: ast.AST) -> tuple[str, ...]:
     """The name one module-scope node binds, where pytest would run it unseen.
 
-    Three spellings of a binding and nothing else: the `class` statement, the
-    `import` alias, and an identifier the tree marks `Store` — which is one node
-    type for assignment, unpacking, `for`, `with … as`, the walrus and the
-    augmented forms, so none of those needs naming here.
+    Four spellings of a binding and nothing else: the `class` statement, the
+    `import` alias, an identifier the tree marks `Store` — which is one node type
+    for assignment, unpacking, `for`, `with … as`, the walrus and the augmented
+    forms, so none of those needs naming here — and a `match` pattern's capture,
+    which is the one binding Python spells as a bare `str` on the node rather
+    than as a `Name`, and so the one that has to be named separately.
     """
     if isinstance(node, ast.ClassDef):
         return (node.name,) if any(_is_test_case(base) for base in node.bases) else ()
@@ -421,6 +434,13 @@ def _runnable_but_unseen(node: ast.AST) -> tuple[str, ...]:
         name = node.asname or node.name.split(".", 1)[0]
     elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
         name = node.id
+    elif isinstance(node, ast.MatchAs | ast.MatchStar):
+        # `case test_x:` and `case [*test_x]:`. `None` is the wildcard `case _:`,
+        # which binds nothing.
+        name = node.name or ""
+    elif isinstance(node, ast.MatchMapping):
+        # `case {**test_rest}:`, the third and last of the `str`-valued captures.
+        name = node.rest or ""
     else:
         return ()
 
