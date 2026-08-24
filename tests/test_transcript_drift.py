@@ -164,6 +164,33 @@ def test_a_capture_with_no_committed_copy_is_reported_rather_than_raising(
     assert "no committed copy" in out
 
 
+def test_a_staged_capture_asks_git_for_a_copy_head_does_not_hold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The same sentence, reached the other way — through `git` rather than around it.
+
+    An untracked capture is reported from its status code, so the lookup is
+    never called. Staging one is what makes `git status` report something other
+    than `??` for a path `HEAD` has never held, and therefore the only route by
+    which "no committed copy" is `git`'s answer rather than the porcelain's.
+    """
+    repository(tmp_path, monkeypatch, None)
+
+    assert transcripts.keep(BEAT, A_CAPTURE) is True
+
+    subprocess.run(
+        ["git", "add", f"{BEAT}{transcripts.SUFFIX}"],
+        cwd=transcripts.COMMITTED,
+        check=True,
+        capture_output=True,
+    )
+
+    out = printed(capsys)
+
+    assert f"{BEAT}{transcripts.SUFFIX}" in out
+    assert "no committed copy" in out
+
+
 def test_a_capture_deleted_from_the_working_tree_is_reported_rather_than_raising(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -219,3 +246,52 @@ def test_a_file_that_is_not_a_capture_is_left_to_the_verdict(
     (transcripts.COMMITTED / "README.md").write_text("What the mask covers.\n", encoding="utf-8")
 
     assert printed(capsys) == ""
+
+
+def test_a_git_that_failed_for_another_reason_is_not_read_as_an_absent_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The mis-diagnosis this helper exists to prevent, made by the helper itself.
+
+    Every `git show` failure exits 128 — a path HEAD does not hold and an object
+    HEAD does hold but cannot read are the same number — so reading the exit
+    status alone turns a broken repository into the loudest claim available about
+    a capture that *is* committed.
+
+    Corrupting the committed blob is the cheapest failure that leaves `git
+    status` answering, which is what keeps the entry reaching :func:`committed`
+    at all.
+    """
+    repository(tmp_path, monkeypatch, A_CAPTURE)
+    fresh = A_CAPTURE.replace('"sub": "priya-raman"', '"sub": "tomas-weber"')
+
+    assert transcripts.keep(BEAT, fresh) is True
+
+    path = f"docs/transcripts/{BEAT}{transcripts.SUFFIX}"
+    blob = tmp_path / ".git" / "objects"
+    sha = subprocess.run(
+        ["git", "rev-parse", f"HEAD:{path}"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    loose = blob / sha[:2] / sha[2:]
+    # Loose objects are written read-only, which on Windows is enforced.
+    loose.chmod(0o600)
+    loose.write_bytes(b"not an object")
+
+    said = subprocess.run(
+        ["git", "show", f"HEAD:{path}"], cwd=tmp_path, capture_output=True, text=True
+    )
+    assert said.returncode != 0
+
+    with pytest.raises(transcript_drift.GitFailed) as failure:
+        transcript_drift.main()
+
+    # Asserted against what `git` said on this runner rather than against a
+    # quoted message, because the wording is `git`'s to change between versions
+    # and the claim here is that it is passed through.
+    assert str(said.returncode) in str(failure.value)
+    assert said.stderr.strip().splitlines()[-1] in str(failure.value)
+    assert "no committed copy" not in capsys.readouterr().out

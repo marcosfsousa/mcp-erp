@@ -20,6 +20,14 @@ that is nobody's capture. What it does not swallow is `git` itself failing, whic
 is a fact about the runner rather than about the exhibit; the step calls it with
 `|| true` so that even then the intended `exit 1` is what the job reports.
 
+**Which means the exit status is never what tells those apart.** `git show`
+exits 128 for a path `HEAD` does not hold *and* for one it holds and cannot
+read, so reading the number alone reports a corrupt object as a capture that was
+never committed — the loudest claim this helper can make, made about a committed
+file, inside the helper that exists to stop exactly that. Only `git`'s own
+stderr distinguishes them, so :data:`ABSENT` is what concludes "not in `HEAD`"
+and every other failure is raised as :exc:`GitFailed` carrying what `git` said.
+
 That coupling is why this lives in `tests/` rather than in a workflow heredoc: it
 imports :func:`transcripts.mask`, so the diff it prints is the comparison that
 was actually made rather than a second opinion about it.
@@ -28,6 +36,7 @@ was actually made rather than a second opinion about it.
 from __future__ import annotations
 
 import difflib
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,6 +54,33 @@ copy to diff against, so this prints the fact rather than raising on it.
 
 RENAMED: Final = " -> "
 """How `git status --porcelain` joins a rename's two paths, source first."""
+
+ABSENT: Final = re.compile(
+    r"^fatal: path '.*' (?:does not exist|exists on disk, but not) in 'HEAD'$",
+    re.MULTILINE,
+)
+"""The only two things `git show` says that mean `HEAD` does not hold that path.
+
+Two rather than one because `git` says which of them it is: a path that is not
+on disk either *does not exist in* `HEAD`, and the case this helper actually
+meets — a capture this run wrote, staged and not yet committed — *exists on
+disk, but not in* `HEAD`. Both were measured against the `git` on the runner
+rather than quoted from its documentation.
+
+Matched multi-line because a failing `git show` may print several `error:` lines
+before the `fatal:` one, and anchored at both ends so a path that contains the
+sentence cannot supply it.
+"""
+
+
+class GitFailed(RuntimeError):
+    """`git` did not answer, so nothing was learned about what `HEAD` holds.
+
+    Distinct from `None`, which is `git` answering that `HEAD` holds nothing
+    there. Collapsing the two is the defect this type exists to make
+    unrepresentable: a caller cannot reach the "no committed copy" sentence
+    without having been told that by `git`.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,17 +140,38 @@ def drifted() -> list[Entry]:
 
 
 def committed(path: str) -> str | None:
-    """What `HEAD` holds at `path`, or `None` when `HEAD` holds nothing there."""
+    """What `HEAD` holds at `path`, or `None` when `HEAD` holds nothing there.
+
+    Args:
+        path: The committed side's path, relative to the repository root.
+
+    Returns:
+        The committed bytes as text, or `None` when `git` said `HEAD` does not
+        hold that path.
+
+    Raises:
+        GitFailed: When `git` failed for any other reason, carrying its exit
+            status and its stderr. Not returned as `None`, because a runner
+            whose `git` cannot read `HEAD` has told this helper nothing about
+            whether the capture is committed.
+    """
     shown = subprocess.run(
         ["git", "show", f"HEAD:{path}"],
         capture_output=True,
         check=False,
         cwd=transcripts.REPO,
     )
-    if shown.returncode != 0:
+    if shown.returncode == 0:
+        return shown.stdout.decode("utf-8")
+
+    said = shown.stderr.decode("utf-8", errors="replace")
+    if ABSENT.search(said):
         return None
 
-    return shown.stdout.decode("utf-8")
+    raise GitFailed(
+        f"`git show HEAD:{path}` exited {shown.returncode} without saying whether `HEAD` "
+        f"holds that path, so nothing here is a statement about the capture:\n{said.rstrip()}"
+    )
 
 
 def diff(entry: Entry) -> str:
