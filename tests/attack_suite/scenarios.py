@@ -420,22 +420,24 @@ def _unseen_in(tree: ast.Module) -> Iterator[str]:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
         and node.name.startswith("test_")
     }
-    for node in _at_module_scope(tree):
+    for node in _at_the_scope_of(tree):
         if id(node) not in read:
             yield from _runnable_but_unseen(node)
 
 
-def _at_module_scope(node: ast.AST) -> Iterator[ast.AST]:
-    """Every node under one that runs at module scope, in source order.
+def _at_the_scope_of(node: ast.AST) -> Iterator[ast.AST]:
+    """Every node under one that runs in the scope that node opens, in source order.
 
-    Stops at `def` and `class`, whose bodies bind names in a scope of their own —
-    which is why :func:`_tests_in` reads `tree.body` and nothing deeper. Anything
-    else is descended, control flow included, because `if`, `try`, `for`, `while`
-    and `with` bind into the module's own namespace exactly as a bare statement
-    does. Two things descended here do *not*: a comprehension and a `lambda`. They
-    are left in on the bias :func:`runnable_but_unseen_in` states — a refusal
-    costs a rename and a miss costs a silent bijection break — rather than because
-    they belong.
+    Written for a module and used for a class body too, because the question is
+    the same one twice: *what runs here*. Stops at `def` and `class`, whose bodies
+    open a scope of their own — which is why :func:`_tests_in` reads `tree.body`
+    and nothing deeper. Anything else is descended, control flow included, because
+    `if`, `try`, `for`, `while` and `with` write into the enclosing namespace
+    exactly as a bare statement does — which is what a first cut at reading
+    :data:`TEST_FLAG` off a class body's top level alone missed (#127). Two things
+    descended here do *not*: a comprehension and a `lambda`. They are left in on
+    the bias :func:`runnable_but_unseen_in` states — a refusal costs a rename and a
+    miss costs a silent bijection break — rather than because they belong.
 
     **What this does not reach is a name bound from inside a scope it stopped
     at**: `global test_x` in a function the module calls binds one, and the
@@ -445,7 +447,7 @@ def _at_module_scope(node: ast.AST) -> Iterator[ast.AST]:
     for child in ast.iter_child_nodes(node):
         yield child
         if not isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-            yield from _at_module_scope(child)
+            yield from _at_the_scope_of(child)
 
 
 def _runnable_but_unseen(node: ast.AST) -> tuple[str, ...]:
@@ -458,9 +460,12 @@ def _runnable_but_unseen(node: ast.AST) -> tuple[str, ...]:
     which is the one binding Python spells as a bare `str` on the node rather
     than as a `Name`, and so the one that has to be named separately.
 
-    Two of the four are refused on what they bind rather than on the `test_`
-    prefix: a `class` pytest would collect by type or by :data:`TEST_FLAG`, and an
-    `import` that renames a `TestCase`. Neither has to be called `test_…` to run.
+    **Three of them are refused on what they bind rather than on the `test_`
+    prefix**, because none of the three has to be called `test_…` to run: a
+    `class` pytest would collect by type or by :data:`TEST_FLAG`, an `import` that
+    binds a `TestCase`, and — the one thing here that is not a binding at all — an
+    attribute assignment setting :data:`TEST_FLAG` on a name the module already
+    bound.
     """
     if isinstance(node, ast.ClassDef):
         return (node.name,) if _is_a_test_case(node) else ()
@@ -474,6 +479,13 @@ def _runnable_but_unseen(node: ast.AST) -> tuple[str, ...]:
         name = node.asname or node.name.split(".", 1)[0]
         if _imports_a_test_case(node):
             return (name,)
+    elif isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store):
+        # `Leak.__test__ = True` binds nothing — it sets pytest's flag on
+        # something already bound, and the flag is what runs it. Refused under
+        # the name it mutates, which is where a reader would look. It is also the
+        # shape with no class in it: `audit.__test__ = True` runs a module-level
+        # `def` under a name no `test_` prefix would have caught.
+        return (ast.unparse(node.value),) if node.attr == TEST_FLAG else ()
     elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
         name = node.id
     elif isinstance(node, ast.MatchAs | ast.MatchStar):
@@ -500,13 +512,15 @@ def classes_that_cannot_be_judged_in(directory: Path = HERE) -> tuple[str, ...]:
     nothing reported. Two of those are now decided on the line; the third cannot
     be, and this is where it is said out loud instead.
 
-    **The clearance is narrow on purpose.** A class is cleared only when it
+    **The clearance is narrow on purpose.** A class is cleared here only when it
     derives from nothing at all: `python_classes = []` leaves pytest two ways to
-    reach a class — by type and by :data:`TEST_FLAG` — and a class with no bases
-    can be reached by neither. Every other base is a name whose class is in
-    another file, so every class carrying one is reported. That is a wide refusal
-    and it costs nothing: this directory writes no module-scope classes, and the
-    invariant beside it is that it never starts.
+    reach a class — by type and by :data:`TEST_FLAG` — and a base-less class can
+    be reached by neither, the flag having already been read by
+    :func:`_is_flagged_as_a_test`. Any other base is a name whose class is decided
+    somewhere this does not read, so a class carrying one is either matched by
+    :func:`_is_a_test_case_base` and refused there or reported here. That is a
+    wide net and it costs nothing: no `test_*.py` in this directory writes a
+    module-scope class, and the invariant beside this is that none starts.
 
     **A keyword base is not read.** `class A(metaclass=M)` carries no base and is
     cleared, though a metaclass could return anything — the same boundary
@@ -522,7 +536,7 @@ def classes_that_cannot_be_judged_in(directory: Path = HERE) -> tuple[str, ...]:
     return tuple(
         f"{path.name}::{node.name}"
         for path, tree in _modules_in(directory)
-        for node in _at_module_scope(tree)
+        for node in _at_the_scope_of(tree)
         if isinstance(node, ast.ClassDef) and node.bases and not _is_a_test_case(node)
     )
 
@@ -557,19 +571,28 @@ def _is_a_test_case_base(base: ast.expr) -> bool:
 def _is_flagged_as_a_test(node: ast.ClassDef) -> bool:
     """Whether a class body sets :data:`TEST_FLAG` to anything but a written `False`.
 
-    **A class-body read, and the only one here.** :func:`_at_module_scope` stops
-    at a `class` because its question is *what does the module bind*, and a class
-    body binds nothing into the module. This asks a different question — *what is
-    this class* — of a statement the module-scope walk already handed over, so it
-    is a second mechanism rather than that rule bent: nothing about which names
-    the check collects changes, and `@exercises` still means one thing.
+    **A class-body read, and the only one here.** The module walk stops at a
+    `class` because its question is *what does the module bind*, and a class body
+    binds nothing into the module. This asks a different question — *what is this
+    class* — of a statement that walk already handed over, so it is a second
+    mechanism rather than that rule bent: nothing about which names the check
+    collects changes, and `@exercises` still means one thing. It is the same walk
+    though, run over the class instead of the module, because `if os.name:
+    __test__ = True` sets the flag exactly as a bare statement would.
 
     `False` is `__test__`'s documented opt-out and is read as one. Anything else —
     a name, a call, a flag decided at import — is refused rather than resolved,
     which is the same bias as the suffix above and costs a rename when it is
     wrong.
+
+    **The flag set from outside the class is not this function's**, and is not
+    missed: `Leak.__test__ = True` on the line below is a module-scope statement,
+    and :func:`_runnable_but_unseen` refuses it under the name it mutates.
+    `setattr(Leak, "__test__", True)` is out of reach of both, which is the
+    boundary :func:`runnable_but_unseen_in` draws at `exec` and `globals()` — the
+    flag has to be an identifier on a line to be read.
     """
-    for statement in node.body:
+    for statement in _at_the_scope_of(node):
         if isinstance(statement, ast.Assign):
             targets: list[ast.expr] = list(statement.targets)
         elif isinstance(statement, ast.AnnAssign):
@@ -593,27 +616,30 @@ def _is_written_false(value: ast.expr | None) -> bool:
 
 
 def _imports_a_test_case(node: ast.alias) -> bool:
-    """Whether an import binds a `TestCase` under a name that does not say so.
+    """Whether an import binds a class written as a `TestCase`, renamed or not.
 
-    `from unittest import TestCase as Base` puts a class pytest collects by type
-    into this module under a name no rule here would look at twice — and it
-    resolves nothing to notice, because both names are on the line. So the
-    binding is refused where the rename is written, and the `class A(Base)` below
-    it is left to :func:`classes_that_cannot_be_judged_in`, which is the honest
-    answer to a base it can no longer read.
+    Two reasons, and the rename is only the first. `from unittest import TestCase
+    as Base` puts a class pytest collects by type into this module under a name no
+    rule here would look at twice — and it resolves nothing to notice, because
+    both names are on the line. So the binding is refused where the rename is
+    written, and the `class A(Base)` below it is left to
+    :func:`classes_that_cannot_be_judged_in`, which is the honest answer to a base
+    it can no longer read.
 
-    Refused rather than merely noted, because the import *is* the runnable shape
-    on its own: `from unittest import FunctionTestCase` binds a concrete
-    `TestCase` with a `runTest` method, and pytest collects it in the importing
-    module.
+    The second is that the import can be the runnable shape on its own: `from
+    unittest import FunctionTestCase` binds a concrete `TestCase` carrying a
+    `runTest`, and pytest collects it in the importing module. So the un-renamed
+    import is refused too — `from unittest import TestCase` reports a name pytest
+    happens not to collect, which is a rename to fix and the bias this check takes
+    everywhere.
 
     `import a.b.TestCase` is not this — it binds `a`, whose name says nothing —
     which is why the original is only read when it is what the line actually
     binds. The gap that leaves is a `TestCase` subclass imported under a name
     carrying no suffix at all; that one reaches the class rule or nothing.
     """
-    binds_what_it_names = node.asname is not None or "." not in node.name
-    return binds_what_it_names and node.name.rsplit(".", 1)[-1].endswith(TEST_CASE)
+    binds_the_name_it_reads = node.asname is not None or "." not in node.name
+    return binds_the_name_it_reads and node.name.rsplit(".", 1)[-1].endswith(TEST_CASE)
 
 
 def rows_without_a_test(rows: Suite, declared: tuple[Declaration, ...]) -> set[str]:

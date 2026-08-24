@@ -257,8 +257,13 @@ def test_nothing_here_runs_in_a_shape_the_collector_cannot_see() -> None:
 
     **Refused rather than collected**, because the alternatives are worse:
     resolving imports and assignments makes the collector an interpreter, and
-    walking class bodies makes `@exercises` mean two things. Nothing here is
-    written in any of the three.
+    collecting a declaration out of a class body makes `@exercises` mean two
+    things. Nothing here is written in any of the three.
+
+    A class body *is* read since #127, for :data:`~scenarios.TEST_FLAG` and
+    nothing else. That is neither alternative: it collects no declaration and
+    binds no name, and it answers about the class the module-scope walk already
+    stopped at rather than descending past it to look for tests.
     """
     assert scenarios.runnable_but_unseen_in() == ()
 
@@ -638,6 +643,45 @@ def test_a_base_from_another_module_is_reported_rather_than_cleared(tmp_path: Pa
     )
 
 
+def test_the_flag_is_refused_wherever_it_is_written(tmp_path: Path) -> None:
+    """The flag under a branch, and the flag set from outside the class.
+
+    `__test__` is the one thing here that reaches pytest without being a base and
+    without being a `test_*` name, and a first cut at reading it read the class
+    body's top level only — which is the #127 failure in miniature: `if TYPE_CHECKING`
+    around it, or `Leak.__test__ = True` on the line below the class, and the
+    class is cleared while pytest runs it. Both are on a line a reader can see,
+    so both are read.
+
+    The second is not a binding at all — it mutates a name already bound — and it
+    is refused under the name it mutates, which is where a reader would look for
+    it. That also reaches the shape with no class in it: a module-level `def`
+    carrying the flag runs under its own name whatever that name is.
+    """
+    (tmp_path / "test_under_a_branch.py").write_text(
+        "import os\n\n\nclass PartitionLeak:\n    if os.name:\n        __test__ = True\n\n"
+        "    def test_it(self) -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_set_from_outside.py").write_text(
+        "class ScopeLeak:\n    def test_it(self) -> None:\n        pass\n\n\n"
+        "ScopeLeak.__test__ = True\n\n\n"
+        "def audit() -> None:\n    pass\n\n\naudit.__test__ = True\n",
+        encoding="utf-8",
+    )
+
+    assert _collected_by_pytest(tmp_path) == {
+        "test_under_a_branch.py::PartitionLeak::test_it",
+        "test_set_from_outside.py::ScopeLeak::test_it",
+        "test_set_from_outside.py::audit",
+    }
+    assert scenarios.runnable_but_unseen_in(tmp_path) == (
+        "test_set_from_outside.py::ScopeLeak",
+        "test_set_from_outside.py::audit",
+        "test_under_a_branch.py::PartitionLeak",
+    )
+
+
 def test_a_class_pytest_cannot_reach_is_left_alone(tmp_path: Path) -> None:
     """The other direction, so the widening is a judgment and not a blanket refusal.
 
@@ -645,7 +689,10 @@ def test_a_class_pytest_cannot_reach_is_left_alone(tmp_path: Path) -> None:
     by nothing else, so a class deriving from nothing is unreachable however it is
     named — `TestThings` included, which is the name a reader would expect to be
     caught and the one `pyproject.toml` turned off. `__test__ = False` is the
-    documented opt-out and is read as one.
+    documented opt-out and is read as one *here*, where there is no base to read:
+    the class judgment ORs the base test first, so a `TestCase` subclass writing
+    the flag off is still refused. That is a false refusal costing a rename, which
+    is the trade the whole check is built on.
 
     Asserted because a check that refused every class would satisfy the invariant
     above by refusing to think, and this directory would never notice.
@@ -694,9 +741,9 @@ def _collected_by_pytest(directory: Path) -> set[str]:
         text=True,
         check=False,
     )
-    # `5` is pytest's *nothing collected*, which is an answer here rather than a
-    # failure: a directory whose classes pytest cannot reach is exactly what
-    # :func:`test_a_class_pytest_cannot_reach_is_left_alone` asserts against.
+    # `5` is pytest's *nothing collected*, which is an answer to this question
+    # rather than a failure of it: a caller asserting that a directory's classes
+    # are out of pytest's reach expects an empty set back, not a raise.
     assert completed.returncode in (0, 5), completed.stdout + completed.stderr
     return {
         line.strip().rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
