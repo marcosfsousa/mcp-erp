@@ -276,10 +276,10 @@ _REQUEST_LINE: Final = re.compile(r"^([A-Z]+) (\S+) (HTTP/[\d.]+)$")
 _HEADER_LINE: Final = re.compile(r"^([a-z0-9-]+): (.*)$")
 """A rendered header. Names are lower-cased and sorted by :func:`snapshot`."""
 
-_FORM_BODY: Final = re.compile(r"^[^\s:\[]+=\S*(&[^\s:]+=\S*)*$")
+_FORM_BODY: Final = re.compile(r"^[^\s:\[]+=\S*(&[^\s:\[]+=\S*)*$")
 """A form-encoded body line, which carries no spaces and no `: ` — unlike the other two.
 
-**A parameter name may not open with `[`, which is what keeps an elision out.**
+**No parameter name may open with `[`, which is what keeps an elision out.**
 :func:`_body` renders a body it does not read as its bracketed media type, and
 `[text/html;charset=utf-8]` carries no space and no `: ` either — so the
 unqualified pattern matched it, `_mask_query` rewrote it as a query string, and
@@ -793,21 +793,31 @@ def _listings(transcript: str) -> list[list[str]]:
 def _documents(transcript: str) -> list[Any]:
     """Every JSON body in a transcript, parsed.
 
-    Found by their braces at column zero, which is what :func:`_body` produces
-    and nothing else in the rendering does: a header carries a `: ` and a form
-    body is one line with no braces at all. So this reads the artifact rather
-    than re-asking the server, which is the whole point of a committed capture.
+    Found by :data:`_OPENS` at column zero, which is what :func:`_body` produces
+    and nothing else in the rendering does: a header carries a `: `, a form body
+    is one line with no braces at all, and an elision is bracketed on one line.
+    So this reads the artifact rather than re-asking the server, which is the
+    whole point of a committed capture.
+
+    The same opener set as :func:`mask`, and for the same reason. Before #108
+    both read `{` alone, and an array body would have been invisible to the mask
+    and to the README's derived proof at once — two failures a reader would have
+    had to connect, from one cause.
     """
     documents: list[Any] = []
     held: list[str] | None = None
+    closes = ""
 
     for line in transcript.split("\n"):
-        if line == "{":
-            held = [line]
-        elif held is not None:
-            held.append(line)
-            if line == "}":
-                documents.append(json.loads("\n".join(held)))
-                held = None
+        if held is None:
+            if line in _OPENS:
+                held = [line]
+                closes = _OPENS[line]
+            continue
+
+        held.append(line)
+        if line == closes:
+            documents.append(json.loads("\n".join(held)))
+            held = None
 
     return documents

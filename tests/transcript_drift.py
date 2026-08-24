@@ -13,9 +13,12 @@ a reader who trusts it concludes a clock moved. Under the mask the same drift is
 and the consent post is gone.
 
 **Asserts nothing.** The step's `git status --porcelain` is the verdict; this is
-the diagnosis printed beside it. It exits 0 on every path, including the ones
-where it can say nothing useful, because the workflow runs under
-`set -euo pipefail` and a non-zero exit here would mask the intended `exit 1`.
+the diagnosis printed beside it. So it returns 0 on every entry it can be handed,
+including the ones it can say nothing useful about — an untracked capture with no
+`HEAD:` copy, one deleted from the working tree, a file under the watched path
+that is nobody's capture. What it does not swallow is `git` itself failing, which
+is a fact about the runner rather than about the exhibit; the step calls it with
+`|| true` so that even then the intended `exit 1` is what the job reports.
 
 That coupling is why this lives in `tests/` rather than in a workflow heredoc: it
 imports :func:`transcripts.mask`, so the diff it prints is the comparison that
@@ -26,6 +29,7 @@ from __future__ import annotations
 
 import difflib
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
@@ -39,13 +43,37 @@ The case the step's `git status --porcelain` was chosen over `git diff
 copy to diff against, so this prints the fact rather than raising on it.
 """
 
+RENAMED: Final = " -> "
+"""How `git status --porcelain` joins a rename's two paths, source first."""
 
-def drifted() -> list[tuple[str, str]]:
-    """Every capture `git status` reports as changed, as `(status code, path)`.
+
+@dataclass(frozen=True, slots=True)
+class Entry:
+    """One line of `git status --porcelain`, as the two sides a diff needs.
+
+    A pair of bare strings would have been a pair a type checker cannot tell
+    apart, and a rename makes them genuinely different paths rather than one path
+    twice — which is the case that turned a two-string pair into a type.
+
+    Attributes:
+        code: The two-character status code.
+        before: Where the committed side is — a rename's source, and the same
+            path as `after` for every other status.
+        after: Where the working tree's side is.
+    """
+
+    code: str
+    before: str
+    after: str
+
+
+def drifted() -> list[Entry]:
+    """Every capture `git status` reports as changed.
 
     Parsed by column rather than split on whitespace: the code is the first two
-    characters, the path is everything from the fourth, and a rename reports
-    `old -> new` of which the fresh copy is the second.
+    characters and the paths are everything from the fourth. A rename reports
+    both of them, and asking `HEAD:` for the *new* path would answer nothing and
+    report a renamed capture as one with no committed copy at all.
 
     `--untracked-files=all` because the default collapses an untracked directory
     to one entry ending in `/`. That cannot happen while `docs/transcripts/`
@@ -54,7 +82,7 @@ def drifted() -> list[tuple[str, str]]:
     precisely the one the step chose `git status` over `git diff` to catch.
 
     Returns:
-        One pair per drifted capture, in the order `git status` reported them.
+        One entry per drifted capture, in the order `git status` reported them.
     """
     reported = subprocess.run(
         ["git", "status", "--porcelain", "--untracked-files=all", "--", "docs/transcripts"],
@@ -66,9 +94,11 @@ def drifted() -> list[tuple[str, str]]:
 
     entries = []
     for line in reported:
-        code, path = line[:2], line[3:].split(" -> ")[-1]
-        if path.endswith(transcripts.SUFFIX):
-            entries.append((code, path))
+        code, paths = line[:2], line[3:]
+        before, _, after = paths.partition(RENAMED)
+        entry = Entry(code, before, after or before)
+        if entry.after.endswith(transcripts.SUFFIX):
+            entries.append(entry)
 
     return entries
 
@@ -87,33 +117,32 @@ def committed(path: str) -> str | None:
     return shown.stdout.decode("utf-8")
 
 
-def diff(path: str, code: str) -> str:
+def diff(entry: Entry) -> str:
     """One capture's drift, under the mask, as the text to print for it.
 
     Args:
-        path: The capture, repo-relative, as `git status` spelled it.
-        code: That entry's two-character `git status --porcelain` code.
+        entry: What `git status` reported for that capture.
 
     Returns:
         A unified diff of the two masked forms, or a sentence for a case that has
         no two sides to diff.
     """
-    fresh = transcripts.REPO / Path(path)
+    fresh = transcripts.REPO / Path(entry.after)
 
     if not fresh.exists():
-        return f"{path}: the committed capture is gone from the working tree."
+        return f"{entry.after}: the committed capture is gone from the working tree."
 
-    before = None if code == UNTRACKED else committed(path)
+    before = None if entry.code == UNTRACKED else committed(entry.before)
     if before is None:
         lines = fresh.read_text(encoding="utf-8").count("\n")
-        return f"{path}: no committed copy; this run captured it fresh, {lines} lines."
+        return f"{entry.after}: no committed copy; this run captured it fresh, {lines} lines."
 
     delta = "\n".join(
         difflib.unified_diff(
             transcripts.mask(before).split("\n"),
             transcripts.mask(fresh.read_text(encoding="utf-8")).split("\n"),
-            fromfile=f"{path} (committed, masked)",
-            tofile=f"{path} (this run, masked)",
+            fromfile=f"{entry.before} (committed, masked)",
+            tofile=f"{entry.after} (this run, masked)",
             lineterm="",
         )
     )
@@ -123,15 +152,17 @@ def diff(path: str, code: str) -> str:
         # not exist. It means something other than a substantive change touched
         # the file — a checkout that converted line endings is the one to look
         # for, which is what `.gitattributes` pins these `-text` against.
-        return f"{path}: identical under the mask, so the rewrite was not a substantive change."
+        return (
+            f"{entry.after}: identical under the mask, so the rewrite was not a substantive change."
+        )
 
     return delta
 
 
 def main() -> int:
-    """Print every drifted capture's masked diff. Always succeeds."""
-    for code, path in drifted():
-        print(diff(path, code))
+    """Print every drifted capture's masked diff, and return 0 whatever they held."""
+    for entry in drifted():
+        print(diff(entry))
 
     return 0
 

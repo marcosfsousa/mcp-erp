@@ -947,8 +947,13 @@ jobs:
     # repository publishes. This one fetches the published Client Identity
     # Metadata Document, which is public, so no credential exists to add; and the
     # containers fetch the same URL, because dereferencing it is what the
-    # authorization server is being asked to do. Every other outbound address is
-    # a container talking to a container.
+    # authorization server is being asked to do. The other outbound address is
+    # GitHub's own artifact service, which `Keep the drifted captures` reaches on
+    # a failed run: it authenticates with the runner's Actions runtime token
+    # rather than with `GITHUB_TOKEN`, so it adds a reach without adding a
+    # permission, and `contents: read` stays as it is. Named here because this
+    # file requires every job to state what it reaches. Every remaining address
+    # is a container talking to a container.
     runs-on: ubuntu-latest
     # Longer than the Docker-free jobs, because this one builds two images and
     # waits on four healthchecks before it asserts anything.
@@ -1072,6 +1077,10 @@ jobs:
       # drifted bytes themselves, kept past the rerun that overwrites them. #108
       # is the case — a drift that a rerun of the same commit did not reproduce,
       # whose only surviving artifact was a filename.
+      #
+      # `if: failure()` rather than a condition on the drift step, so a capture
+      # that half-wrote before the flow suite fell over is kept too. That is the
+      # one state in which nothing else in this job can say what the wire said.
       - name: Keep the drifted captures
         if: failure()
         uses: actions/upload-artifact@v7

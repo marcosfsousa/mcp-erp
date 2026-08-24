@@ -62,10 +62,13 @@ def repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, committed: str |
     git("init", "--initial-branch", "main")
     git("config", "user.email", "capture@example.invalid")
     git("config", "user.name", "The capture")
-    # The pin `.gitattributes` carries in the real checkout: these bytes are
-    # compared, and a checkout that converted line endings would drift a file
-    # nobody edited.
-    (tmp_path / ".gitattributes").write_text("docs/transcripts/** -text\n", encoding="utf-8")
+    # The two lines the real `.gitattributes` carries for these files, in the
+    # order it carries them — later lines win for the same attribute, so the
+    # `-text` that exempts the captures has to sit below the repository-wide
+    # normalisation. Copied because the captures are compared byte for byte, and
+    # a repository whose line endings behaved differently from the real one would
+    # make this suite agree with a mask it is not testing.
+    (tmp_path / ".gitattributes").write_bytes(b"* text=auto eol=lf\ndocs/transcripts/*.txt -text\n")
 
     if committed is not None:
         (captures / f"{BEAT}{transcripts.SUFFIX}").write_bytes(committed.encode("utf-8"))
@@ -171,6 +174,36 @@ def test_a_capture_deleted_from_the_working_tree_is_reported_rather_than_raising
     out = printed(capsys)
 
     assert "gone from the working tree" in out
+
+
+def test_a_renamed_capture_is_diffed_against_the_path_it_came_from(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`git status` reports a rename's two paths, and only the first has a committed copy.
+
+    Asking `HEAD:` for the new one answers nothing, so a renamed capture reads as
+    a capture that was never committed — the loudest thing this helper can say,
+    said about the wrong file. A rename needs the index, so the capture writers
+    cannot produce one; a person running the helper over staged work can.
+    """
+    repository(tmp_path, monkeypatch, A_CAPTURE)
+    renamed = f"the-beat-renamed{transcripts.SUFFIX}"
+    subprocess.run(
+        ["git", "mv", f"{BEAT}{transcripts.SUFFIX}", renamed],
+        cwd=transcripts.COMMITTED,
+        check=True,
+        capture_output=True,
+    )
+    (transcripts.COMMITTED / renamed).write_text(
+        A_CAPTURE.replace('"sub": "priya-raman"', '"sub": "tomas-weber"'), encoding="utf-8"
+    )
+
+    out = printed(capsys)
+
+    assert "no committed copy" not in out
+    assert f"{BEAT}{transcripts.SUFFIX} (committed, masked)" in out
+    assert f"{renamed} (this run, masked)" in out
+    assert '-  "sub": "priya-raman"' in out
 
 
 def test_a_file_that_is_not_a_capture_is_left_to_the_verdict(

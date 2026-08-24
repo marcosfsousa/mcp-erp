@@ -84,14 +84,13 @@ asserts that it covers each of these and none of those.
 
 The step names the drifted file and then prints the diff **under this same
 mask**, so the output is the comparison the verdict made rather than a second
-opinion about it. `git diff` on the same drift leads with `date` and
-`x-served-by`, which are masked and played no part in the verdict, and a reader
-who trusts it concludes a clock moved.
+opinion about it — a `git diff` would lead with fields the mask covers, and
+`tests/transcript_drift.py` opens with what that costs a reader.
 
 The drifted captures are also uploaded as a `drifted-transcripts` artifact, which
 is what lets someone re-run the mask with different rules after the rerun that
-overwrites them. `tests/transcript_drift.py` prints the diff and
-`tests/test_transcript_drift.py` holds it and the verdict in agreement.
+overwrites them. `tests/test_transcript_drift.py` holds the printed diff and the
+verdict in agreement.
 
 ## Two steps are envelopes rather than bodies
 
