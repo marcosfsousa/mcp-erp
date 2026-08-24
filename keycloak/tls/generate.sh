@@ -42,8 +42,11 @@
 # reader looks for the difference.
 #
 # **Revoking the grant is two steps**, and re-minting is not one of them on its
-# own: delete `keycloak/tls/` — which takes the leaf key with it — and remove
-# *mcp-erp demo certificate authority* from the store it was added to. Minting
+# own: delete the two files this script leaves behind — `keycloak/tls/keycloak.p12`,
+# which is where the leaf key lives, and `keycloak/tls/authority.crt` — and remove
+# *mcp-erp demo certificate authority* from the store it was added to. **Not the
+# directory.** It also holds this script and the profile's two env files, all of
+# them tracked, so a reader who deletes it has nothing left to mint with. Minting
 # again therefore means trusting again. That is the honest cost of the property
 # above, and one year is the validity chosen against it.
 #
@@ -78,7 +81,7 @@ CHAIN="$TLS_DIR/chain.crt"
 
 # Idempotent, because this runs on every `docker compose` invocation that
 # selects the profile and a fresh certificate every time would mean trusting a
-# fresh authority every time. Delete the directory's contents to start over.
+# fresh authority every time. Delete the two files the header names to start over.
 if [ -f "$KEYSTORE" ] && [ -f "$CA_CERT" ]; then
   echo "certificate already present in $TLS_DIR — delete it to mint another"
   exit 0

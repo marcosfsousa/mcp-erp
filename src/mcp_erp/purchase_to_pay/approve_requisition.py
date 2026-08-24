@@ -97,8 +97,11 @@ MAXIMUM_BATCH: Final = 20
 A batch is N writes inside one request, and a declared list with no upper bound
 is a request whose cost the caller chooses. The ceiling is not a capacity claim —
 it is a bound, stated where the rule that generates rows is stated, and it is
-generous enough that nothing this exhibit demonstrates comes near it: the whole
-seeded organisation holds four requisitions.
+generous enough that nothing this exhibit demonstrates comes near it: the seed
+renders one requisition per matrix row that names a ``given``, seventeen rows in
+the whole organisation. The one call that exceeds the ceiling is the one written
+to: ``test_a_list_the_schema_forbids_is_a_protocol_error_and_not_a_refusal``
+posts twenty-one identifiers, and expects ``-32602``.
 
 Declared in the schema *and* enforced by the handler, because nothing on this
 stack validates arguments against a published ``inputSchema`` — the same reason
