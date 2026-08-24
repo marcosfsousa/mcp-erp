@@ -165,14 +165,45 @@ def _key_set(answer: object | BaseException) -> KeySet:
     return KeySet(ISSUER, client=httpx2.AsyncClient(transport=httpx2.MockTransport(respond)))
 
 
-def _token(claims: Mapping[str, Any]) -> str:
-    """A token carrying exactly these claims, signed with a key nobody published.
+UNPUBLISHED = {"kid": "unpublished"}
+"""The header both minters below sign with, and the whole of what they share.
 
-    The key costs nothing: every assertion below is about a refusal reached
-    *before* the signature is checked.
+One name rather than two literals, because the key identifier is what
+`_key_set` answers nothing for and every assertion here rests on that pairing —
+two copies would be two things to keep equal for no second reason.
+"""
+
+
+def _signing_key() -> rsa.RSAPrivateKey:
+    """A key nobody published.
+
+    It costs nothing: every assertion below is about a refusal reached *before*
+    the signature is checked.
     """
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    return jwt.encode(dict(claims), key, algorithm="RS256", headers={"kid": "unpublished"})
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+
+def _token(claims: Mapping[str, Any]) -> str:
+    """A token carrying exactly these claims."""
+    return jwt.encode(dict(claims), _signing_key(), algorithm="RS256", headers=UNPUBLISHED)
+
+
+def _unstructured_token(claims: Mapping[str, Any]) -> str:
+    """The same, for claims `jwt.encode` refuses to build.
+
+    PyJWT raises `TypeError: Issuer (iss) must be a string` before signing, so a
+    token whose `iss` is a list cannot be minted through it — and the tokens
+    this server has to answer for are minted by somebody else. Signing the
+    payload through the JWS layer is what a foreign minter does and what a
+    handwritten token is; nothing about the token that reaches `validate`
+    differs.
+    """
+    return jwt.api_jws.encode(
+        json.dumps(dict(claims)).encode(),
+        _signing_key(),
+        algorithm="RS256",
+        headers=UNPUBLISHED,
+    )
 
 
 # ─── The key set, when the document is not one ────────────────────────────────
@@ -343,6 +374,39 @@ def test_a_token_naming_another_issuer_is_still_refused_as_a_mismatch() -> None:
     touching the row.
     """
     token = _token({"iss": NEIGHBOUR_ISSUER, "sub": "s", "aud": AUDIENCE, "exp": FAR_FUTURE})
+
+    with pytest.raises(TokenRefusal) as refused:
+        asyncio.run(validate(token, key_set=_key_set({}), issuer=ISSUER, audience=AUDIENCE))
+
+    assert refused.value.description == ISSUER_MISMATCH
+
+
+@pytest.mark.parametrize(
+    ("shape", "iss"),
+    [
+        ("a list", [ISSUER]),
+        ("a list holding the issuer twice", [ISSUER, ISSUER]),
+        ("a number", 123),
+        ("an object", {"url": ISSUER}),
+        ("null", None),
+    ],
+)
+def test_an_issuer_claim_that_is_not_a_string_is_a_mismatch_rather_than_malformed(
+    shape: str, iss: object
+) -> None:
+    """The third of the pair's readings, asserted rather than left to the comment.
+
+    `validate`'s docstring calls this a position: the claim is *there* and it is
+    not ours, so the caller's remedy is the one a wrong string earns, and only
+    absence reaches the `malformed` branch. Nothing said so, and the branch that
+    would swallow these — widening the first question from *is `iss` absent* to
+    *is `iss` a usable string* — keeps every other test in this file green.
+
+    A list carrying the right issuer is in the set deliberately: it is the shape
+    a reader would expect to be admitted, and it is the one that would make the
+    comparison a membership test.
+    """
+    token = _unstructured_token({"iss": iss, "sub": "s", "aud": AUDIENCE, "exp": FAR_FUTURE})
 
     with pytest.raises(TokenRefusal) as refused:
         asyncio.run(validate(token, key_set=_key_set({}), issuer=ISSUER, audience=AUDIENCE))

@@ -27,7 +27,7 @@ at once — and nothing else. Type-checking every field is not on the list: that
 is what the seed's own shape and mypy are for, and a loader that grew a check
 per field would be a schema written twice. The rule is stated here so a review
 grades a proposed refusal against it rather than against taste, and
-:func:`read_identity_seed` lists the six it currently makes.
+:func:`read_identity_seed` lists the seven it currently makes.
 
 **The renderings are byte-stable**: sorted keys, sorted rows, no generated
 identifiers, no timestamps. A Keycloak realm export emits all three of those by
@@ -48,6 +48,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -137,9 +138,11 @@ class IdentitySeed:
         tls_issuer: The same realm's identifier under the opt-in TLS profile,
             or ``None``. Optional because the default configuration has one
             identifier and the profile is something a reader takes
-            deliberately.
-        realm: The realm the user import belongs to, taken from the issuer's
-            last path segment rather than authored twice.
+            deliberately. ADR-0015 makes it ``issuer`` under another scheme and
+            nothing else, so it is not a second place the realm can be reached
+            from.
+        realm: The realm the user import belongs to, taken from the first
+            issuer's last path segment rather than authored twice.
         password: One conspicuously fake password, shared by everybody. Seven
             per-person passwords would be seven equally committed, equally fake
             secrets buying no behaviour.
@@ -170,15 +173,19 @@ class IdentitySeed:
 def realm_of(issuer: str) -> str:
     """The realm an issuer names, which is its last path segment.
 
-    One derivation, because the seed now authors two issuers and the realm has to
-    be the same one under both — a second spelling of this rule is how the user
-    import ends up rendered for a realm the directory does not hold rows at.
+    One derivation, and it runs on the **first** issuer alone. The realm name is
+    not what the second issuer is checked against — ADR-0015 holds that one to
+    the first issuer entire, scheme excepted — because a name taken from one
+    path segment is the same name at an authority nothing serves, and reading
+    the second issuer for its realm is what made the refusal one segment
+    narrower than the sentence describing it.
 
     **The empty segment is refused here rather than returned**, so that a
-    trailing slash fails at the issuer that carries it and does so for either of
-    them. Nothing downstream would have noticed: the user import would carry
-    ``"realm": ""`` and every rendering would be wrong at once, with no line of
-    the seed to point at.
+    trailing slash fails at the issuer that carries it. The second issuer needs
+    no separate guard: it either matches the first, whose segment was checked
+    here, or it does not and is refused for that. Nothing downstream would have
+    noticed either: the user import would carry ``"realm": ""`` and every
+    rendering would be wrong at once, with no line of the seed to point at.
 
     Raises:
         ValueError: The issuer's last path segment is empty.
@@ -189,21 +196,34 @@ def realm_of(issuer: str) -> str:
     return realm
 
 
+def _but_for_the_scheme(issuer: str) -> tuple[str, tuple[str, ...]]:
+    """An issuer as the scheme it is reached by, and everything else it is.
+
+    Parsed rather than split on ``"://"``, so that an issuer carrying no scheme
+    at all has its whole self land in the second half instead of vanishing into
+    a separator that was never there — two schemeless issuers would otherwise
+    compare equal on nothing and pass.
+    """
+    parts = urlsplit(issuer)
+    return parts.scheme, (parts.netloc, parts.path, parts.query, parts.fragment)
+
+
 def read_identity_seed(text: str) -> IdentitySeed:
     """Parse the identity half of the seed, refusing what the realm would reject later.
 
-    Six refusals, every one of them an instance of the rule this module's
+    Seven refusals, every one of them an instance of the rule this module's
     docstring states. Four are things an authorization server would reject a
     file for, later and further away: a subject sharing another's — also a
     directory key collision — a subject too long to be a realm identifier, a
     username sharing another's, and an issuer with no last path segment to take
-    a realm name from, which :func:`realm_of` makes for both issuers at once.
+    a realm name from, which :func:`realm_of` makes.
 
-    The other two nothing downstream would reject at all. The second issuer
-    naming a different realm renders the user import for whichever realm that
-    issuer names while the directory carries rows for one that was never
-    imported; and a role column that is absent rather than empty reached
-    ``sorted`` and reported itself as a `TypeError` from the standard library.
+    The other three nothing downstream would reject at all. A second issuer that
+    moves more than the scheme, and one that moves nothing, are both ADR-0015 —
+    the first renders seven directory rows at an address nothing serves, the
+    second renders every person twice under one key. And a role column that is
+    absent, ``null`` or one scalar rather than a list is a row that reads
+    correctly to a person and holds either no roles or one role per character.
 
     The empty role list is **not** among them. It is the state ADR-0007 calls
     load-bearing — Priya Raman holds no server-side role — so a person with no
@@ -211,17 +231,33 @@ def read_identity_seed(text: str) -> IdentitySeed:
 
     Raises:
         ValueError: A subject is empty or longer than :data:`SUBJECT_LIMIT`; two
-            people share a subject or a username; either issuer's last path
-            segment is empty; the second issuer's realm is not the first's; or a
-            person states no ``roles`` or ``realm_roles`` at all.
+            people share a subject or a username; the issuer's last path segment
+            is empty; the second issuer is not the first under another scheme;
+            or a person states a role column that is absent, ``null`` or a
+            scalar.
     """
     document = yaml.safe_load(text)
     issuer = str(document["issuer"])
     realm = realm_of(issuer)
     authored = document.get("tls_issuer")
     tls_issuer = None if authored is None else str(authored)
-    if tls_issuer is not None and realm_of(tls_issuer) != realm:
-        raise ValueError(f"second issuer {tls_issuer!r} names a realm other than {realm!r}")
+    if tls_issuer is not None:
+        # ADR-0015. The profile changes how the realm is reached and not which
+        # realm it is, nor where — `tls.env` moves one origin variable from
+        # `http://keycloak:8081` to `https://keycloak:8081` and every issuer
+        # string in `compose.yaml` reads it — so the scheme is the one part
+        # allowed to differ and everything else has to be the same string.
+        scheme, rest = _but_for_the_scheme(issuer)
+        second_scheme, second_rest = _but_for_the_scheme(tls_issuer)
+        if second_rest != rest:
+            raise ValueError(
+                f"second issuer {tls_issuer!r} moves more than the scheme of {issuer!r}"
+            )
+        if second_scheme == scheme:
+            raise ValueError(
+                f"second issuer {tls_issuer!r} moves no scheme: it is the first issuer, "
+                "and the directory would hold every person twice under one key"
+            )
 
     identities: list[Identity] = []
     subjects: set[str] = set()
@@ -262,19 +298,31 @@ def read_identity_seed(text: str) -> IdentitySeed:
 
 
 def _roles(person: Mapping[str, Any], column: str, *, subject: str) -> tuple[str, ...]:
-    """One role column, sorted, refusing the absent list and admitting the empty one.
+    """One role column, sorted, refusing everything that is not a list of names.
 
-    The distinction is the whole of this function. ``roles: []`` is Priya Raman
-    and stays legal; the key missing or ``null`` is a malformed row, and
-    subscripting it reported that as a `TypeError` out of ``sorted`` rather than
-    as a defect naming the person it came from.
+    Two distinctions, and they are the whole of this function. ``roles: []`` is
+    Priya Raman and stays legal, while the key missing or ``null`` is a
+    malformed row that reported itself as a `TypeError` out of ``sorted`` rather
+    than as a defect naming the person it came from. And **one authored scalar
+    is not one role**: ``roles: erp.read`` is a string, ``sorted`` walks it, and
+    the row that reads correctly to a person builds an identity holding one role
+    per character — every call under which refuses ``role_missing``, several
+    steps from the line that caused it.
+
+    A list rather than *not a string*, because the number the standard library
+    does refuse is refused here too, naming the person and the column instead of
+    the iteration.
 
     Raises:
-        ValueError: The column is absent or ``null``.
+        ValueError: The column is absent, ``null``, or not a list.
     """
     names = person.get(column)
     if names is None:
         raise ValueError(f"person {subject!r} states no {column!r}")
+    if not isinstance(names, list):
+        raise ValueError(
+            f"person {subject!r} states {column!r} as one {type(names).__name__} rather than a list"
+        )
     return tuple(sorted(str(name) for name in names))
 
 
