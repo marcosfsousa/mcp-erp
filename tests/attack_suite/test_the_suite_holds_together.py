@@ -263,6 +263,23 @@ def test_nothing_here_runs_in_a_shape_the_collector_cannot_see() -> None:
     assert scenarios.runnable_but_unseen_in() == ()
 
 
+def test_no_class_here_is_one_the_check_cannot_judge() -> None:
+    """The same blind spot from the other side: a class it can neither clear nor refuse.
+
+    The refusal above answers *is this a test case* off the `class` statement,
+    and for a base it cannot read — one imported under another name, one from a
+    helper — there is no honest answer. Answering "no" by default is what let
+    three collected shapes through (#127), so the check reports the question
+    instead, and this asserts the directory never asks it.
+
+    A class with no bases at all is cleared rather than reported: under
+    `python_classes = []` pytest reaches a class by type or by `__test__`, and
+    one deriving from nothing can be neither. Every other class here would be
+    reported, which costs nothing today because this directory writes none.
+    """
+    assert scenarios.classes_that_cannot_be_judged_in() == ()
+
+
 # ─── How a row asserts ────────────────────────────────────────────────
 
 
@@ -515,6 +532,137 @@ def test_the_refusal_is_a_rule_and_not_a_list_of_the_three(tmp_path: Path) -> No
     )
 
 
+def test_a_class_is_judged_by_what_pytest_runs_and_not_by_one_base_name(
+    tmp_path: Path,
+) -> None:
+    """The three shapes a literal `TestCase` missed, run rather than described.
+
+    `_pytest/unittest.py` collects a `TestCase` subclass by *type*, and `unittest`
+    spells a `TestCase` three ways: `TestCase`, `IsolatedAsyncioTestCase` and
+    `FunctionTestCase`. A fourth class arrives with no base worth reading at all —
+    `__test__ = True` is a flag pytest checks on the object, which `python_classes
+    = []` does not reach. All four run here and all four were passing the refusal
+    unrefused, because the check compared a base's last identifier against the
+    literal string (#127).
+
+    So the base test is a **suffix** and the flag is a second mechanism, read off
+    the class body. The suffix carries the read-as-written bias the rest of this
+    refusal takes: a class deriving from something a reader would call
+    `LedgerTestCase` is refused too, and a rename is the whole remedy because the
+    invariant is that no such class is in this directory at all.
+
+    **`FunctionTestCase` is the one that reports twice.** Importing it binds a
+    concrete `TestCase` subclass into the module, and pytest collects that import
+    as well as the subclass below it — which is why the import is refused under
+    its own name rather than only the `class` statement being.
+    """
+    (tmp_path / "test_async_case.py").write_text(
+        "import unittest\n\n\nclass PartitionLeak(unittest.IsolatedAsyncioTestCase):\n"
+        "    async def test_it(self) -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_function_case.py").write_text(
+        "from unittest import FunctionTestCase\n\n\nclass ScopeLeak(FunctionTestCase):\n"
+        "    def test_it(self) -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "test_the_flag.py").write_text(
+        "class CostCentreLeak:\n    __test__ = True\n\n"
+        "    def test_it(self) -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+
+    assert _collected_by_pytest(tmp_path) == {
+        "test_async_case.py::PartitionLeak::test_it",
+        "test_function_case.py::FunctionTestCase::runTest",
+        "test_function_case.py::ScopeLeak::test_it",
+        "test_the_flag.py::CostCentreLeak::test_it",
+    }
+    assert tuple(scenarios._tests_in(tmp_path)) == ()
+    assert scenarios.tests_without_a_declaration(tmp_path) == ()
+    assert scenarios.runnable_but_unseen_in(tmp_path) == (
+        "test_async_case.py::PartitionLeak",
+        "test_function_case.py::FunctionTestCase",
+        "test_function_case.py::ScopeLeak",
+        "test_the_flag.py::CostCentreLeak",
+    )
+
+
+def test_a_base_renamed_on_the_import_line_is_read_there(tmp_path: Path) -> None:
+    """`from unittest import TestCase as Base` resolves nothing — the original is written.
+
+    A base spelled `Base` is unreadable at the `class` statement, and the check
+    is not allowed to go looking for it. It does not have to: the import line
+    carries both names, so the binding is refused where the rename happens. The
+    class below it is then reported as one the check cannot judge, which is the
+    honest answer to a name it can no longer read — and between the two, nothing
+    about this module passes quietly.
+    """
+    (tmp_path / "test_renamed.py").write_text(
+        "from unittest import TestCase as Base\n\n\nclass RowProbe(Base):\n"
+        "    def test_it(self) -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+
+    assert _collected_by_pytest(tmp_path) == {"test_renamed.py::RowProbe::test_it"}
+    assert scenarios.runnable_but_unseen_in(tmp_path) == ("test_renamed.py::Base",)
+    assert scenarios.classes_that_cannot_be_judged_in(tmp_path) == ("test_renamed.py::RowProbe",)
+
+
+def test_a_base_from_another_module_is_reported_rather_than_cleared(tmp_path: Path) -> None:
+    """The base whose name says nothing, which is the case with no reading left.
+
+    `from helper import Base` binds a `TestCase` subclass under a name that
+    carries no suffix to match and no original to read — the answer is in the
+    other file, and reading it is the import resolver this is not. So neither
+    refusal fires and the class is reported as undecided instead, which is the
+    difference between a check that says *I cannot tell* and one that says *no*.
+
+    The helper's own base is deliberately test-free, so pytest collects nothing
+    from the import itself: what runs is the subclass written here, and it is the
+    only thing this has to account for.
+    """
+    (tmp_path / "helper.py").write_text(
+        "import unittest\n\n\nclass Base(unittest.TestCase):\n    pass\n", encoding="utf-8"
+    )
+    (tmp_path / "test_quiet.py").write_text(
+        "from helper import Base\n\n\nclass RetryAfterRefusal(Base):\n"
+        "    def test_it(self) -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+
+    assert _collected_by_pytest(tmp_path) == {"test_quiet.py::RetryAfterRefusal::test_it"}
+    assert scenarios.runnable_but_unseen_in(tmp_path) == ()
+    assert scenarios.classes_that_cannot_be_judged_in(tmp_path) == (
+        "test_quiet.py::RetryAfterRefusal",
+    )
+
+
+def test_a_class_pytest_cannot_reach_is_left_alone(tmp_path: Path) -> None:
+    """The other direction, so the widening is a judgment and not a blanket refusal.
+
+    Under `python_classes = []` a class is collected by type or by `__test__` and
+    by nothing else, so a class deriving from nothing is unreachable however it is
+    named — `TestThings` included, which is the name a reader would expect to be
+    caught and the one `pyproject.toml` turned off. `__test__ = False` is the
+    documented opt-out and is read as one.
+
+    Asserted because a check that refused every class would satisfy the invariant
+    above by refusing to think, and this directory would never notice.
+    """
+    (tmp_path / "test_unreachable.py").write_text(
+        "class TestThings:\n    def test_it(self) -> None:\n        pass\n\n\n"
+        "class Helper:\n    def test_it(self) -> None:\n        pass\n\n\n"
+        "class OptedOut:\n    __test__ = False\n\n"
+        "    def test_it(self) -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+
+    assert _collected_by_pytest(tmp_path) == set()
+    assert scenarios.runnable_but_unseen_in(tmp_path) == ()
+    assert scenarios.classes_that_cannot_be_judged_in(tmp_path) == ()
+
+
 def _collected_by_pytest(directory: Path) -> set[str]:
     """What pytest, configured as this repo configures it, collects from a directory.
 
@@ -546,7 +694,10 @@ def _collected_by_pytest(directory: Path) -> set[str]:
         text=True,
         check=False,
     )
-    assert completed.returncode == 0, completed.stdout + completed.stderr
+    # `5` is pytest's *nothing collected*, which is an answer here rather than a
+    # failure: a directory whose classes pytest cannot reach is exactly what
+    # :func:`test_a_class_pytest_cannot_reach_is_left_alone` asserts against.
+    assert completed.returncode in (0, 5), completed.stdout + completed.stderr
     return {
         line.strip().rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
         for line in completed.stdout.splitlines()
