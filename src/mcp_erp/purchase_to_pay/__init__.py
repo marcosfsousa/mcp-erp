@@ -23,6 +23,29 @@ about and which can run a module's top level twice. Layer 2 keeps its own
 generator out of its ``__all__`` for the same reason.
 :mod:`~mcp_erp.purchase_to_pay.vendors` reads what that generator writes and has
 no entry point, so it is re-exported normally.
+
+**Every schema in this package carries ``additionalProperties: false``**, and
+this is where the reason is written down. The convention holds across the tool
+declarations and the entity schemas alike, and it is asserted by four suites
+under ``tests/wire/`` — an argument recorded once beside one of those assertions
+would be a claim in a place nobody edits this package from (#112).
+
+The reason is *disclosure*, not validation. ``submit_requisition`` is the sharp
+case: a requisition is written to the submitter's own cost centre, taken from
+``principal.partition``, and there is no property to send. A free-text one would
+leak which centres exist — the probing surface ADR-0002 designed out — and an
+enumerated one would publish the organisation's shape in a document
+``tools/list`` hands to anyone holding the scope. Saying ``false`` is how the
+declaration tells a model reading it that the omission is deliberate rather than
+an oversight it should work around.
+
+**It is not an enforcement point, and must never be read as one.** Nothing on
+this stack validates arguments against a published ``inputSchema``: an argument
+list is what ADR-0003 makes the policy function's, and a caller sending a
+forbidden key is refused by nothing. What closes that hole is the handler — it
+never reads the key, and the write takes ``principal.partition`` regardless. So
+each declaration states the shape and the handler holds it, and neither one is
+the whole claim by itself.
 """
 
 from mcp_erp.purchase_to_pay import (

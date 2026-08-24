@@ -126,6 +126,13 @@ testpaths = ["tests"]
 # pytest actually obeys. Nothing in `tests/` is written in the dropped shapes,
 # so this changes no collection today; it stops one from arriving unnoticed.
 # `tests/attack_suite/test_the_suite_holds_together.py` holds the two equal.
+#
+# **`python_classes` does not reach `unittest.TestCase`**, and no value of it
+# would: `_pytest/unittest.py` collects a subclass by type before any name
+# pattern is read, and `unittest`'s loader then finds its methods by their own
+# `test` prefix rather than by `python_functions` below. Setting this empty
+# narrows plain classes and nothing else, so the one shape that could still run
+# unseen is refused in that same module instead of narrowed here.
 python_files = ["test_*.py"]
 python_classes = []
 python_functions = ["test_*"]

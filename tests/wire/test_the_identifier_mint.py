@@ -25,11 +25,14 @@ module-scoped reload — the reason it gives is that *each write row owns a fixt
 outright, so no row can disturb another*. That premise is exactly what fails
 here: what this module manipulates is the high-water mark all three tables mint
 from, which no row owns and every row moves, so a test running after the
-boundary test would mint from a table its neighbour left in another state. The
-trailing reload also puts `fixtures.ABSENT_IDENTIFIER` and
-`fixtures.ABSENT_ORDER` — absent for a whole run everywhere else — back out of
-the tables before another module reads either as *never existed*. Recorded as an
-amendment to ADR-0003 by #84.
+boundary test would mint from a table its neighbour left in another state.
+Recorded as an amendment to ADR-0003 by #84.
+
+`fixtures.ABSENT_IDENTIFIER` and `fixtures.ABSENT_ORDER` — absent for a whole run
+everywhere else — are restored by `fixtures.at_the_ceiling` itself rather than by
+that reload: it is a context manager, so their absence holds outside its block
+whatever happens inside it, instead of resting on this module remembering to
+reload (#112).
 """
 
 import re
@@ -76,8 +79,13 @@ def requisitions() -> Iterator[None]:
 
     Function-scoped, for the reason the module docstring gives: the high-water
     mark is what this module moves, so one test's leftovers are the next one's
-    subject. The trailing reload is what puts `req_9999` and `po_9999` back out
-    of the tables before another module reads either as *never existed*.
+    subject — every test here submits, and a row minted by one shifts what the
+    next mints from.
+
+    **Not what restores the ceiling rows.** `fixtures.at_the_ceiling` is a
+    context manager and reloads on its own way out, so `req_9999` and `po_9999`
+    are gone before this fixture is reached. What is left for this to do is the
+    ordinary per-test wipe, which is the whole of its job.
     """
     fixtures.load()
     yield
@@ -162,12 +170,39 @@ def test_the_chain_mints_past_the_ceiling_on_all_three_tables() -> None:
     Each handle is also carried forward as the next call's argument, so a mint
     that returned something the read path could not hydrate would fail here too.
     """
-    fixtures.at_the_ceiling()
-
-    requisition = _submit()
-    order = _approve(requisition)
-    invoice = _record(order)
+    with fixtures.at_the_ceiling():
+        requisition = _submit()
+        order = _approve(requisition)
+        invoice = _record(order)
 
     assert requisition == "req_10000"
     assert order == "po_10000"
     assert invoice == "inv_10000"
+
+
+def test_the_ceiling_rows_are_gone_even_when_the_block_raises() -> None:
+    """What makes `fixtures.ABSENT_IDENTIFIER`'s absence structural rather than promised.
+
+    The docstring on that constant tells every other suite the value never
+    exists, and this module is the one exception. Before #112 the exception was
+    held open by discipline — `at_the_ceiling` wrote and the fixture above
+    reloaded — so a test that raised between them left `req_9999` in the table,
+    and the next module to read it as *never existed* would have been reading a
+    row.
+
+    Raising deliberately is the whole assertion, because a block that ends
+    normally cannot tell a context manager's exit from the caller remembering.
+    Asserted inside this test rather than left to the fixture, for the same
+    reason: the fixture reloads afterwards either way and would hide the answer.
+
+    Counted through `fixtures.purchase_orders_for`, which reads the database.
+    `fixtures.every_identifier` would not do: it derives from the committed
+    rendering, so it answers what the fixtures *declare* rather than what the
+    tables hold, and these three rows are in no rendering by design.
+    """
+    with pytest.raises(RuntimeError, match="deliberate"):
+        with fixtures.at_the_ceiling():
+            assert fixtures.purchase_orders_for(fixtures.ABSENT_IDENTIFIER) == 1
+            raise RuntimeError("deliberate, to end the block the way a failure would")
+
+    assert fixtures.purchase_orders_for(fixtures.ABSENT_IDENTIFIER) == 0

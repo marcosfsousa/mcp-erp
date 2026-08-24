@@ -299,6 +299,48 @@ def tests_without_a_declaration(directory: Path = HERE) -> tuple[str, ...]:
     )
 
 
+def unittest_cases_in(directory: Path = HERE) -> tuple[str, ...]:
+    """`unittest.TestCase` subclasses in this directory — the one shape no setting narrows.
+
+    Every other way a test could run without :func:`_tests_in` seeing it is
+    closed in `pyproject.toml`, which declines to collect it. This one cannot be:
+    `_pytest/unittest.py` collects a `TestCase` subclass **by type**, before any
+    name pattern is consulted, so `python_classes` has no bearing on it — and
+    `unittest`'s own loader then finds its methods by *their* `test` prefix
+    rather than by `python_functions`. A `TestCase` here would run, declare no
+    row, and be reported by nothing.
+
+    So the shape is refused rather than collected. The alternative was to walk
+    class bodies for `@exercises`, which makes the declaration mean two things
+    for a shape nothing here is written in.
+
+    **Matched on the base as written**, `TestCase` or `unittest.TestCase`, for
+    the reason :data:`DECLARATION` gives about aliases: what the check accepts is
+    what a reader can see on the line. A subclass of a subclass is not matched,
+    and neither is one built by `type()` — stated rather than defended against,
+    since the invariant this serves is about the shape being absent entirely.
+
+    Args:
+        directory: Where the test modules live.
+
+    Returns:
+        ``module::Class`` for each, in file and then source order.
+    """
+    return tuple(
+        f"{path.name}::{node.name}"
+        for path, tree in _modules_in(directory)
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and any(_is_test_case(base) for base in node.bases)
+    )
+
+
+def _is_test_case(base: ast.expr) -> bool:
+    """Whether a base class is `unittest.TestCase`, in either spelling."""
+    if isinstance(base, ast.Name):
+        return base.id == "TestCase"
+    return isinstance(base, ast.Attribute) and base.attr == "TestCase"
+
+
 def rows_without_a_test(rows: Suite, declared: tuple[Declaration, ...]) -> set[str]:
     """Asserting rows that no test declares — the drift a new row arrives as.
 

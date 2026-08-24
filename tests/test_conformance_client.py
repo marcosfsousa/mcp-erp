@@ -151,14 +151,26 @@ async def _sending(
     by nothing else, which is what the rule they check is about: it reads the
     request rather than the address, so what a test has to vary is exactly what
     it declares.
+
+    Guarded under :data:`BUDGET` for :func:`_yielding`'s reason, and against the
+    same measured failure: with the wait gone this request does not fail, it
+    waits for the fake — and what arrives thirty seconds later is
+    `RemoteProtocolError: peer closed connection without sending complete message
+    body`, the fake hanging up at :data:`QUIET` under a name that says nothing
+    about a timeout. The guard is what turns *this never came back* into an
+    answer, and it is what keeps a regression here costing a second rather than
+    half a minute of a check that then misreports itself.
     """
     async with _serving() as url, protocol_client(TOKEN, timeout=WAIT) as http:
         try:
-            await http.request(method, url, headers=headers, json=json)
+            async with asyncio.timeout(BUDGET):
+                await http.request(method, url, headers=headers, json=json)
         except httpx2.ReadTimeout:
             return "bounded"
+        except TimeoutError:
+            return "unbounded"
 
-    return "unbounded"
+    return "the server answered"
 
 
 def test_a_post_keeps_the_read_wait_a_tool_call_needs() -> None:

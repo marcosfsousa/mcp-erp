@@ -89,20 +89,17 @@ def _written(username: str) -> dict[str, Any]:
 def test_the_declaration_takes_no_cost_centre() -> None:
     """The input schema is the assertion, because the absence is the design.
 
-    A free-text centre would leak which centres exist — its refusal is the
-    probing surface ADR-0002 designed out — and an enumerated one would publish
-    the organisation's shape in a document `tools/list` hands to anyone holding
-    the scope. So there is no property to send, and `additionalProperties: false`
-    says so to a model reading the declaration.
+    Why `additionalProperties: false` is on every schema in this package, and why
+    it is a disclosure rule rather than an enforcement point, is argued in
+    `mcp_erp.purchase_to_pay`'s own docstring — the convention is on every schema
+    in that package and asserted from several suites in this directory, so the
+    argument belongs where it is applied rather than beside one of the
+    assertions (#112). This is the sharp case that argument is written from.
 
-    **What the flag is not is an enforcement point**, and the test below this one
-    is what actually closes the hole. Nothing on this stack validates arguments
-    against a published `inputSchema` — `submit_requisition`'s own module says
-    so, and it is why the handler matches `AMOUNT_PATTERN` itself — so a caller
-    sending a forbidden property is not refused by anything. What makes it not a
-    way in is that the handler never reads the key and the write takes
-    `principal.partition`. This test asserts the declaration; that one asserts
-    the behaviour, and the pair is the whole claim.
+    What this test adds is the pairing: it asserts the **declaration**, and
+    :func:`test_sending_the_forbidden_property_anyway_does_not_move_the_row`
+    asserts the **behaviour** that makes the declaration safe to publish. Neither
+    is the claim on its own.
     """
     tools = rpc.result(
         rpc.post("tools/list", token=mint("priya.raman", ["erp.write"]).access_token)

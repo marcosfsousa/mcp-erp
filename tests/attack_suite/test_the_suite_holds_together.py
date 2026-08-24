@@ -239,6 +239,24 @@ def test_every_test_in_this_directory_declares_a_row() -> None:
     assert scenarios.tests_without_a_declaration() == ()
 
 
+def test_no_module_in_this_directory_is_written_as_a_test_case() -> None:
+    """The third invariant's blind spot, closed by refusing the shape that opens it.
+
+    Every other escaping shape is closed by `pyproject.toml` declining to collect
+    it, so the equality below holds structurally. `unittest.TestCase` is the one
+    that cannot be: pytest's own plugin collects a subclass **by type**, and no
+    value of `python_classes` is consulted — so a `TestCase` here would run, and
+    :func:`~scenarios._tests_in` reads module-level `def test_…` and would not see
+    it. That is a test declaring no row, invisible to the check above.
+
+    **Refused rather than collected.** Growing the collector to walk class bodies
+    would make `@exercises` mean two things — a decorator on a function and a
+    decorator on a method — for a shape nothing in `tests/` is written in and
+    nothing here wants. One declaration shape, and a check that says so.
+    """
+    assert scenarios.unittest_cases_in() == ()
+
+
 # ─── How a row asserts ────────────────────────────────────────────────
 
 
@@ -345,6 +363,13 @@ def test_pytest_collects_exactly_what_the_collector_sees(tmp_path: Path) -> None
     to match — one declaration of *what counts as a test here* instead of two
     that must be kept equal.
 
+    **There is a fourth, and it is not here.** A `unittest.TestCase` subclass is
+    collected by type rather than by name, so no setting narrows it away and this
+    equality cannot be made to hold over one. It is refused instead, by
+    :func:`test_no_module_in_this_directory_is_written_as_a_test_case`, and
+    :func:`test_a_test_case_is_what_that_refusal_is_for` is what shows the hole
+    it would open.
+
     **Asserted by running pytest, not by reading the setting.** Restating the
     three patterns here would be the second declaration the narrowing exists to
     avoid; what is checked instead is the equality itself, over a directory
@@ -363,6 +388,29 @@ def test_pytest_collects_exactly_what_the_collector_sees(tmp_path: Path) -> None
     assert _collected_by_pytest(tmp_path) == {
         f"{path.name}::{function.name}" for path, function in scenarios._tests_in(tmp_path)
     }
+
+
+def test_a_test_case_is_what_that_refusal_is_for(tmp_path: Path) -> None:
+    """The hole, demonstrated in all three of its parts rather than described.
+
+    Named for what it tests rather than for the framework, which is the shape
+    that makes this worth refusing: `TestCase` is collected by type, so the name
+    changes nothing and a reader checking against `python_classes` would conclude
+    the opposite. Run against this module before the refusal above, this is what
+    a defence deleted without a red check looks like — pytest runs it, the
+    collector cannot see it, and the *every test declares a row* check reports
+    nothing at all.
+    """
+    (tmp_path / "test_a_test_case.py").write_text(
+        "import unittest\n\n\nclass CostCentreLeakage(unittest.TestCase):\n"
+        "    def test_it(self) -> None:\n        pass\n",
+        encoding="utf-8",
+    )
+
+    assert _collected_by_pytest(tmp_path) == {"test_a_test_case.py::CostCentreLeakage::test_it"}
+    assert tuple(scenarios._tests_in(tmp_path)) == ()
+    assert scenarios.tests_without_a_declaration(tmp_path) == ()
+    assert scenarios.unittest_cases_in(tmp_path) == ("test_a_test_case.py::CostCentreLeakage",)
 
 
 def _collected_by_pytest(directory: Path) -> set[str]:
