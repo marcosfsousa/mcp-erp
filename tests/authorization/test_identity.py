@@ -128,12 +128,14 @@ def test_a_person_renders_the_same_roles_at_every_issuer() -> None:
     drift, and a reader comparing two rows for one person would have no way to
     tell which the server was answering from.
     """
-    text = _seed_text(
-        subject="somebody",
-        roles=["a_server_role"],
-        issuer="http://issuer.example/realms/exhibit",
+    both = read_identity_seed(
+        _seed_text(
+            subject="somebody",
+            roles=["a_server_role"],
+            issuer="http://issuer.example/realms/exhibit",
+            tls_issuer="https://issuer.example/realms/exhibit",
+        )
     )
-    both = read_identity_seed(text + "tls_issuer: https://issuer.example/realms/exhibit\n")
 
     rows = json.loads(render_directory(both))
 
@@ -184,9 +186,10 @@ def test_a_second_issuer_that_moves_more_than_the_scheme_is_refused(
     is green on some of these rows and red on others, and a single case would
     not say which reading landed.
     """
-    text = (
-        _seed_text(subject="somebody", issuer="http://issuer.example/realms/exhibit")
-        + f"tls_issuer: {second}\n"
+    text = _seed_text(
+        subject="somebody",
+        issuer="http://issuer.example/realms/exhibit",
+        tls_issuer=second,
     )
 
     with pytest.raises(ValueError, match="scheme"):
@@ -200,9 +203,10 @@ def test_a_second_issuer_that_moves_only_the_scheme_is_the_one_shape_admitted() 
     `https://keycloak:8081` and nothing else, so this is the one seed the
     committed configuration can produce.
     """
-    text = (
-        _seed_text(subject="somebody", issuer="http://issuer.example/realms/exhibit")
-        + "tls_issuer: https://issuer.example/realms/exhibit\n"
+    text = _seed_text(
+        subject="somebody",
+        issuer="http://issuer.example/realms/exhibit",
+        tls_issuer="https://issuer.example/realms/exhibit",
     )
 
     parsed = read_identity_seed(text)
@@ -212,6 +216,87 @@ def test_a_second_issuer_that_moves_only_the_scheme_is_the_one_shape_admitted() 
         "https://issuer.example/realms/exhibit",
     )
     assert parsed.realm == "exhibit"
+
+
+@pytest.mark.parametrize("position", ["issuer", "tls_issuer"])
+@pytest.mark.parametrize(
+    ("damage", "authored", "names"),
+    [
+        # `urlsplit` strips ASCII whitespace from both ends, so a comparison of
+        # parses admits these and the rendering keys the directory at the
+        # string with the space still on it.
+        ("a leading space", " https://issuer.example/realms/exhibit", "' '"),
+        ("a trailing space", "https://issuer.example/realms/exhibit ", "' '"),
+        # Deleted wherever it sits rather than stripped from the ends, which is
+        # why this one damages the host itself and is invisible in the seed.
+        ("an embedded tab", "https://issuer\t.example/realms/exhibit", r"'\\t'"),
+        (
+            "a trailing carriage return",
+            "https://issuer.example/realms/exhibit\r\n",
+            r"'\\r'",
+        ),
+        # Case-folded by the parse, so the guard compares `https` and the
+        # directory renders `HTTPS`.
+        ("an upper-case scheme", "HTTPS://issuer.example/realms/exhibit", "lower case"),
+        # The one shape a round-trip through the parse would not catch: it
+        # survives unchanged and is simply an address no token names.
+        ("no scheme at all", "//issuer.example/realms/exhibit", "carries no scheme"),
+    ],
+)
+def test_an_issuer_the_parse_would_change_is_refused(
+    damage: str, authored: str, names: str, position: str
+) -> None:
+    """ADR-0015: the authored string is canonical, at either issuer.
+
+    The cross-product is the assertion. The rule is that an issuer is taken
+    exactly as written — which is a claim about **both** of them, and a loader
+    that validated only the second would still key seven directory rows at an
+    address nothing serves whenever the first is the damaged one. Parameterised
+    over the position as well as the damage so that a refactor narrowing the
+    rule to one issuer goes red on half the rows rather than none.
+
+    Each row pins its own fragment of the message, because all three refusals
+    would otherwise pass on the word `issuer` alone and the test would not say
+    which one fired.
+    """
+    other = "http://issuer.example/realms/exhibit"
+    if position == "issuer":
+        text = _seed_text(subject="somebody", issuer=authored)
+    else:
+        text = _seed_text(subject="somebody", issuer=other, tls_issuer=authored)
+
+    with pytest.raises(ValueError, match=names):
+        read_identity_seed(text)
+
+
+def test_a_damaged_issuer_is_refused_before_the_realm_is_taken_from_it() -> None:
+    """The order is what makes the message name the slip rather than its consequence.
+
+    A protocol-relative issuer with a trailing slash carries two defects at
+    once. `realm_of` would report the empty last path segment — true, and not
+    what the author typed — so the canonical-form refusal runs first and names
+    the missing scheme.
+    """
+    text = _seed_text(subject="somebody", issuer="//issuer.example/realms/exhibit/")
+
+    with pytest.raises(ValueError, match="carries no scheme"):
+        read_identity_seed(text)
+
+
+def test_the_committed_issuers_are_already_canonical(seed: IdentitySeed) -> None:
+    """The positive case, against the seed that ships rather than a constructed one.
+
+    Nothing in the committed organisation moves under this rule, which is the
+    claim `Seed renders clean` rests on: the refusals above are about seeds an
+    author is in the middle of writing, not about this one.
+    """
+    for issuer in seed.issuers:
+        assert issuer == issuer.strip()
+        assert issuer.split(":", 1)[0] in {"http", "https"}
+        assert not any(
+            character.isascii() and (character.isspace() or not character.isprintable())
+            for character in issuer
+        )
 
 
 def test_rendering_twice_produces_the_same_bytes(seed: IdentitySeed) -> None:
@@ -520,11 +605,24 @@ def _seed_text(
     realm_roles: list[str] | None = None,
     username: str = "a.person",
     issuer: str = "https://issuer.example/realms/exhibit",
+    tls_issuer: str | None = None,
 ) -> str:
-    """A one-person seed, for the cases the committed organisation cannot show."""
+    """A one-person seed, for the cases the committed organisation cannot show.
+
+    ``issuer`` is emitted **double-quoted**, which is the only way an arbitrary
+    string survives YAML. Unquoted, a plain scalar has its leading and trailing
+    whitespace stripped before the loader ever sees it — so the leading-space
+    case would go green with its coverage silently gone — and a tab or a
+    carriage return inside one is a scanner error, which is a different
+    exception from a different layer. ``json.dumps`` emits a double-quoted
+    scalar with the escapes YAML reads, the same way ``_person_block`` already
+    emits the role lists. ``tls_issuer`` is emitted the same way and for the
+    same reason, which is why it is a parameter here rather than a line the
+    caller appends.
+    """
+    second = "" if tls_issuer is None else f"tls_issuer: {json.dumps(tls_issuer)}\n"
     return (
-        f"issuer: {issuer}\n"
-        "password: not-a-secret\n"
+        f"issuer: {json.dumps(issuer)}\n" + second + "password: not-a-secret\n"
         "cost_centres: []\n"
         "vendors: []\n"
         "people:\n" + _person_block(subject, roles, realm_roles, username)
