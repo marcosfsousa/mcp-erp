@@ -164,6 +164,33 @@ def test_a_capture_with_no_committed_copy_is_reported_rather_than_raising(
     assert "no committed copy" in out
 
 
+def test_a_staged_capture_asks_git_for_a_copy_head_does_not_hold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The same sentence, reached the other way — through `git` rather than around it.
+
+    An untracked capture is reported from its status code, so the lookup is
+    never called. Staging one is what makes `git status` report something other
+    than `??` for a path `HEAD` has never held, and therefore the only route by
+    which "no committed copy" is `git`'s answer rather than the porcelain's.
+    """
+    repository(tmp_path, monkeypatch, None)
+
+    assert transcripts.keep(BEAT, A_CAPTURE) is True
+
+    subprocess.run(
+        ["git", "add", f"{BEAT}{transcripts.SUFFIX}"],
+        cwd=transcripts.COMMITTED,
+        check=True,
+        capture_output=True,
+    )
+
+    out = printed(capsys)
+
+    assert f"{BEAT}{transcripts.SUFFIX}" in out
+    assert "no committed copy" in out
+
+
 def test_a_capture_deleted_from_the_working_tree_is_reported_rather_than_raising(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -219,3 +246,138 @@ def test_a_file_that_is_not_a_capture_is_left_to_the_verdict(
     (transcripts.COMMITTED / "README.md").write_text("What the mask covers.\n", encoding="utf-8")
 
     assert printed(capsys) == ""
+
+
+def unreadable(tmp_path: Path, revision: str) -> None:
+    """Delete the object `revision` names, leaving the rest of the repository intact.
+
+    The cheapest `git` failure that leaves `git status` answering, which is what
+    keeps the entry reaching :func:`transcript_drift.committed` at all — a
+    repository broken at `HEAD` or a missing `git` would fail in
+    :func:`transcript_drift.drifted` instead and never reach the lookup under
+    test.
+
+    Args:
+        tmp_path: The checkout's root.
+        revision: What to resolve and then delete — `HEAD:<dir>` for the tree
+            above a capture, `HEAD:<path>` for the capture's own blob.
+    """
+    sha = subprocess.run(
+        ["git", "rev-parse", revision],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    loose = tmp_path / ".git" / "objects" / sha[:2] / sha[2:]
+    # Loose objects are written read-only, and on Windows that is enforced.
+    loose.chmod(0o600)
+    loose.unlink()
+
+
+def test_an_unreadable_tree_is_not_read_as_a_capture_that_was_never_committed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The case that makes reading `git show`'s stderr unsound, rather than merely fragile.
+
+    `git show` answers a path it cannot resolve with *exists on disk, but not in
+    `HEAD`* — the identical sentence it gives for a path `HEAD` genuinely lacks,
+    because every drifted capture is on disk. So this repository, whose capture
+    is committed and whose tree object is gone, is indistinguishable from a
+    fresh capture to anything reading that message, and the first draft of this
+    fix duly called it one.
+    """
+    repository(tmp_path, monkeypatch, A_CAPTURE)
+
+    assert transcripts.keep(BEAT, A_CAPTURE.replace("priya-raman", "tomas-weber")) is True
+
+    unreadable(tmp_path, "HEAD:docs/transcripts")
+
+    # The premise: `git status` is still answering, and still reports the
+    # capture as tracked and modified rather than as untracked.
+    status = subprocess.run(
+        ["git", "status", "--porcelain", "--", "docs/transcripts"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert status.stdout.startswith(" M")
+
+    assert transcript_drift.main() == 1
+
+    out = capsys.readouterr().out
+
+    assert "no committed copy" not in out
+    assert f"{BEAT}{transcripts.SUFFIX}" in out
+
+
+def test_a_git_that_did_not_answer_names_what_it_was_asked_and_what_it_said(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The failure is reported as `git`'s, carrying enough to act on.
+
+    Asserted against what `git` said on this runner rather than against a quoted
+    message, because the wording is `git`'s to change between versions and the
+    claim here is only that it is passed through.
+    """
+    repository(tmp_path, monkeypatch, A_CAPTURE)
+
+    assert transcripts.keep(BEAT, A_CAPTURE.replace("priya-raman", "tomas-weber")) is True
+
+    unreadable(tmp_path, "HEAD:docs/transcripts")
+
+    said = subprocess.run(
+        ["git", "ls-tree", "--name-only", "HEAD", "--", f"docs/transcripts/{BEAT}.txt"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert said.returncode != 0
+
+    assert transcript_drift.main() == 1
+
+    out = capsys.readouterr().out
+
+    assert "ls-tree" in out
+    assert str(said.returncode) in out
+    assert said.stderr.strip().splitlines()[-1] in out
+
+
+def test_one_unreadable_capture_does_not_cost_the_others_their_diagnosis(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A `git` failure is a fact about one capture, and the loop goes on to the rest.
+
+    Letting it out of the loop would discard every later capture's diff — and
+    the diagnosis for a capture whose objects are fine is both still available
+    and still exactly what the reader needs. The unreadable one sorts first, so
+    a helper that stopped at the failure would print nothing else.
+    """
+    repository(tmp_path, monkeypatch, A_CAPTURE)
+    other = "z-later-beat"
+    # Committed with a subject of its own. Two captures holding the same bytes
+    # would be one blob under two names, and deleting it would make both
+    # unreadable — which is the opposite of what this test needs to show.
+    (transcripts.COMMITTED / f"{other}{transcripts.SUFFIX}").write_bytes(
+        A_CAPTURE.replace("priya-raman", "nadia-oyelaran").encode("utf-8")
+    )
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "A second beat"], cwd=tmp_path, check=True, capture_output=True
+    )
+
+    assert transcripts.keep(BEAT, A_CAPTURE.replace("priya-raman", "tomas-weber")) is True
+    assert transcripts.keep(other, A_CAPTURE.replace("priya-raman", "ines-castro")) is True
+
+    unreadable(tmp_path, f"HEAD:docs/transcripts/{BEAT}{transcripts.SUFFIX}")
+
+    assert transcript_drift.main() == 1
+
+    out = capsys.readouterr().out
+
+    # The failure for the first, and the real masked diff for the second.
+    assert f"{BEAT}{transcripts.SUFFIX}" in out
+    assert '-  "sub": "nadia-oyelaran"' in out
+    assert '+  "sub": "ines-castro"' in out
+    assert "no committed copy" not in out
