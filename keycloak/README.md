@@ -376,10 +376,22 @@ Two settings in there are worth reading rather than copying:
   redirect URI* survives contact with an implementation.
 - **`cimd-allow-permitted-domains` has to name the callback's host as well as
   the document's.** The executor checks the client identifier *and* the redirect
-  URI against that one list, so the publishing origin alone would refuse the
+  URI against that one list, so the publishing origins alone would refuse the
   document's own loopback callbacks. The policy's condition is narrower —
-  `https` from `marcosfsousa.github.io` and nothing else — which is what decides
-  whether a stranger's document is looked at in the first place.
+  `https` from the two publishing domains and nothing local — which is what
+  decides whether a stranger's document is looked at in the first place.
+- **Both lists have to name a domain, and a mismatch fails in the confusing
+  direction.** *Added 2026-08-24 by
+  [#93](https://github.com/marcosfsousa/mcp-erp/issues/93), which found it by
+  running Claude Code against this realm.* `claude.ai` in the executor's list
+  and not the policy's means the condition never matches, so the profile never
+  runs, so the identifier is never dereferenced — and the log reads
+  `ClientIdUriSchemeCondition: not trusted domain` followed by
+  `LOGIN_ERROR error="client_not_found"`. A *no such client* answer for a client
+  nothing ever went to look for. Both lists now name it, and
+  [ADR-0007](../docs/adr/0007-the-realm-is-the-exhibit.md) §*Five clients, one
+  stated job each* carries why a vendor's own domain is the point rather than
+  the price.
 
 **A provisioned client inherits the realm's defaults, and this realm had none.**
 Every hand-authored client in the realm file names its own `defaultClientScopes`

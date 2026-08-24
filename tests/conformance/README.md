@@ -100,8 +100,9 @@ be served from inside the compose network. The `localhost` and `127.0.0.1`
 entries in `cimd-allow-permitted-domains` are not an opening for a local
 document: the executor checks the redirect URI against that same list, so they
 are there for the document's own loopback callback. The policy that binds this
-profile admits only `https` from the exhibit's origin, so a locally served
-identifier never reaches the profile at all. So there is no way to make this
+profile admits only `https` from two publishing domains — the exhibit's origin
+and, since #93, `claude.ai` — and neither is a name a local document can be
+served under, so a locally served identifier never reaches the profile at all. So there is no way to make this
 assertion without egress. `Attack suite (wire)` says of itself that nothing it
 asserts depends on a service outside this repository, and that sentence is worth
 keeping. This job already fetches the document, and already runs the preflight
