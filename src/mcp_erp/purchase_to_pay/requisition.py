@@ -3,15 +3,16 @@
 ``Requisition`` is the first type in this repository to satisfy layer 2's
 one-member :class:`~mcp_erp.authorization.action.Resource` protocol. Everything
 that crosses into the authorization layer from here is an ``Action``, and the
-three that name this entity are declared in a module each beside this one:
+four that name this entity are declared in a module each beside this one:
 :mod:`~mcp_erp.purchase_to_pay.list_requisitions`,
-:mod:`~mcp_erp.purchase_to_pay.get_requisition` and
-:mod:`~mcp_erp.purchase_to_pay.submit_requisition`.
+:mod:`~mcp_erp.purchase_to_pay.get_requisition`,
+:mod:`~mcp_erp.purchase_to_pay.submit_requisition` and
+:mod:`~mcp_erp.purchase_to_pay.approve_requisition`.
 
 **The entity is here and the tools are not**, which is what the second and third
 tool made necessary rather than merely tidy. A tool declares five module-level
 names — ``NAME``, ``TITLE``, ``DESCRIPTION``, ``INPUT_SCHEMA``, ``OUTPUT_SCHEMA``
-— and the three named just above, sharing one module, would have to prefix every
+— and the four named just above, sharing one module, would have to prefix every
 one of them. That is the same flattening layer 3's ``__init__`` refuses at the
 package level, arriving one level down.
 
@@ -70,7 +71,8 @@ ROW_SCHEMA: Final[dict[str, Any]] = {
 Which is ``list_requisitions``, ``get_requisition``, ``submit_requisition`` and —
 through :data:`mcp_erp.purchase_to_pay.purchase_order.DECISION_SCHEMA` —
 ``approve_requisition``. ``record_invoice`` is the one tool that answers with no
-requisition at all.
+requisition row: its result names the requisition only as the ``{id, label}``
+reference :data:`mcp_erp.purchase_to_pay.purchase_order.ORDER_SCHEMA` carries.
 
 Declared once for the same reason :meth:`Requisition.as_row` is written once: the
 type that knows the fields is the type that renders them, and tools returning the

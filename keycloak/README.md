@@ -382,8 +382,8 @@ Two settings in there are worth reading rather than copying:
   whether a stranger's document is looked at in the first place.
 
 **A provisioned client inherits the realm's defaults, and this realm had none.**
-The four hand-authored clients each name their own `defaultClientScopes` and
-`optionalClientScopes`, so nothing had ever needed realm-level ones — and a
+Every hand-authored client in the realm file names its own `defaultClientScopes`
+and `optionalClientScopes`, so nothing had ever needed realm-level ones — and a
 client the executor creates gets exactly those. It arrived with no `basic` scope
 (no `sub` claim), no `mcp-erp-audience` (no audience, so this server refuses the
 token at gate 4) and none of the three capability scopes, which answers an
@@ -398,10 +398,10 @@ So the realm declares them:
 
 That is the same pair `mcp-conformance` names for itself, which is the point: the
 client that earns its identity and the client that was handed one differ by how
-they are known and by nothing else. It changes none of the four authored
-clients — each states its own lists, and the decoy still carries somebody else's
-audience — and the policy condition above is what keeps *any* client the realm
-provisions to identifiers from one origin.
+they are known and by nothing else. It changes none of the authored clients —
+each states its own lists, and the decoy still carries somebody else's audience —
+and the policy condition above is what keeps *any* client the realm provisions to
+identifiers from one origin.
 
 **`offline_access` is not on that second list, and leaving it off is not what
 stops it.** Keycloak advertises the scope in `scopes_supported` in every realm,

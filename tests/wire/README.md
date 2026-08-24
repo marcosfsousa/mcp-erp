@@ -119,7 +119,7 @@ of document shapes counts once.
 | # | What is asserted | Where | Since |
 | --- | --- | --- | --- |
 | 1 | Layer 1's source names no tool and no batch argument | `test_the_fold.py` | #41 |
-| 2 | One order was minted, read off `purchase_order` | `test_the_fold.py` | #85 |
+| 2 | One order was minted, read off `purchase_order` | `test_approve_requisition.py` | #85 |
 | 3 | `worker_processes 1`, read off `gateway/nginx.conf` | `test_replicas.py` | #37 |
 | 4 | The same, read off `compose.yaml` | `test_replicas.py` | #37 |
 | 5 | An unreadable key-set document is a fruitless fetch, disclosing nothing | `test_the_cause_a_refusal_names.py` | #82 |

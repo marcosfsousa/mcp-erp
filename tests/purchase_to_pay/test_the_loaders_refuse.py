@@ -16,12 +16,14 @@ list, a duplicated cost-centre code, a duplicated vendor identifier — and, thr
 ways, the one `read_matrix` makes about a row's per-tool expectation.
 
 **That is not the whole of either `Raises:` list, and this file does not claim
-it is.** `read_organisation`'s fourth, two people sharing a subject, has no case
-here, and neither do the shape and value refusals `_given` and `_expect` make —
-a missing fixture field, a status outside the vocabulary, an amount that is not
-decimal. A refusal with no case here is a promise still unfed; adding the input
-it names is the standing way to close one, and it belongs in this file when
-somebody does.
+it is.** Unfed here: `read_organisation`'s fourth, two people sharing a subject;
+`read_matrix`'s own two, a duplicated row identifier and a `given` on a tool that
+acts against no named resource; every refusal `_given` makes — its field set, the
+two status vocabularies, the three chain implications, and an amount that is
+non-positive or not decimal; and three of `_expect`'s four — a key the parser does
+not know, a decision that is neither word, and the reason biconditional. A refusal
+with no case here is a promise still unfed; adding the input it names is the
+standing way to close one, and it belongs in this file when somebody does.
 
 **Not in `tests/matrix/`.** That directory is driven from the table in its
 entirety and its invariants file says so — it asserts the parser's refusals by

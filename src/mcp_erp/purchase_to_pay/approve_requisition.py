@@ -97,8 +97,9 @@ MAXIMUM_BATCH: Final = 20
 A batch is N writes inside one request, and a declared list with no upper bound
 is a request whose cost the caller chooses. The ceiling is not a capacity claim —
 it is a bound, stated where the rule that generates rows is stated, and it is
-generous enough that nothing this exhibit demonstrates comes near it: the whole
-seeded organisation holds four requisitions.
+generous enough that nothing this exhibit demonstrates comes near it: the seed
+renders one requisition per matrix row that names a ``given`` — seventeen rows in
+the whole organisation — and no suite posts a batch out of the single digits.
 
 Declared in the schema *and* enforced by the handler, because nothing on this
 stack validates arguments against a published ``inputSchema`` — the same reason

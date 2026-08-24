@@ -332,10 +332,13 @@ services:
     # `entrypoint:` already clears the image's `CMD` — measured on Compose
     # v5.3.1: the container is created with `Cmd=null` where the image carries
     # `["start", "--optimized", "--import-realm"]` — so this changes nothing
-    # today. It is here because that is a default a reader has to know to read
-    # the two lines above, and because the day `generate.sh` grows a `"$@"` or a
-    # `getopts` is the day the difference between "no arguments" and "whatever
-    # the image's `CMD` happens to be" stops being invisible.
+    # today, and it would go on changing nothing however many arguments
+    # `generate.sh` learns to read, as long as the two lines above stay. What it
+    # guards is their removal: bake the script into the image as its
+    # `ENTRYPOINT` and the realm-start `CMD` comes back, and this line is what
+    # stops it arriving as `start --optimized --import-realm` handed to a
+    # certificate generator. It is also the default a reader has to know to read
+    # the `entrypoint:` above at all.
     command: []
     volumes:
       # The one service that writes here. Everything else mounts it read-only,
