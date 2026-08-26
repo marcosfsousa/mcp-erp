@@ -21,31 +21,48 @@ from what they already have, without an account or a clone.
 ## Why there are two documents rather than one
 
 The conformance document is what the suite drives. The Inspector document exists
-because MCP Inspector cannot use the first one, for a reason that is worth
-writing down rather than rediscovering.
+because MCP Inspector cannot use the first one — **and the reason is the
+`redirect_uris`, which is the only thing this document decides.**
 
-The client library Inspector ships appends `offline_access` to the scopes it
-asks for whenever two things are true at once: the authorization server
-advertises that scope, and **the client's own metadata document declares the
-`refresh_token` grant**. This realm advertises it, and the conformance document
-declares that grant — so every Inspector run against the conformance identifier
-asks for a scope no client here is permitted, and Keycloak refuses the
-authorization request with `invalid_scope` before it provisions anything. No
-Inspector flag suppresses it; the augmentation reads the document, not the
-command line.
+MCP Inspector calls back on its own loopback ports: `6274` for the web interface
+and `6276` for the command line. The conformance document names `8085`, because
+that is where the conformance client listens, and an authorization server
+matching redirect URIs by exact string accepts only what it was given. A run
+against the conformance identifier is refused with `Invalid parameter:
+redirect_uri` and gets no further. The command line can be pointed at another
+port with `--callback-url`; the web interface's callback is not configurable at
+all.
 
-The Inspector document therefore declares `authorization_code` and nothing else.
-That is the whole of the difference, and it is deliberate: this exhibit issues
-five-minute tokens, and the one Person who holds an offline token holds it for
-the recorded third-party session, which is argued in
-[ADR-0007](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/adr/0007-the-realm-is-the-exhibit.md).
-A tool that only ever reads and calls has no business asking for a long-lived
-one.
+So this document names all four — both ports, each in both spellings a caller
+may use — and that is the whole of its job.
 
-Its `redirect_uris` name Inspector's own loopback callbacks — `6274` for the web
-interface, `6276` for the command line, each in both spellings a caller may use.
-The web interface's callback is not configurable, so a document that omitted it
-would leave the mode most readers reach for unable to log in at all.
+### What this document does not decide, measured rather than assumed
+
+**It does not stop Inspector asking for `offline_access`.** The client library
+appends that scope whenever the authorization server advertises it and the
+client metadata declares the `refresh_token` grant — but the metadata it reads
+is Inspector's *own*, a hardcoded object naming `["authorization_code",
+"refresh_token"]`, not the document the authorization server fetched. A
+published document cannot reach that decision. Every Inspector run asks for
+`offline_access`, whatever is written here.
+
+**And the authorization server grants it regardless.** A client provisioned by
+dereferencing a metadata document carries `offline_access` among its optional
+scopes whatever this file's `grant_types` says, which
+[`keycloak/README.md`](https://github.com/marcosfsousa/mcp-erp/blob/main/keycloak/README.md)
+already recorded from [#46](https://github.com/marcosfsousa/mcp-erp/issues/46).
+The consent screen shows Offline Access, and the flow completes.
+
+`grant_types` here is therefore `["authorization_code"]` as an accurate
+statement of what this client does, not as a control. **Nothing a document can
+say prevents the offline token** — only the realm could, by not advertising the
+scope, and that would break the recorded third-party session which needs it.
+This is a real concession against ADR-0007's five-minute-token story, and it is
+recorded here rather than left for a reader to notice.
+
+*This section replaced an earlier one that had the mechanism backwards, claiming
+the omitted grant was what stopped the scope being requested. Both halves were
+wrong, and both were corrected by running it.*
 
 **Every link below is absolute, and must stay that way.** Only this directory is
 uploaded, so a relative path out of it — `../docs/adr/…` — resolves in a clone
@@ -203,13 +220,12 @@ is `["code"]` for the matching reason: it is what closes off every other
 response type, including the implicit flow OAuth 2.1 removed.
 
 **This is the one field the two documents differ on.**
-`clients/inspector/1.json` names `authorization_code` alone, and the reason is
-the same governing rule read the other way: for that client the grant changes an
-authorization decision it should not. A client library that sees
-`refresh_token` in a document adds `offline_access` to the scopes it requests,
-whatever the caller asked for — so declaring the grant there would make every
-Inspector run demand a long-lived token from a realm built on five-minute ones.
-The section above has the mechanism.
+`clients/inspector/1.json` names `authorization_code` alone, which describes
+what that client does rather than constraining it. Measured behaviour: Inspector
+requests `offline_access` regardless, from client metadata of its own that no
+document reaches, and the authorization server provisions the scope regardless
+too. The field is honest here and inert. The section above has the measurements,
+and says plainly that no document can prevent the offline token.
 
 **`scope` is deliberately absent.** The three capability scopes are gated by
 role scope mappings and displayed on the consent screen
