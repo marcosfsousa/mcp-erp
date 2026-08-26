@@ -50,17 +50,39 @@ The client starts with nothing. No token, no registration, no handshake.
 Revision `2026-07-28` removed connection initialization entirely, so the first
 thing on the wire is a real method call rather than an `initialize`. The server
 answers it unauthenticated, which is deliberate: `server/discover` is the one
-method that has to work before a caller knows what to ask for. It answers with
-the rules it intends to apply.
+method that has to work before a caller knows what to ask for. It names one
+protocol version and offers no cached answer:
+
+<!-- excerpt: the-flow-completes -->
+```
+    "supportedVersions": [
+      "2026-07-28"
+    ],
+    "ttlMs": 0,
+```
+
+It also answers with the rules it intends to apply, in an `instructions` string
+it volunteers to every caller before any of them authenticates. Two sentences in
+it are the whole of beats 3 and 4:
+
+> The set of tools returned by `tools/list` varies with the granted scopes the
+> caller's token carries; **a tool the caller may not reach is absent rather than
+> refused**. Results are additionally scoped per caller, and **what is scoped
+> away is omitted rather than refused**.
+
+<details>
+<summary>The full <code>instructions</code> string, as the server sent it</summary>
 
 <!-- excerpt: the-flow-completes -->
 ```
     "instructions": "An MCP server exposing a mock enterprise resource planning system as a portfolio exhibit, with OAuth 2.0 as a first-class concern. Access tokens are validated locally and must be audience-bound to this resource. The set of tools returned by tools/list varies with the granted scopes the caller's token carries; a tool the caller may not reach is absent rather than refused. Results are additionally scoped per caller, and what is scoped away is omitted rather than refused.",
 ```
 
-Read the second half of that string again. *A tool the caller may not reach is
-absent rather than refused*, and *what is scoped away is omitted rather than
-refused*. Beats 3 and 4 are those two sentences performed.
+</details>
+
+The blockquote above is the readable half of that line, and the fold holds the
+line itself — one string, unbroken, as it came off the wire. The fold is what is
+checked; the blockquote is prose and is not.
 
 **One asterisk, stated where the claim is made.** This server is stateless, and
 the qualification is that it is stateless on a leg it does not fully own. The
@@ -113,12 +135,31 @@ which names the authorization server and the three scopes this resource
 understands. Nothing was configured into the client.
 
 The authorization request that follows is where this exhibit stops looking like
-every other OAuth demonstration:
+every other OAuth demonstration. Its query string is one 437-character line on
+the wire; these are its parameters, decoded, one per row.
+
+| Parameter | Value |
+| --- | --- |
+| `response_type` | `code` |
+| `client_id` | `https://marcosfsousa.github.io/mcp-erp/clients/conformance/1.json` |
+| `redirect_uri` | `http://127.0.0.1:8085/callback` |
+| `code_challenge_method` | `S256` |
+| `resource` | `http://localhost:8080/mcp` |
+| `scope` | `erp.decide erp.read erp.write` |
+
+`state` and `code_challenge` are per-request values and are in the capture.
+
+<details>
+<summary>The request line itself, as it went out</summary>
 
 <!-- excerpt: the-flow-completes -->
 ```
 GET /realms/mcp-erp/protocol/openid-connect/auth?response_type=code&client_id=https%3A%2F%2Fmarcosfsousa.github.io%2Fmcp-erp%2Fclients%2Fconformance%2F1.json&redirect_uri=http%3A%2F%2F127.0.0.1%3A8085%2Fcallback&state=0oo6wESfu_p-OtkGPlEWv5bRyqVa1XdaT5VOIfirYCg&code_challenge=hWV89lPCj_8nNQ3e6OmWLyDTnOQkdB1n7TKa_CEz26Q&code_challenge_method=S256&resource=http%3A%2F%2Flocalhost%3A8080%2Fmcp&scope=erp.decide+erp.read+erp.write HTTP/1.1
 ```
+
+</details>
+
+The table is hand-written and unchecked; the fold is the line the check reads.
 
 **The `client_id` is a URL.** Not an opaque string a registration step handed
 out — a document GitHub Pages serves, which Keycloak dereferences at first use
