@@ -390,10 +390,20 @@ Then he asks for `req_9999`, which has never existed:
       "id": "req_9999"
 ```
 
-Both answers are this, byte for byte:
+Both answers are this — the whole response body, not a fragment of it:
 
 <!-- excerpt: row-scoped-not-found -->
 ```
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "text": "{\n  \"reason\": \"not_found\",\n  \"remedy\": \"none\",\n  \"retry_as_other_person_helps\": false,\n  \"retry_identical_helps\": false\n}",
+        "type": "text"
+      }
+    ],
     "isError": true,
     "resultType": "complete",
     "structuredContent": {
@@ -402,11 +412,25 @@ Both answers are this, byte for byte:
       "retry_identical_helps": false,
       "retry_as_other_person_helps": false
     },
+    "_meta": {
+      "io.modelcontextprotocol/serverInfo": {
+        "name": "mcp-erp",
+        "title": "mcp-erp",
+        "version": ""
+      }
+    }
+  }
+}
 ```
 
-The only difference between the two exchanges in the capture is which of the two
-replicas answered. **A row in another partition and a row that was never minted
-are indistinguishable at the wire**, so the read path leaks nothing about what
+That is everything that came back, and it came back twice. In the capture the
+two bodies are identical line for line, and the only thing that differs between
+the exchanges is which of the two replicas answered. One excerpt can only show
+you one of them, so the identity is asserted rather than displayed — by
+`tests/attack_suite/test_row_probe_indistinguishable.py`, against a live pair.
+
+**A row in another partition and a row that was never minted are
+indistinguishable at the wire**, so the read path leaks nothing about what
 exists. `remedy: none`, and both retry hints are false: there is no version of
 this request that works, and no person who can make it work for Yusuf Demir.
 
@@ -611,6 +635,14 @@ and actually executed twice. Documentation was the only artifact, so
 consistency-with-the-trail was the only available error signal, and that signal
 is infinitely generative.
 
+The design produced no defects because nothing was in a position to find one.
+Every one of those decision records came out of a grilling session and was
+written from it, and the two research documents underneath them state on their
+own first pages that nothing in them was executed against a live server. There
+was no Keycloak, no Compose file and no `src/` until 2026-08-18. What the trail
+recorded was decisions that had survived being argued with — a real test, and
+not the same test as contact.
+
 Both halves of that are load-bearing. The second defect is the reason the process
 cannot be written off — a false security claim, in a committed artifact, that
 nothing but a trail walk was in a position to catch, because there was no code to
@@ -618,20 +650,43 @@ fail. And the same process consumed the build window it existed to protect: the
 fifty-one commits before 2026-08-18 are documentation, and everything that runs
 was written in the six working days after it.
 
-The design itself did not churn, which is the part I would want a reader to check
-rather than take. Fifteen ADRs, all Accepted, none superseded and none rejected;
-twelve amendments across the trail, zero of which reverse a decision. Three
-vocabulary changes look like instability and are not — `already_approved` became
-`already_decided` when rejection turned out to be equally terminal,
-`senior_approver` became `unlimited_approver` because the role was never about
-seniority, and the scope word `approve` became `decide` because `decide` is both
-more accurate and domain-free. Each is a name corrected to fit a contract that
-never moved.
+Six days reads equally well as the specification paying for itself, so it is
+worth saying which way the evidence points. The ADR trail carries fifty-seven
+amendments. Eleven of them predate 2026-08-18 and forty-six are dated on or
+after it. The specification was not being vindicated during those six days. It
+was being corrected, by the first thing that had ever been in a position to
+correct it.
+
+Code did not land early enough to test the design, and that is this project's
+largest single defect. Larger than anything in the register, because a register
+row is a departure taken deliberately and this was not decided at all. Of the
+forty-six amendments dated on or after 2026-08-18, thirty-nine were forced by
+contact — a ticket that built a tool, ran a client, deployed the gate chain, or
+found a refusal naming a cause the server had never established. The other seven
+are housekeeping that would have accrued under any schedule.
+
+At least one of the thirty-nine reversed a decision rather than refining one. On
+2026-08-19, commit `fc43905` cut the streamed response mode, and ADR-0002 says so
+in its own words: *"This reverses one decision — the rejection of option 5 — and
+nothing else here changes."* Three more replace a decision without using the
+word. Response mode stopped being keyed on cardinality the same day, and two of
+ADR-0013's rules were rewritten on 2026-08-21, both after execution caught layer
+1 doing something the document said it did not do. All four are dated after the
+first Python landed, because code was the first thing in a position to reverse
+anything.
+
+Do not read the status field as evidence against that. All fifteen ADRs are
+Accepted and none is superseded, and what that measures is the amendment
+convention rather than the design: this trail reverses in place, under a header
+line, and retires nothing. A reader who opens ADR-0002 finds a reversal in a
+document this page would otherwise be read as calling unreversed.
 
 Every figure above re-derives from the repository. As of 2026-08-26: fifteen
-ADRs, six register rows, thirteen map constraints, a thirty-four row attack suite
-whose `meta` block agrees with its own contents in all three dimensions, ten
-continuous integration jobs where eight were designed, and a hundred and four
-Python files — thirty-four under `src/`, seventy under `tests/`. Do not trust
+ADRs carrying fifty-seven amendments between them, six register rows, thirteen
+map constraints — the same thirteen as on 2026-08-18, unchanged since — a
+thirty-four row attack suite whose `meta` block agrees with its own contents in
+all three dimensions, ten continuous integration jobs where eight were designed,
+and a hundred and four Python files, thirty-four under `src/` and seventy under
+`tests/`. Do not trust
 that paragraph; `git log --date=short --format='%ad' | sort | uniq -c` and the
 commands in this document's own history are faster than believing it.
