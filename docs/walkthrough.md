@@ -643,10 +643,11 @@ was no Keycloak, no Compose file and no `src/` until 2026-08-18. What the trail
 recorded was decisions that had survived being argued with — a real test, and
 not the same test as contact.
 
-Both halves of that are load-bearing. The second defect is the reason the process
-cannot be written off — a false security claim, in a committed artifact, that
-nothing but a trail walk was in a position to catch, because there was no code to
-fail. And the same process consumed the build window it existed to protect: the
+Two things are true at once here, and neither cancels the other. The process
+caught a real overclaim before any code existed — a security property recorded as
+*asserted* with nothing measuring it, sitting in a committed artifact, which
+nothing but a trail walk was in a position to catch because there was nothing to
+run. And the same process consumed the build window it existed to protect: the
 fifty-one commits before 2026-08-18 are documentation, and everything that runs
 was written in the six working days after it.
 
@@ -660,20 +661,23 @@ correct it.
 Code did not land early enough to test the design, and that is this project's
 largest single defect. Larger than anything in the register, because a register
 row is a departure taken deliberately and this was not decided at all. Of the
-forty-six amendments dated on or after 2026-08-18, thirty-nine were forced by
-contact — a ticket that built a tool, ran a client, deployed the gate chain, or
-found a refusal naming a cause the server had never established. The other seven
-are housekeeping that would have accrued under any schedule.
+forty-six amendments dated on or after 2026-08-18, at least thirty-nine were
+forced by contact — a ticket that built a tool, ran a client, deployed the gate
+chain, or found a refusal naming a cause the server had never established. The
+other seven are housekeeping that would have accrued under any schedule.
 
-At least one of the thirty-nine reversed a decision rather than refining one. On
+At least one of them reversed a decision rather than refining one. On
 2026-08-19, commit `fc43905` cut the streamed response mode, and ADR-0002 says so
 in its own words: *"This reverses one decision — the rejection of option 5 — and
 nothing else here changes."* Three more replace a decision without using the
 word. Response mode stopped being keyed on cardinality the same day, and two of
-ADR-0013's rules were rewritten on 2026-08-21, both after execution caught layer
-1 doing something the document said it did not do. All four are dated after the
-first Python landed, because code was the first thing in a position to reverse
-anything.
+ADR-0013's rules were rewritten on 2026-08-21 — only one of them caught by
+running. A probe handler yielding a `Decimal` reached a legacy caller as
+`Object of type Decimal is not JSON serializable` where the document claimed both
+eras answer identically; the other reversed the exception type a handler raises
+for an argument its declaration forbids, found by reading a catch against the
+sentence that described it. All four are dated after the first Python landed,
+because code was the first thing in a position to reverse anything.
 
 Do not read the status field as evidence against that. All fifteen ADRs are
 Accepted and none is superseded, and what that measures is the amendment
