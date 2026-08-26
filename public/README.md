@@ -6,16 +6,46 @@ Everything in this directory is served publicly over HTTPS at
 `main`. Nothing else in the repository is published — the workflow uploads this
 directory and no other.
 
-Today it holds one artifact and this note, both served:
+Today it holds two artifacts and this note, all served:
 
 | Path | Served at |
 | --- | --- |
 | `clients/conformance/1.json` | <https://marcosfsousa.github.io/mcp-erp/clients/conformance/1.json> |
+| `clients/inspector/1.json` | <https://marcosfsousa.github.io/mcp-erp/clients/inspector/1.json> |
 | `README.md` | <https://marcosfsousa.github.io/mcp-erp/README.md> |
 
-The note ships with the artifact deliberately. Anyone who dereferences the
+The note ships with the artifacts deliberately. Anyone who dereferences a
 `client_id` and wonders why it looks the way it does can follow the reasoning
 from what they already have, without an account or a clone.
+
+## Why there are two documents rather than one
+
+The conformance document is what the suite drives. The Inspector document exists
+because MCP Inspector cannot use the first one, for a reason that is worth
+writing down rather than rediscovering.
+
+The client library Inspector ships appends `offline_access` to the scopes it
+asks for whenever two things are true at once: the authorization server
+advertises that scope, and **the client's own metadata document declares the
+`refresh_token` grant**. This realm advertises it, and the conformance document
+declares that grant — so every Inspector run against the conformance identifier
+asks for a scope no client here is permitted, and Keycloak refuses the
+authorization request with `invalid_scope` before it provisions anything. No
+Inspector flag suppresses it; the augmentation reads the document, not the
+command line.
+
+The Inspector document therefore declares `authorization_code` and nothing else.
+That is the whole of the difference, and it is deliberate: this exhibit issues
+five-minute tokens, and the one Person who holds an offline token holds it for
+the recorded third-party session, which is argued in
+[ADR-0007](https://github.com/marcosfsousa/mcp-erp/blob/main/docs/adr/0007-the-realm-is-the-exhibit.md).
+A tool that only ever reads and calls has no business asking for a long-lived
+one.
+
+Its `redirect_uris` name Inspector's own loopback callbacks — `6274` for the web
+interface, `6276` for the command line, each in both spellings a caller may use.
+The web interface's callback is not configurable, so a document that omitted it
+would leave the mode most readers reach for unable to log in at all.
 
 **Every link below is absolute, and must stay that way.** Only this directory is
 uploaded, so a relative path out of it — `../docs/adr/…` — resolves in a clone
@@ -145,7 +175,14 @@ Being wrong about it would cost a new document version. `8085` sits alongside
 the exhibit's other fixed ports — `8080` the server, `8081` Keycloak, `9090` the
 decoy audience.
 
-## What the document does and does not declare
+## What the documents declare, and what they leave out
+
+**This section describes `clients/conformance/1.json` except where a paragraph
+says otherwise.** The two documents answer these questions the same way apart
+from `grant_types`, called out below where it arises, and `redirect_uris`, whose
+values name each client's own callbacks and are covered where each is described.
+Neither gets a second copy of this section — a governing rule restated twice is a
+rule with two places to drift.
 
 `client_id`, `client_name` and `redirect_uris` are the three properties the
 Model Context Protocol requires; the draft itself requires only `client_id`.
@@ -164,6 +201,15 @@ replayed one revokes the grant — so whether the authorization server issues a
 refresh token to this client changes an authorization decision. `response_types`
 is `["code"]` for the matching reason: it is what closes off every other
 response type, including the implicit flow OAuth 2.1 removed.
+
+**This is the one field the two documents differ on.**
+`clients/inspector/1.json` names `authorization_code` alone, and the reason is
+the same governing rule read the other way: for that client the grant changes an
+authorization decision it should not. A client library that sees
+`refresh_token` in a document adds `offline_access` to the scopes it requests,
+whatever the caller asked for — so declaring the grant there would make every
+Inspector run demand a long-lived token from a realm built on five-minute ones.
+The section above has the mechanism.
 
 **`scope` is deliberately absent.** The three capability scopes are gated by
 role scope mappings and displayed on the consent screen
