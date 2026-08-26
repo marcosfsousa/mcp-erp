@@ -411,10 +411,7 @@ exists. `remedy: none`, and both retry hints are false: there is no version of
 this request that works, and no person who can make it work for Yusuf Demir.
 
 Constant time is not claimed. The property asserted is byte-identity of the
-response, which is what a test over HTTP against Compose can actually establish
-— an earlier draft of the attack-suite row claimed indistinguishable *timing*
-with nothing measuring timing, and narrowing it was the right correction to make
-before any code existed to make it true or false.
+response, which is what a test over HTTP against Compose can actually establish.
 
 **The identifiers are guessable on purpose**, and that is a `SHOULD` this project
 departs from in the open. MCP's own Security Best Practices ask for
