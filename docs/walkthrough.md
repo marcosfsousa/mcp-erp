@@ -432,11 +432,7 @@ reader cannot call circular.
 [![The consent screen at rest, from the recording](images/recording-poster.png)](https://github.com/marcosfsousa/mcp-erp/releases/download/v1.0.0/recording.mp4)
 
 [**Watch the recording**](https://github.com/marcosfsousa/mcp-erp/releases/download/v1.0.0/recording.mp4)
-— 90 seconds, 1920×1080, no audio, published as a release asset rather than
-committed. A repository-committed animated image would put tens of megabytes into
-every future clone so that one skimming reader saves one click; an attachment URL
-would leave the file untracked and unversioned. The frame above is the poster,
-committed, so the consent screen is visible to a reader who never plays it.
+— 90 seconds, 1920×1080, no audio. The frame above is its poster.
 
 Claude Code 2.1.246, launched from a checkout of this repository against a local
 stack, with the protocol era pinned:
