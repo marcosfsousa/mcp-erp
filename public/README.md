@@ -6,16 +6,63 @@ Everything in this directory is served publicly over HTTPS at
 `main`. Nothing else in the repository is published — the workflow uploads this
 directory and no other.
 
-Today it holds one artifact and this note, both served:
+Today it holds two artifacts and this note, all served:
 
 | Path | Served at |
 | --- | --- |
 | `clients/conformance/1.json` | <https://marcosfsousa.github.io/mcp-erp/clients/conformance/1.json> |
+| `clients/inspector/1.json` | <https://marcosfsousa.github.io/mcp-erp/clients/inspector/1.json> |
 | `README.md` | <https://marcosfsousa.github.io/mcp-erp/README.md> |
 
-The note ships with the artifact deliberately. Anyone who dereferences the
+The note ships with the artifacts deliberately. Anyone who dereferences a
 `client_id` and wonders why it looks the way it does can follow the reasoning
 from what they already have, without an account or a clone.
+
+## Why there are two documents rather than one
+
+The conformance document is what the suite drives. The Inspector document exists
+because MCP Inspector cannot use the first one — **and the reason is the
+`redirect_uris`, which is the only thing this document decides.**
+
+MCP Inspector calls back on its own loopback ports: `6274` for the web interface
+and `6276` for the command line. The conformance document names `8085`, because
+that is where the conformance client listens, and an authorization server
+matching redirect URIs by exact string accepts only what it was given. A run
+against the conformance identifier is refused with `Invalid parameter:
+redirect_uri` and gets no further. The command line can be pointed at another
+port with `--callback-url`; the web interface's callback is not configurable at
+all.
+
+So this document names all four — both ports, each in both spellings a caller
+may use — and that is the whole of its job.
+
+### What this document does not decide, measured rather than assumed
+
+**It does not stop Inspector asking for `offline_access`.** The client library
+appends that scope whenever the authorization server advertises it and the
+client metadata declares the `refresh_token` grant — but the metadata it reads
+is Inspector's *own*, a hardcoded object naming `["authorization_code",
+"refresh_token"]`, not the document the authorization server fetched. A
+published document cannot reach that decision. Every Inspector run asks for
+`offline_access`, whatever is written here.
+
+**And the authorization server grants it regardless.** A client provisioned by
+dereferencing a metadata document carries `offline_access` among its optional
+scopes whatever this file's `grant_types` says, which
+[`keycloak/README.md`](https://github.com/marcosfsousa/mcp-erp/blob/main/keycloak/README.md)
+already recorded from [#46](https://github.com/marcosfsousa/mcp-erp/issues/46).
+The consent screen shows Offline Access, and the flow completes.
+
+`grant_types` here is therefore `["authorization_code"]` as an accurate
+statement of what this client does, not as a control. **Nothing a document can
+say prevents the offline token** — only the realm could, by not advertising the
+scope, and that would break the recorded third-party session which needs it.
+This is a real concession against ADR-0007's five-minute-token story, and it is
+recorded here rather than left for a reader to notice.
+
+*This section replaced an earlier one that had the mechanism backwards, claiming
+the omitted grant was what stopped the scope being requested. Both halves were
+wrong, and both were corrected by running it.*
 
 **Every link below is absolute, and must stay that way.** Only this directory is
 uploaded, so a relative path out of it — `../docs/adr/…` — resolves in a clone
@@ -145,7 +192,14 @@ Being wrong about it would cost a new document version. `8085` sits alongside
 the exhibit's other fixed ports — `8080` the server, `8081` Keycloak, `9090` the
 decoy audience.
 
-## What the document does and does not declare
+## What the documents declare, and what they leave out
+
+**This section describes `clients/conformance/1.json` except where a paragraph
+says otherwise.** The two documents answer these questions the same way apart
+from `grant_types`, called out below where it arises, and `redirect_uris`, whose
+values name each client's own callbacks and are covered where each is described.
+Neither gets a second copy of this section — a governing rule restated twice is a
+rule with two places to drift.
 
 `client_id`, `client_name` and `redirect_uris` are the three properties the
 Model Context Protocol requires; the draft itself requires only `client_id`.
@@ -164,6 +218,14 @@ replayed one revokes the grant — so whether the authorization server issues a
 refresh token to this client changes an authorization decision. `response_types`
 is `["code"]` for the matching reason: it is what closes off every other
 response type, including the implicit flow OAuth 2.1 removed.
+
+**This is the one field the two documents differ on.**
+`clients/inspector/1.json` names `authorization_code` alone, which describes
+what that client does rather than constraining it. Measured behaviour: Inspector
+requests `offline_access` regardless, from client metadata of its own that no
+document reaches, and the authorization server provisions the scope regardless
+too. The field is honest here and inert. The section above has the measurements,
+and says plainly that no document can prevent the offline token.
 
 **`scope` is deliberately absent.** The three capability scopes are gated by
 role scope mappings and displayed on the consent screen

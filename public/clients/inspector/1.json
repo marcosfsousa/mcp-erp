@@ -1,0 +1,13 @@
+{
+  "client_id": "https://marcosfsousa.github.io/mcp-erp/clients/inspector/1.json",
+  "client_name": "mcp-erp MCP Inspector client",
+  "redirect_uris": [
+    "http://localhost:6274/oauth/callback",
+    "http://127.0.0.1:6274/oauth/callback",
+    "http://localhost:6276/oauth/callback",
+    "http://127.0.0.1:6276/oauth/callback"
+  ],
+  "grant_types": ["authorization_code"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none"
+}
