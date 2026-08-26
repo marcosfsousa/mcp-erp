@@ -8,6 +8,7 @@
 - **Amended:** 2026-08-18 — additive, by [#12](https://github.com/marcosfsousa/mcp-erp/issues/12). A **resolution step** sits between gates 4 and 5, and the chain runs in mount-level middleware rather than in a route dependency. See *The gate order is a security property, not a style choice*. No decision here is reversed.
 - **Amended:** 2026-08-19 — additive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which built the validator. The rejection vocabulary gains a **seventh** value, `issuer_mismatch`. See *Refusals disclose the caller's own token, and nothing else*. No decision here is reversed.
 - **Amended:** 2026-08-19 — additive, by [#37](https://github.com/marcosfsousa/mcp-erp/issues/37), which deployed it. One resource identifier means **one published address**, which is why two replicas answer behind a gateway. The derivation was argued only in `gateway/README.md`. See *Discovery is published both ways, at one address*. No decision here is reversed.
+- **Amended:** 2026-08-26 — substantive, by [#93](https://github.com/marcosfsousa/mcp-erp/issues/93), which ran MCP Inspector against this server rather than reading its source. **A third-party client does send an `Origin`**, and gate 1 refuses it. Inspector 2.1.0's web interface connects from the browser, not through its proxy, so the *no client in this exhibit ever sends an `Origin`* limit below is withdrawn and the hop table gains a row. The gate, the empty allow-list and the order are unchanged; what changes is that the check now has a demonstrated positive case instead of only a negative scenario. See *`Origin`: absent passes, present must prove itself* and *An honest limit*. No decision here is reversed.
 - **Amended:** 2026-08-21 — additive, by [#82](https://github.com/marcosfsousa/mcp-erp/issues/82), which found two refusals naming a cause this server had not established. **The issuer step is two questions**: an absent `iss` is `malformed` and a wrong one is `issuer_mismatch`, where a single comparison had answered `issuer_mismatch` to both. And **the key-set refetch suppresses every failure rather than four named ones** — the hand-written list did not cover what `PyJWKSet.from_dict` raises, so an unreadable key set left the token gate as a `500` carrying our own infrastructure, which is the one outcome that suppression exists to prevent. See *Refusals disclose the caller's own token, and nothing else*. The vocabulary and the gate order are unchanged and no decision here is reversed.
 
 ## Question
@@ -171,6 +172,18 @@ So: absent passes; present is checked against an allow-list that **ships empty**
 | --- | --- | --- |
 | Browser UI → Inspector backend | browser fetch | yes |
 | Inspector backend → our server | Node in `createTransportNode` | **no** |
+| Inspector 2.1.0 web UI → our server | browser fetch, direct | **yes** |
+
+**The verification above was read, not run, and 2.1.0 does not behave that way.** *Added 2026-08-26 by [#93](https://github.com/marcosfsousa/mcp-erp/issues/93), which executed it.* Inspector 2.1.0's web interface connects to the target server **from the browser** rather than through its own backend — the gateway log records a Firefox user agent arriving at `/mcp` directly. So the third row above exists, and gate 1 refuses it:
+
+```
+curl -X OPTIONS http://localhost:8080/mcp -H 'Origin: http://localhost:6274'
+→ 403 Forbidden    "Origin not allowed"
+```
+
+`app.py:226` adds the gate with no `allowed_origins`, so the preflight is refused, no CORS headers are emitted, and the interface sits at *connecting…* with no error. **The gate is working.** A shipped third-party browser client reaching a server on the operator's machine is precisely the rebinding shape the empty allow-list is the position on, and it is now demonstrated rather than only asserted.
+
+What it costs is one route into this exhibit: Inspector's **command line** is the written path in [the walkthrough](../walkthrough.md), and its web interface cannot be used against this server without adding an origin to a list whose emptiness is the decision. Claude Code is unaffected and remains a Node process.
 
 ## Options considered
 
@@ -188,7 +201,7 @@ So: absent passes; present is checked against an allow-list that **ships empty**
 
 **A correction to ADR-0002.** It justifies the "unlisted tool called anyway → `403` naming the tool and the scope" rule with *"tool names and scope names are already published unauthenticated in the protected-resource metadata."* **RFC 9728 has no field that publishes tool names**, and `tools/list` requires a token. The reasoning survives; the stated evidence does not. The repaired claim: the refusal names a **scope** that is genuinely published in `scopes_supported`, and confirms a **tool name the caller themselves supplied**. Neither is a fact only the database holds.
 
-**An honest limit.** No client in this exhibit ever sends an `Origin`, so the check is exercised **only** by the negative scenario. No positive path covers it, and the write-up says so rather than implying otherwise.
+**~~An honest limit.~~ Withdrawn 2026-08-26 by [#93](https://github.com/marcosfsousa/mcp-erp/issues/93).** This read: *No client in this exhibit ever sends an `Origin`, so the check is exercised **only** by the negative scenario. No positive path covers it, and the write-up says so rather than implying otherwise.* MCP Inspector 2.1.0's web interface is a real, shipped, third-party client that sends one and is refused — see the table above. The limit was true of the clients this exhibit **drives** and false of one it **documents**, which is a distinction the sentence did not make.
 
 **Cost.** A rate limiter, a cooldown and a negative path to test on a mechanism that fires once per Keycloak restart. A seventh closed vocabulary to keep honest. A deliberate `404` that reads as an oversight unless explained. And an asymmetry in clock handling that a reviewer will assume is sloppiness until told it is a position.
 

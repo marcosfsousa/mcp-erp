@@ -88,6 +88,16 @@ retyped; that transcript and the rest of the captured set are in
 were minted by a throwaway local realm, they expired five minutes after capture,
 and that directory's README says why publishing them is not a leak.
 
+## The walkthrough
+
+[**`docs/walkthrough.md`**](docs/walkthrough.md) is the long version of the block
+above, and the one thing on this page worth twenty minutes. It walks five beats
+end to end — the flow completing, the three denial classes side by side, the
+listing differing between two principals, row scoping returning `not_found`, and
+a recorded session driving this server from Anthropic's own shipped client. Every
+wire exchange in it is copied from the captured set and checked; the prose
+between them is not.
+
 ## Where everything else is
 
 Every directory holding something non-obvious carries its own README, and GitHub
