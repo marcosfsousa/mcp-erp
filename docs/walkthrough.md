@@ -6,13 +6,16 @@
   how a write-up stops being written. Nothing checks a sentence here.
 
   **Every fenced block says where it came from.** One marker on its own line,
-  immediately above the opening fence:
+  immediately above the opening fence: an HTML comment reading `excerpt:` and
+  then a beat name. Every fenced block below carries one, so copy the nearest
+  rather than reconstructing it from a description here — an example written out
+  in this note would have to contain a comment-closing sequence, which ends
+  *this* comment early and spills the rest of it onto the rendered page. That
+  is not hypothetical; it is what this block did until 2026-08-26.
 
-      <!-- excerpt: scope-without-role -->
-
-  naming a beat in `tests/transcripts.py`'s BEATS, and the block below it has to
-  appear verbatim and contiguously in `docs/transcripts/<beat>.txt`. A block
-  that is not a quotation is marked `hand-written` instead — a command the
+  The name is a beat in `tests/transcripts.py`'s BEATS, and the block below it
+  has to appear verbatim and contiguously in `docs/transcripts/<beat>.txt`. A
+  block that is not a quotation is marked `hand-written` instead — a command the
   reader types, a fragment of configuration. There is no third option: an
   unmarked block fails `tests/test_walkthrough.py`, so the escape is always
   visible in a diff.

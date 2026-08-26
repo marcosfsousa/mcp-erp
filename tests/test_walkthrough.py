@@ -245,3 +245,48 @@ def test_every_excerpt_appears_verbatim_in_the_transcript_it_names(beat: str) ->
         f"and the lines it quotes are not in it. Re-copy from the committed capture; "
         f"the connective prose is free, the block is not."
     )
+
+
+def test_no_comment_in_the_write_up_opens_inside_another() -> None:
+    """HTML comments do not nest, and a nested one spills the rest onto the page.
+
+    Found by a reader on 2026-08-26, not by this suite. The editor's note at the
+    top of the document explained the marker convention by writing an example
+    marker out in full — and the example's own `-->` closed the note containing
+    it, so eleven lines of instructions to editors and a stray `-->` rendered as
+    the first thing above the title.
+
+    It is the failure the rest of this file is about, one level up: a document
+    saying something its author never read. Nothing here caught it because every
+    other assertion reads *fenced blocks*, and this damage is in the prose
+    around them — the half ADR-0014 leaves free. Free does not mean the markup
+    may be broken, so the one mechanical property prose has is asserted and the
+    sentences stay unread.
+    """
+    document = transcripts.WALKTHROUGH.read_text(encoding="utf-8")
+
+    nested: list[int] = []
+    position = 0
+
+    while (opens := document.find("<!--", position)) != -1:
+        closes = document.find("-->", opens)
+
+        if closes == -1:
+            break
+
+        if document.find("<!--", opens + len("<!--"), closes) != -1:
+            nested.append(document.count("\n", 0, opens) + 1)
+
+        position = closes + len("-->")
+
+    assert not nested, (
+        f"docs/walkthrough.md opens an HTML comment inside another, at lines {nested}. "
+        f"The inner `-->` closes the outer comment, so everything after it renders as "
+        f"page content. Point at a marker below rather than writing one out."
+    )
+
+    assert document.count("<!--") == document.count("-->"), (
+        f"docs/walkthrough.md has {document.count('<!--')} comment openings and "
+        f"{document.count('-->')} closings. An unclosed comment swallows the rest of the "
+        f"document; a stray closing renders as text."
+    )
