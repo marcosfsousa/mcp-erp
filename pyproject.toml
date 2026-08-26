@@ -1,6 +1,6 @@
 [project]
 name = "mcp-erp"
-version = "0.1.0"
+version = "1.0.0"
 description = "An MCP server exposing a mock ERP over Streamable HTTP, with OAuth 2.0 as a first-class concern."
 readme = "CONTEXT.md"
 # Exact minor, matched by .python-version and — once one exists — by the

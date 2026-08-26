@@ -61,7 +61,8 @@
       "enabled": true,
       "id": "priya-raman",
       "realmRoles": [
-        "approver"
+        "approver",
+        "offline_access"
       ],
       "requiredActions": [],
       "username": "priya.raman"

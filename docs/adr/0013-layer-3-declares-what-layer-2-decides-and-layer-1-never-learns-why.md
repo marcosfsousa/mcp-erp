@@ -534,4 +534,4 @@ The consequence this ADR owns: **the ruleset change cannot precede the jobs it r
 
 - **The build ticket** inherits the module layout, the two contracts, the ~~eight~~ jobs and the ruleset change, in that order. *(All of it landed across #12's children; the ruleset last, with [#47](https://github.com/marcosfsousa/mcp-erp/issues/47).)*
 - **The audit-trail work** inherits that grounds exist only inside layer 2, and that no entity carries a timestamp.
-- **The write-up** inherits four lines recorded in [`docs/write-up-notes.md`](../write-up-notes.md).
+- **The write-up** inherits four lines recorded in `docs/write-up-notes.md`. *(Discharged 2026-08-26 by [#93](https://github.com/marcosfsousa/mcp-erp/issues/93): the notes file was a staging artifact and is deleted; the write-up is [`docs/walkthrough.md`](../walkthrough.md).)*

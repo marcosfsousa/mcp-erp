@@ -154,9 +154,20 @@ The protocol package reads it for exactly one other purpose. SEP-2207 appends
 `offline_access` to the requested scope when the client declares `refresh_token`
 **and** the authorization server advertises that scope — both true here, since
 Keycloak lists `offline_access` in `scopes_supported` in every realm. This realm
-issues rotating refresh tokens with zero reuse and no offline tokens, and no
-Person in the Cast holds the `offline_access` role, so the append asks for
-something that cannot be granted.
+issues rotating refresh tokens with zero reuse, so the append asks for something
+it will not get.
+
+**One Person is the exception, and it is this one.** #93 granted Priya Raman the
+`offline_access` role so Claude Code — which requests the scope unconditionally
+and offers no way to turn it off — can be recorded driving this server;
+`docs/adr/0007-the-realm-is-the-exhibit.md` §Token lifetimes argues it. This run
+logs in as her, so the exception and this client meet. It changes nothing here:
+the append is what `GRANT_TYPES` above declines to trigger, so the request this
+run sends carries the three capability scopes and no fourth, whoever holds what.
+**Adding `refresh_token` to the list above would now succeed for her rather than
+fail**, which is a worse outcome than the failure this docstring was written
+against — it would issue an offline token inside the run that captures the
+exhibit's transcripts, silently.
 
 **And it does not degrade into a narrowing, which is the part worth recording.**
 Keycloak refuses an unentitled `offline_access` at the token endpoint outright —

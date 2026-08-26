@@ -55,6 +55,19 @@ single-valued mapping would unlist `approve_requisition` for her and make the
 above-threshold branch she exists for unreachable.
 """
 
+KEYCLOAK_DECLARES_THESE = frozenset({"offline_access", "uma_authorization"})
+"""Realm roles this file must **not** declare, because Keycloak declares them.
+
+Every realm Keycloak creates gets these two plus a `default-roles-{realm}`
+composite, whatever the imported file names. Measured 2026-08-24 against this
+stack — `GET /admin/realms/mcp-erp/roles` on a booted container answers
+`approver, auditor, default-roles-mcp-erp, invoice_clerk, offline_access,
+uma_authorization, unlimited_approver` against a file that authors four.
+
+The exemption exists because #93 gave Priya Raman `offline_access`, which is a
+name this repository does not own and must not mint a second definition of.
+"""
+
 PLACEHOLDER = re.compile(r"\$\{([^}]*)\}")
 """Keycloak's `${VAR}` substitution, which resolves from the environment only.
 
@@ -132,11 +145,17 @@ def test_every_realm_role_the_import_references_is_declared(
     Raman's divergence. That leaves exactly one thing unchecked, and this is it:
     the realm has to declare what the import assigns, or a user is imported
     without the role and `erp.decide` silently stops being issued.
+
+    **Minus what Keycloak declares for itself.** :data:`KEYCLOAK_DECLARES_THESE`
+    is the exemption and carries the measurement. Subtracting from the
+    references rather than adding to the declarations is deliberate: it keeps
+    this file free of a second definition of a name Keycloak owns, and it still
+    fails on a typo, since a misspelt `offline-access` is not in the set.
     """
     declared = {role["name"] for role in realm["roles"]["realm"]}
     referenced = {role for user in user_import["users"] for role in user["realmRoles"]}
 
-    assert referenced <= declared
+    assert referenced - KEYCLOAK_DECLARES_THESE <= declared
 
 
 def test_the_deciding_roles_are_declared(realm: dict[str, Any]) -> None:

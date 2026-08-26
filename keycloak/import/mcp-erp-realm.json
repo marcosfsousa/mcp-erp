@@ -199,6 +199,7 @@
               "only-allow-confidential-client": false,
               "cimd-allow-permitted-domains": [
                 "marcosfsousa.github.io",
+                "claude.ai",
                 "localhost",
                 "127.0.0.1"
               ]
@@ -225,14 +226,14 @@
     "policies": [
       {
         "name": "client-identity-metadata-document",
-        "description": "Bind the profile above to https client identifiers served from the exhibit's own origin.",
+        "description": "Bind the profile above to https client identifiers served from the exhibit's own origin, and from the one vendor whose shipped client is recorded driving this server.",
         "enabled": true,
         "conditions": [
           {
             "condition": "client-id-uri",
             "configuration": {
               "client-id-uri-scheme": ["https"],
-              "client-id-uri-allow-permitted-domains": ["marcosfsousa.github.io"]
+              "client-id-uri-allow-permitted-domains": ["marcosfsousa.github.io", "claude.ai"]
             }
           }
         ],

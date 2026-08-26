@@ -100,8 +100,9 @@ be served from inside the compose network. The `localhost` and `127.0.0.1`
 entries in `cimd-allow-permitted-domains` are not an opening for a local
 document: the executor checks the redirect URI against that same list, so they
 are there for the document's own loopback callback. The policy that binds this
-profile admits only `https` from the exhibit's origin, so a locally served
-identifier never reaches the profile at all. So there is no way to make this
+profile admits only `https` from two publishing domains — the exhibit's origin
+and, since #93, `claude.ai` — and neither is a name a local document can be
+served under, so a locally served identifier never reaches the profile at all. So there is no way to make this
 assertion without egress. `Attack suite (wire)` says of itself that nothing it
 asserts depends on a service outside this repository, and that sentence is worth
 keeping. This job already fetches the document, and already runs the preflight
@@ -204,7 +205,7 @@ response's own `scope` key as it passes.
 **The behaviour is real but not general**, which the run also found. Keycloak
 refuses an unentitled `offline_access` at the token endpoint outright rather than
 omitting it from the grant. `conformance_client.GRANT_TYPES` carries that
-finding and what this client does about it.
+finding, what this client does about it, and the one Person #93 entitled.
 
 ## One added call, and why it duplicates something twice proven
 

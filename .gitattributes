@@ -32,3 +32,10 @@ keycloak/import/*.json -text
 # a checkout that converted line endings would rewrite every one of them on a
 # machine rather than on a change. `docs/transcripts/README.md` carries the rest.
 docs/transcripts/*.txt -text
+
+# The repository's first binary files. `text=auto` would detect them and do the
+# right thing unaided — this line exists because a rule that holds by detection
+# is one nobody can review, and #93 put an unpoliceable artifact class into a
+# repository that had held none. It sits last because later lines win, so the
+# attribute is stated where a reader looking for it would look.
+docs/images/*.png -text

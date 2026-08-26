@@ -107,6 +107,45 @@ SUFFIX: Final = ".txt"
 README: Final = REPO / "README.md"
 """The root README, whose one embedded proof is derived from the captured set."""
 
+WALKTHROUGH: Final = REPO / "docs" / "walkthrough.md"
+"""The write-up, which ADR-0014 settles is also the walkthrough and is one artifact.
+
+The README carries a **derivation** between markers, rewritten by a generator.
+This document carries **excerpts**, chosen by whoever writes it and checked
+where they sit — see :func:`quotations`. Two mechanisms because the two
+documents want different things: the README's one proof is the same proof
+forever and nobody picks it, while a narrative quotes the four lines that make
+its paragraph land and no generator can know which four.
+"""
+
+QUOTED: Final = re.compile(r"<!-- excerpt: ([^\s>]+) -->")
+"""What names the transcript a fenced block was taken out of.
+
+One marker per block, on its own line, immediately above the opening fence.
+The capture is a beat name from :data:`BEATS` or the literal
+:data:`HAND_WRITTEN`. A marker rather than a path because the beat name is
+already this module's stable identifier and a path would be a second spelling
+of it.
+"""
+
+HAND_WRITTEN: Final = "hand-written"
+"""The one thing a fenced block may name instead of a beat.
+
+A walkthrough contains blocks that are not quotations — a command the reader
+types, a fragment of configuration, a decoded claim set. They have to be
+writable, and they must not be writable **by omission**: an unmarked block is a
+failure, so the escape is a marker a reviewer sees in the diff rather than an
+absence nobody notices. That asymmetry is the whole mechanism.
+"""
+
+FENCE: Final = "```"
+"""What opens and closes a Markdown code block, at column zero and nowhere else.
+
+Indented fences are not read, and so would slip the check. Nothing in this
+document needs one: a quotation inside a list item is a quotation that wants to
+be a paragraph.
+"""
+
 FLOW_COMPLETES: Final = "the-flow-completes"
 SCOPE_WITHOUT_ROLE: Final = "scope-without-role"
 TOOLS_LIST_FOR_TWO_TOKENS: Final = "tools-list-for-two-tokens"
@@ -599,6 +638,101 @@ def proof(transcript: str) -> str:
         lines.append("")
 
     return "\n".join(lines).rstrip("\n")
+
+
+@dataclass(frozen=True, slots=True)
+class Quotation:
+    """One fenced block in a prose document, and what it says it was taken from.
+
+    Attributes:
+        beat: The marker's capture — a name in :data:`BEATS`, :data:`HAND_WRITTEN`,
+            or `None` where the block carried no marker at all.
+        body: The block's lines, without either fence.
+        line: The opening fence's 1-based line number, so a failure names a place.
+    """
+
+    beat: str | None
+    body: tuple[str, ...]
+    line: int
+
+
+def quotations(document: str) -> tuple[Quotation, ...]:
+    """Every fenced block in a prose document, with the marker above it.
+
+    The marker is the nearest preceding non-blank line, and it has to be the
+    whole of that line. Reading only the line above means a block cannot inherit
+    a marker from a paragraph three back that a later edit was written around.
+
+    Args:
+        document: The write-up, as committed.
+
+    Returns:
+        One :class:`Quotation` per fenced block, in the order they appear.
+    """
+    lines = document.splitlines()
+    found: list[Quotation] = []
+
+    index = 0
+    while index < len(lines):
+        if not lines[index].startswith(FENCE):
+            index += 1
+            continue
+
+        opened = index
+        index += 1
+        body: list[str] = []
+        while index < len(lines) and not lines[index].startswith(FENCE):
+            body.append(lines[index])
+            index += 1
+        index += 1
+
+        found.append(Quotation(beat=_marker(lines, opened), body=tuple(body), line=opened + 1))
+
+    return tuple(found)
+
+
+def misquoted(quotation: Quotation, transcript: str) -> bool:
+    """Whether a block claims a transcript that does not contain it.
+
+    **Contiguous, and in order.** The block's lines have to appear in the
+    transcript as one unbroken run. An excerpt that elided its middle would be
+    a claim about two places at once, and the honest form of that is two blocks.
+
+    Trailing whitespace is stripped from both sides before comparing, and
+    nothing else is. Editors strip it from Markdown and the capture does not, so
+    a difference there is an artifact of where the bytes were typed rather than
+    of what the wire said. Every other difference is drift and fails.
+
+    Args:
+        quotation: The block, which must name a beat rather than be hand-written.
+        transcript: The committed capture the marker names.
+
+    Returns:
+        Whether the run is absent.
+    """
+    wanted = [line.rstrip() for line in quotation.body]
+    held = [line.rstrip() for line in transcript.splitlines()]
+
+    if not wanted:
+        return True
+
+    return not any(
+        held[start : start + len(wanted)] == wanted for start in range(len(held) - len(wanted) + 1)
+    )
+
+
+def _marker(lines: list[str], fence: int) -> str | None:
+    """The `<!-- excerpt: … -->` above a fence, or `None` if the line above is not one."""
+    above = fence - 1
+    while above >= 0 and not lines[above].strip():
+        above -= 1
+
+    if above < 0:
+        return None
+
+    found = QUOTED.fullmatch(lines[above].strip())
+
+    return found.group(1) if found else None
 
 
 def _exchange(exchange: Exchange) -> list[str]:
