@@ -175,7 +175,14 @@ Being wrong about it would cost a new document version. `8085` sits alongside
 the exhibit's other fixed ports — `8080` the server, `8081` Keycloak, `9090` the
 decoy audience.
 
-## What the document does and does not declare
+## What the documents declare, and what they leave out
+
+**This section describes `clients/conformance/1.json` except where a paragraph
+says otherwise.** The two documents answer these questions the same way apart
+from `grant_types`, called out below where it arises, and `redirect_uris`, whose
+values name each client's own callbacks and are covered where each is described.
+Neither gets a second copy of this section — a governing rule restated twice is a
+rule with two places to drift.
 
 `client_id`, `client_name` and `redirect_uris` are the three properties the
 Model Context Protocol requires; the draft itself requires only `client_id`.
@@ -194,6 +201,15 @@ replayed one revokes the grant — so whether the authorization server issues a
 refresh token to this client changes an authorization decision. `response_types`
 is `["code"]` for the matching reason: it is what closes off every other
 response type, including the implicit flow OAuth 2.1 removed.
+
+**This is the one field the two documents differ on.**
+`clients/inspector/1.json` names `authorization_code` alone, and the reason is
+the same governing rule read the other way: for that client the grant changes an
+authorization decision it should not. A client library that sees
+`refresh_token` in a document adds `offline_access` to the scopes it requests,
+whatever the caller asked for — so declaring the grant there would make every
+Inspector run demand a long-lived token from a realm built on five-minute ones.
+The section above has the mechanism.
 
 **`scope` is deliberately absent.** The three capability scopes are gated by
 role scope mappings and displayed on the consent screen
