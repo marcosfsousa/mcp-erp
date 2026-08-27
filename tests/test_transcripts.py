@@ -517,6 +517,42 @@ def test_the_short_form_stays_under_the_ceiling_it_declares() -> None:
     assert form.words <= form.ceiling, f"{form.words} words against a ceiling of {form.ceiling}"
 
 
+SPELLED_COUNTS = (
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+)
+"""Counts the digit rule below would miss, because a spelled count is still a count.
+
+Written out rather than derived, and **`one` is deliberately not here**: in this
+repository's register it is a determiner far more often than a quantity — *the
+one proof*, *one route onward* — so forbidding it would fight the prose instead
+of the drift. Everything from `two` up is a count in practice, and a count in
+the short form belongs in the card.
+"""
+
+
+def test_the_short_form_spells_out_no_count_either() -> None:
+    """The hole the digit rule leaves, closed to the extent a check can close it.
+
+    *five tools* and *two tokens* carry exactly the drift `5` and `2` would and
+    pass a search for digits. What no check can reach is a count phrased around
+    the number — that stays a reviewer's job, and it is why the ceiling above is
+    asserted at all: a short form that grows enough to start counting things is
+    a short form that has started restating the page below it.
+    """
+    form = transcripts.short_form(transcripts.README.read_text(encoding="utf-8"))
+    words = {word.strip(".,;:*`()[]").lower() for word in form.prose.split()}
+
+    assert not words.intersection(SPELLED_COUNTS), sorted(words.intersection(SPELLED_COUNTS))
+
+
 def test_the_short_form_carries_no_number_a_check_does_not_hold() -> None:
     """Every count, figure or identifier in the short form is included or absent.
 

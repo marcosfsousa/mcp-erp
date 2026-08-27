@@ -1,6 +1,16 @@
-# mcp-erp
+# Model Context Protocol server with OAuth 2.0
 
 <!-- short form: soft ceiling 120 words -->
+
+A portfolio exhibit: a Model Context Protocol server over a mock purchase-to-pay
+ERP, built to be read and run rather than to serve users.
+
+**Authorization is the subject here, not a feature.** A token is earned at a
+real login screen, from a real authorization server, and what it may do is
+decided per request by granted scope intersected with roles the server resolves
+for itself. So the same endpoint, asked the same question, does not give every
+caller the same answer:
+
 <!-- card: derived from docs/transcripts/tools-list-for-two-tokens.txt -->
 | `tools/list` answers | **priya-raman** | **rafael-costa** |
 | --- | --- | --- |
@@ -11,6 +21,11 @@
 | `record_invoice` | ✓ | ✓ |
 | `submit_requisition` | ✓ | ✓ |
 <!-- /card -->
+
+The long version is [**`docs/walkthrough.md`**](docs/walkthrough.md), which
+walks that difference end to end with the beats around it, every exchange
+copied from a captured run.
+
 <!-- /short form -->
 
 A Model Context Protocol server exposing a mock enterprise resource planning
