@@ -54,11 +54,19 @@ ones this exhibit makes are over the JSON-RPC body, which no proxy touches.
 
 ## What it does not do
 
-No TLS. Plain HTTP on both identifiers is the normative register's *Plain-HTTP
-identifiers* deviation, a hard `MUST` departure carried deliberately, and the route that would close it —
-terminating TLS at a fixed hostname as a **non-default opt-in profile** — is
-declined for v1 on setup cost rather than on impossibility. This file is where
-that profile would land.
+No TLS. Plain HTTP on both identifiers under `docker compose up` is the
+normative register's *Plain-HTTP identifiers* deviation, a hard `MUST` departure
+carried deliberately. The route that would close it — terminating TLS at a fixed
+hostname as a **non-default opt-in profile** — is built and ships: ADR-0014 took
+it, and `docker compose --env-file tls.env up` runs it.
+
+**It did not land here.** The profile terminates TLS at the authorization
+server, because the reason for it is a browser reaching Keycloak's login — so it
+lives in `compose.yaml`, `tls.env`, `keycloak/tls/` and `keycloak/README.md`.
+The gateway publishes `8080` over plain HTTP under both configurations, which is
+what keeps the audience stable: `compose.yaml` pins `MCP_RESOURCE_URL` to
+`http://localhost:8080/mcp` and says outright that it does not follow the
+profile. The scheme that moves is the issuer's, and only the issuer's.
 
 No `Origin` header is added or removed. Gate 1 lives in the server, where the
 allow-list ships empty and the emptiness is the position.

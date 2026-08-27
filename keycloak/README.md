@@ -74,9 +74,11 @@ actually exercises.
 
 ## Reaching it
 
-The issuer is `http://keycloak:8081/realms/mcp-erp`, and that one string has to
-resolve identically on both sides of the container boundary, because ADR-0005
-configures the resource server with the issuer and nothing else.
+The issuer is `http://keycloak:8081/realms/mcp-erp` under `docker compose up`;
+the opt-in TLS profile below moves it to `https` and moves nothing else. That one
+string, whichever of the two it is, has to resolve identically on both sides of
+the container boundary, because ADR-0005 configures the resource server with the
+issuer and nothing else.
 
 - **Inside the Compose network**, `keycloak` resolves by Compose's own DNS.
 - **From the host**, add one line to your hosts file:
