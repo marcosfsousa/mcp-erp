@@ -8,7 +8,7 @@ It closes two gaps that contract postings ask for and a file tree does not show.
 
 **The Model Context Protocol as a build task.** A modern-era server — revision
 `2026-07-28`, which removed connection initialization entirely — answering real
-clients over Streamable HTTP, with five purchase-to-pay tools and no handshake to
+clients over Streamable HTTP, with purchase-to-pay tools and no handshake to
 establish anything.
 
 **OAuth 2.0, OpenID Connect and role-based access control.** Tokens are earned
