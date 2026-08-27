@@ -1,5 +1,18 @@
 # mcp-erp
 
+<!-- short form: soft ceiling 120 words -->
+<!-- card: derived from docs/transcripts/tools-list-for-two-tokens.txt -->
+| `tools/list` answers | **priya-raman** | **rafael-costa** |
+| --- | --- | --- |
+| granted scope | `erp.write erp.read erp.decide` | `erp.write erp.read` |
+| `approve_requisition` | ✓ | absent |
+| `get_requisition` | ✓ | ✓ |
+| `list_requisitions` | ✓ | ✓ |
+| `record_invoice` | ✓ | ✓ |
+| `submit_requisition` | ✓ | ✓ |
+<!-- /card -->
+<!-- /short form -->
+
 A Model Context Protocol server exposing a mock enterprise resource planning
 system, with OAuth 2.0 as a first-class concern. It is a **portfolio exhibit**:
 it exists to be read and run, not to serve users.

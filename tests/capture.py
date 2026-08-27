@@ -1,4 +1,4 @@
-"""The three beats a minted token can perform, and the README's one embedded proof.
+"""The three beats a minted token can perform, and the README's two derived regions.
 
 `tests/transcripts.py` is what a transcript *is*; this is what drives the half of
 them that needs no consent screen. The split is not cosmetic: the flow client
@@ -17,8 +17,8 @@ Run it from a checkout, against Compose, to re-capture::
 
     uv run python tests/capture.py
 
-Or re-render the README's one embedded proof from the committed captures, which
-needs nothing running::
+Or re-render the README's two derived regions — the short form's card and the
+one embedded proof — from the committed captures, which needs nothing running::
 
     uv run python tests/capture.py --include
 """
@@ -35,7 +35,7 @@ from tokens import mint
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Capture the minted beats against Compose, or re-render the README's proof.
+    """Capture the minted beats against Compose, or re-render the README's derived regions.
 
     Two modes rather than two commands, on the terms `tests/conformance_client.py`
     states for its own pair: they are two halves of one job, and the two jobs that
@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--include",
         action="store_true",
-        help="only re-render the README's embedded proof from the committed captures",
+        help="only re-render the README's derived regions from the committed captures",
     )
     arguments = parser.parse_args(argv)
 
@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _include() -> int:
-    """Rewrite the README's marked region from the committed capture."""
+    """Rewrite both of the README's marked regions from the committed capture."""
     committed = transcripts.COMMITTED / f"{transcripts.PROOF}{transcripts.SUFFIX}"
     rendered = transcripts.include(
         transcripts.README.read_text(encoding="utf-8"),
@@ -62,7 +62,7 @@ def _include() -> int:
     )
 
     transcripts.README.write_bytes(rendered.encode("utf-8"))
-    print(f"included {transcripts.PROOF} in README.md")
+    print(f"included {transcripts.PROOF} in README.md, as a card and as the proof")
 
     return 0
 
