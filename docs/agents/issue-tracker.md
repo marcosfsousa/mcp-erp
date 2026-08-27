@@ -14,6 +14,43 @@ Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all op
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
+## Issue body
+
+Nothing above says what goes *in* an issue. One heading is required. Everything else you will see in this repo's issues is habit, not rule, and this section marks which is which.
+
+**Required: `## Checked and dropped`.** Every issue created on or after 2026-08-27 carries this heading. Under it goes each candidate claim the issue checked and rejected, stating three things: the claim as it would have been made, what it was checked against, and why it failed. Prose, in whatever shape fits. Where the issue rejected nothing, the body under the heading is the single line `Nothing dropped.`
+
+The heading is always present so that a missing record is visible without reading the issue. This lists the issues that fail:
+
+```
+gh issue list --state all --search "created:>=2026-08-27" --json number,body \
+  --jq '.[] | select((.body // "") | contains("## Checked and dropped") | not) | .number'
+```
+
+It binds by creation date and nothing is backfilled, so the check is green from the day the rule landed. Older issues pick the heading up only if someone edits them for other reasons.
+
+**The trigger is the checking, not the label.** A research ticket, a `/pr-cycle` rollup and a map child can each reject a candidate claim, and each loses the same work a bug does. No label enters the rule, so an issue that gets relabelled does not stop owing the record.
+
+**Why it is required rather than encouraged.** Without the heading, a claim that was checked and failed looks exactly like a claim nobody thought of, and the next person runs the same check again. Recording the rejection is the difference between an issue that reports findings and an issue that reports a search.
+
+**Worked example: #137 §Checked and dropped.** It records a third candidate for that bug, that `keycloak/README.md` and `public/README.md` are unreachable from the root README. Checked against `README.md` §*Where everything else is*, and dropped because that section opens by stating the convention that every directory holding something non-obvious carries its own README. The check leaves no trace without the heading.
+
+**The other headings are observed, not required.** Six recur across this repo's issues: *Acceptance criteria*, *Map*, *Deferred*, *Not in scope*, *What to build*, *Blocked by*. None of them binds you, and what each one means is deliberately unwritten. No frequency is quoted here because a count in prose drifts; re-derive it over whatever window you care about:
+
+```
+gh issue list --state all --limit 60 --json body \
+  --jq '[.[].body // "" | split("\n")[] | select(startswith("## "))] | group_by(.) | map({heading: .[0], uses: length}) | sort_by(-.uses) | .[]'
+```
+
+Six is where the frequency falls off, not a chosen number. Run it again to find out whether a seventh has arrived.
+
+### Amending a body
+
+A comment cannot remove a section, so an amendment that drops or rewrites one is a body edit. Either way, name the date and the issue that caused the change.
+
+- **Ordinary issues**: one line at the top of the body, `**Amended:** <date> (#<n>) — <what changed>`, one line per amendment. #137's header set this precedent and lacks only the causing issue number.
+- **The map** (`wayfinder:map`): amend in place, on the line being amended, as `**Amended <date> (#<n>):**` or `*(Updated <date> by #<n>: ...)*`, with `~~strikethrough~~` on superseded text. Map notes and constraints are cited by number from other issues, so an amendment has to sit where the citation lands. A header at the top of a hundred-line map tells a reader looking at note 5 nothing.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_

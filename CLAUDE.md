@@ -10,6 +10,10 @@ Issues live as GitHub issues in `marcosfsousa/mcp-erp`, managed with the `gh` CL
 
 Bare `#N` means an issue or pull request; map constraint and note numbers take backticks — in commit messages too. See `docs/agents/issue-tracker.md`.
 
+### Issue bodies
+
+Every issue carries `## Checked and dropped`, recording each candidate claim checked and rejected, or the line `Nothing dropped.` See `docs/agents/issue-tracker.md`.
+
 ### Triage labels
 
 The five canonical triage roles, each label string equal to its name. See `docs/agents/triage-labels.md`.
