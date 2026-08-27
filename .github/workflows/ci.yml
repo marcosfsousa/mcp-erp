@@ -360,10 +360,12 @@ jobs:
           # The three #92 added are named exactly, on the same argument
           # `keycloak/import/` is: `docs/decision-matrix/` and
           # `docs/attack-suite/` hold the hand-authored canonical tables beside
-          # the rendered ones, and `README.md` is prose with one included region
-          # in it. Naming a directory or the whole tree would report an authored
-          # edit as a rendering that drifted, which is the one diagnosis this job
-          # exists to give handed out for the one thing it is not.
+          # the rendered ones, and `README.md` is prose with two included
+          # regions in it — the one embedded proof, and the short form's card,
+          # which #142 added. Naming a directory or the whole tree would report
+          # an authored edit as a rendering that drifted, which is the one
+          # diagnosis this job exists to give handed out for the one thing it is
+          # not.
           drifted=$(git status --porcelain -- \
             src/mcp_erp/authorization/data \
             src/mcp_erp/purchase_to_pay/data \
@@ -381,13 +383,14 @@ jobs:
             echo "organisation's three renderings, and docs/decision-matrix/matrix.yaml"
             echo "for the fixtures. The two rendered tables come from"
             echo "docs/decision-matrix/matrix.yaml and docs/attack-suite/scenarios.yaml;"
-            echo "the README's one embedded proof comes from docs/transcripts/."
+            echo "the README's card and its one embedded proof both come from"
+            echo "docs/transcripts/."
             echo "Edit the source and re-run the generators; never edit a"
-            echo "rendering, or the README's marked proof region, by hand."
+            echo "rendering, or either of the README's marked regions, by hand."
             exit 1
           fi
 
-          echo "All seven renderings match the sources they are generated from."
+          echo "All eight renderings match the sources they are generated from."
 
       # The invariants a diff cannot see: that the renderers are byte-stable,
       # that the two role columns stay independent, that realm membership and

@@ -413,3 +413,176 @@ def test_a_readme_that_lost_its_markers_is_refused() -> None:
         return
 
     raise AssertionError("a README with no proof markers was accepted")
+
+
+# ─── The short form, and the card it carries ──────────────────────────────────
+
+
+ALLOWED_DIGITS = ("OAuth 2.0", "2026-07-28")
+"""The only literals carrying a digit that the short form's prose may contain.
+
+Two, each with something that goes red if it drifted, which is what #142 asks a
+reviewer to be able to name. `2026-07-28` is the protocol revision, asserted
+against the server's own answer at `tests/wire/test_endpoints.py`; `OAuth 2.0`
+names a specification family rather than a quantity, and there is nothing in it
+to drift. **Everything else with a digit in it is a count, a figure or an
+identifier**, and those are included from the capture or absent — the rule the
+card exists to satisfy.
+"""
+
+
+def test_the_card_is_derived_from_the_capture_and_not_from_a_constant() -> None:
+    """Every cell in the short form's table is read out of the committed transcript."""
+    committed = (transcripts.COMMITTED / f"{transcripts.PROOF}{transcripts.SUFFIX}").read_text(
+        encoding="utf-8"
+    )
+    derived = transcripts.card(committed)
+
+    assert "priya-raman" in derived
+    assert "rafael-costa" in derived
+    assert "erp.decide" in derived
+
+
+def test_the_card_shows_the_tool_absent_rather_than_refused() -> None:
+    """The one row that carries the exhibit's claim, and the only asymmetric cell.
+
+    `approve_requisition` is in Priya Raman's listing and not in Rafael Costa's,
+    because the authorization server declined `erp.decide` and never issued it.
+    A card that ticked both columns would be a table nobody needs; this is the
+    difference the short form exists to show without a sentence.
+    """
+    committed = (transcripts.COMMITTED / f"{transcripts.PROOF}{transcripts.SUFFIX}").read_text(
+        encoding="utf-8"
+    )
+
+    row = next(
+        line
+        for line in transcripts.card(committed).split("\n")
+        if line.startswith("| `approve_requisition`")
+    )
+
+    assert transcripts.LISTED in row
+    assert transcripts.ABSENT in row
+
+
+def test_the_readme_carries_the_card_the_capture_produces() -> None:
+    """The committed card and a fresh derivation agree, which is what the check re-runs.
+
+    The round trip one test above covers both regions at once, since
+    :func:`transcripts.include` rewrites them together. This asserts the card's
+    own bytes are in the file, so a README that kept its markers and lost its
+    table fails here rather than passing an equality that both sides satisfy.
+    """
+    committed = (transcripts.COMMITTED / f"{transcripts.PROOF}{transcripts.SUFFIX}").read_text(
+        encoding="utf-8"
+    )
+    readme = transcripts.README.read_text(encoding="utf-8")
+
+    assert transcripts.card(committed) in readme
+
+
+def test_a_readme_that_lost_its_card_markers_is_refused() -> None:
+    """A README carrying the proof's markers and not the card's is still an error.
+
+    The second region has the first's failure mode and no diff to show for it,
+    so it gets the first's refusal.
+    """
+    lost = f"# mcp-erp\n\n{transcripts.PROOF_OPENS}\n{transcripts.PROOF_CLOSES}\n"
+
+    try:
+        transcripts.include(lost, "")
+    except ValueError as refusal:
+        assert transcripts.CARD_OPENS in str(refusal)
+        return
+
+    raise AssertionError("a README with no card markers was accepted")
+
+
+def test_the_short_form_stays_under_the_ceiling_it_declares() -> None:
+    """The soft ceiling, read out of the README and asserted against the README.
+
+    **Red here is not an instruction to delete a sentence.** It says: look at
+    whether the short form has started restating the page below it, which is the
+    failure ADR-0014 §*What the README carries* names and the reason the bound is
+    soft. The number lives in the marker rather than here, on the shape
+    `matrix.yaml` uses for its own `meta.ceiling` — a ceiling a test carries is a
+    ceiling the artifact does not declare.
+
+    The card is cut out before counting. It is rendered from the capture, so a
+    tool joining the listing must never be what puts a hand-written surface over
+    its bound.
+    """
+    form = transcripts.short_form(transcripts.README.read_text(encoding="utf-8"))
+
+    assert form.words <= form.ceiling, f"{form.words} words against a ceiling of {form.ceiling}"
+
+
+SPELLED_COUNTS = (
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+)
+"""Counts the digit rule below would miss, because a spelled count is still a count.
+
+Written out rather than derived, and **`one` is deliberately not here**: in this
+repository's register it is a determiner far more often than a quantity — *the
+one proof*, *one route onward* — so forbidding it would fight the prose instead
+of the drift. Everything from `two` up is a count in practice, and a count in
+the short form belongs in the card.
+"""
+
+
+def test_the_short_form_spells_out_no_count_either() -> None:
+    """The hole the digit rule leaves, closed to the extent a check can close it.
+
+    *five tools* and *two tokens* carry exactly the drift `5` and `2` would and
+    pass a search for digits. What no check can reach is a count phrased around
+    the number — that stays a reviewer's job, and it is why the ceiling above is
+    asserted at all: a short form that grows enough to start counting things is
+    a short form that has started restating the page below it.
+    """
+    form = transcripts.short_form(transcripts.README.read_text(encoding="utf-8"))
+    words = {word.strip(".,;:*`()[]").lower() for word in form.prose.split()}
+
+    assert not words.intersection(SPELLED_COUNTS), sorted(words.intersection(SPELLED_COUNTS))
+
+
+def test_the_short_form_carries_no_number_a_check_does_not_hold() -> None:
+    """Every count, figure or identifier in the short form is included or absent.
+
+    #142's first constraint, made mechanical: the prose is hand-written and
+    nothing renders it, so the only enforceable rule is that it carries no digit
+    at all outside :data:`ALLOWED_DIGITS`. A reviewer can name, for each one,
+    what would go red if it drifted. Anything countable belongs in the card,
+    where the capture answers for it.
+    """
+    form = transcripts.short_form(transcripts.README.read_text(encoding="utf-8"))
+
+    prose = form.prose
+    for allowed in ALLOWED_DIGITS:
+        prose = prose.replace(allowed, "")
+
+    assert not any(character.isdigit() for character in prose), prose
+
+
+def test_the_short_form_is_the_first_thing_under_the_title() -> None:
+    """Reachable without a click, and above every heading on the page.
+
+    #142's measurement was that 402 of 785 words came before the one proof, so
+    the property that matters is positional and this is where it is held. A
+    short form that drifted below `## Run it` would satisfy every other test
+    here and none of the ticket.
+    """
+    readme = transcripts.README.read_text(encoding="utf-8")
+
+    opens = transcripts.SHORT_OPENS.search(readme)
+    assert opens is not None
+
+    assert opens.start() < readme.index("\n## ")
+    assert opens.start() < readme.index(transcripts.PROOF_OPENS)

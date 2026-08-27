@@ -169,6 +169,43 @@ connective prose free and only the proof included: *"included from the captured
 set, never retyped."* Everything outside the two markers is a person's.
 """
 
+CARD_OPENS: Final = "<!-- card: derived from docs/transcripts/tools-list-for-two-tokens.txt -->"
+CARD_CLOSES: Final = "<!-- /card -->"
+"""The short form's table, rewritten by :func:`include` from the same capture.
+
+The second marked region, added by #142. It derives from the beat the proof
+below it derives from, deliberately: the short form and the card cannot disagree
+about what the two callers saw, because one file answers for both. What differs
+is the reading — the proof is the wire, and this is the wire's **difference**,
+one row per tool and one column per caller, which is the whole claim in a form
+that needs no English.
+"""
+
+SHORT_OPENS: Final = re.compile(r"<!-- short form: soft ceiling (\d+) words -->")
+SHORT_CLOSES: Final = "<!-- /short form -->"
+
+LISTED: Final = "✓"
+ABSENT: Final = "absent"
+"""What the card puts in a cell, and the asymmetry is the point.
+
+A tick reads at a glance and says nothing anyone has to parse. **Absence is the
+claim**, though — ADR-0002's first denial class is that an under-scoped caller
+does not see the tool at all rather than being refused when they call it — so
+the missing cell gets the word and the present one does not.
+"""
+"""The hand-written surface above the card, and the ceiling it declares for itself.
+
+**The number lives here, in the artifact, and the test reads it** — the shape
+`docs/decision-matrix/matrix.yaml` uses for its own `meta.ceiling`, and not the
+shape a constant in a test file would give it. Crossing it reviews whether the
+short form has started restating the page below it; it is not a cap on words and
+red is not an instruction to delete a sentence.
+
+Soft on ADR-0014's ground: this is the one surface in the repository made of
+prose that nothing else renders, and a hard cap would make every future edit a
+negotiation with a linter.
+"""
+
 EARNED: Final = (FLOW_COMPLETES, SCOPE_WITHOUT_ROLE, TOOLS_LIST_FOR_TWO_TOKENS)
 """The beats whose token was consented to at a login screen, written by the flow suite."""
 
@@ -580,15 +617,154 @@ def include(readme: str, transcript: str) -> str:
             them would otherwise render clean while carrying a proof nothing
             keeps current, which is the drift this whole mechanism is against.
     """
-    opens = readme.find(PROOF_OPENS)
-    closes = readme.find(PROOF_CLOSES)
+    # Both regions are looked for before either is derived, so a README that
+    # lost a marker fails naming the document rather than the capture — the
+    # derivation would otherwise raise first and blame the wrong artifact.
+    for opens, closes in ((PROOF_OPENS, PROOF_CLOSES), (CARD_OPENS, CARD_CLOSES)):
+        _bounds(readme, opens, closes)
 
-    if opens < 0 or closes < opens:
-        raise ValueError(f"README.md carries no {PROOF_OPENS} … {PROOF_CLOSES} region")
+    rendered = _rewrite(
+        readme,
+        PROOF_OPENS,
+        PROOF_CLOSES,
+        "\n".join(["", "```", proof(transcript), "```", ""]),
+    )
 
-    body = "\n".join(["", "```", proof(transcript), "```", ""])
+    return _rewrite(rendered, CARD_OPENS, CARD_CLOSES, "\n".join(["", card(transcript), ""]))
 
-    return readme[: opens + len(PROOF_OPENS)] + body + readme[closes:]
+
+def card(transcript: str) -> str:
+    """The short form's table, read out of the same committed capture.
+
+    One column per caller and one row per tool, so the exhibit's shortest
+    complete thought — same server, two tokens, different tools — is legible
+    without reading a sentence. #142 filed the absence of any such form: every
+    claim on the page was English prose, and the one proof was its third section.
+
+    Nothing here is typed. The subjects and the granted scopes are decoded out of
+    the credentials the capture presented, the tool names are the ones the
+    listings answered with, and a cell is :data:`ABSENT` exactly when a caller's
+    listing did not carry that tool.
+
+    Args:
+        transcript: `docs/transcripts/tools-list-for-two-tokens.txt`, as committed.
+
+    Returns:
+        The Markdown table that goes between the card's markers.
+
+    Raises:
+        ValueError: The capture carries no bearer token, or a different number of
+            them than it carries listings — :func:`proof`'s condition, for the
+            same reason: a table derived from it would be a guess.
+    """
+    bearers = _bearers(transcript)
+    listings = _listings(transcript)
+
+    if not bearers or len(bearers) != len(listings):
+        raise ValueError(
+            f"{PROOF}{SUFFIX} carries {len(bearers)} bearer tokens and "
+            f"{len(listings)} tool listings, and a card needs one of each per caller"
+        )
+
+    claims = [decode_claims(bearer) for bearer in bearers]
+    tools = sorted({name for listing in listings for name in listing})
+
+    rows = [
+        _row("`tools/list` answers", [f"**{held.get('sub')}**" for held in claims]),
+        _row("---", ["---"] * len(claims)),
+        _row("granted scope", [f"`{held.get('scope')}`" for held in claims]),
+    ]
+    rows.extend(
+        _row(f"`{tool}`", [LISTED if tool in listing else ABSENT for listing in listings])
+        for tool in tools
+    )
+
+    return "\n".join(rows)
+
+
+@dataclass(frozen=True, slots=True)
+class ShortForm:
+    """The README's hand-written first surface, and the ceiling it declares for itself.
+
+    Attributes:
+        ceiling: The soft ceiling read out of :data:`SHORT_OPENS`, in words.
+        prose: The region with the card cut out of it, which is what gets counted.
+            The card is rendered, so counting it would let a derivation be the
+            reason a hand-written surface went red.
+    """
+
+    ceiling: int
+    prose: str
+
+    @property
+    def words(self) -> int:
+        """What the ceiling is measured in, split on whitespace and nothing cleverer.
+
+        Markup counts as words. The error is upward, which is the safe direction
+        for a bound whose whole job is to make somebody look.
+        """
+        return len(self.prose.split())
+
+
+def short_form(readme: str) -> ShortForm:
+    """The short form, its declared ceiling, and the card removed from what is counted.
+
+    Args:
+        readme: The README as committed.
+
+    Returns:
+        The region between :data:`SHORT_OPENS` and :data:`SHORT_CLOSES`, without
+        the card, and the ceiling the opening marker declares.
+
+    Raises:
+        ValueError: The markers are missing or out of order. A README with no
+            short form is one #142 did not ship, and a ceiling nothing can find
+            is a ceiling nothing holds.
+    """
+    opens = SHORT_OPENS.search(readme)
+    closes = readme.find(SHORT_CLOSES)
+
+    if opens is None or closes < opens.end():
+        raise ValueError(f"README.md carries no {SHORT_OPENS.pattern} … {SHORT_CLOSES} region")
+
+    region = readme[opens.end() : closes]
+    card_opens = region.find(CARD_OPENS)
+    card_closes = region.find(CARD_CLOSES)
+
+    if card_opens >= 0 <= card_closes:
+        region = region[:card_opens] + region[card_closes + len(CARD_CLOSES) :]
+
+    return ShortForm(ceiling=int(opens.group(1)), prose=region)
+
+
+def _row(head: str, cells: Sequence[str]) -> str:
+    """One Markdown table row, named by the column the tools are listed in."""
+    return "| " + " | ".join([head, *cells]) + " |"
+
+
+def _rewrite(document: str, opens: str, closes: str, body: str) -> str:
+    """Replace what sits between two markers, or refuse a document that lost them.
+
+    Raises:
+        ValueError: The markers are missing or out of order. A region that is not
+            there renders clean while carrying whatever was typed in its place,
+            which is the one failure a diff check cannot see — a file nothing
+            writes to has no diff.
+    """
+    at, to = _bounds(document, opens, closes)
+
+    return document[: at + len(opens)] + body + document[to:]
+
+
+def _bounds(document: str, opens: str, closes: str) -> tuple[int, int]:
+    """Where a marked region starts and ends, or a refusal naming the pair that is missing."""
+    at = document.find(opens)
+    to = document.find(closes)
+
+    if at < 0 or to < at:
+        raise ValueError(f"README.md carries no {opens} … {closes} region")
+
+    return at, to
 
 
 def proof(transcript: str) -> str:
