@@ -22,17 +22,13 @@ caller the same answer:
 | `submit_requisition` | ✓ | ✓ |
 <!-- /card -->
 
-The long version is [**`docs/walkthrough.md`**](docs/walkthrough.md), which
-walks that difference end to end with the beats around it, every exchange
-copied from a captured run.
+[**`docs/walkthrough.md`**](docs/walkthrough.md) walks it from the login screen
+onward.
 
 <!-- /short form -->
 
-A Model Context Protocol server exposing a mock enterprise resource planning
-system, with OAuth 2.0 as a first-class concern. It is a **portfolio exhibit**:
-it exists to be read and run, not to serve users.
-
-It closes two gaps that contract postings ask for and a file tree does not show.
+The exhibit closes two gaps that contract postings ask for and a file tree does
+not show.
 
 **The Model Context Protocol as a build task.** A modern-era server — revision
 `2026-07-28`, which removed connection initialization entirely — answering real
@@ -40,11 +36,10 @@ clients over Streamable HTTP, with purchase-to-pay tools and no handshake to
 establish anything.
 
 **OAuth 2.0, OpenID Connect and role-based access control.** Tokens are earned
-through a real authorization code flow against a real authorization server,
-validated here against its published keys, and every call is decided by granted
-scope intersected with roles the server resolves per request. A token is a
-ceiling on what an application may do on someone's behalf; it is never a
-statement of what that person is allowed to do.
+through a real authorization code flow, and validated here against the
+authorization server's published keys. A token is a ceiling on what an
+application may do on someone's behalf; it is never a statement of what that
+person is allowed to do.
 
 ## Run it
 
