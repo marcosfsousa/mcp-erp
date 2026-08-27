@@ -49,14 +49,6 @@ SUITE: Suite = suite()
 META = dict(SUITE.meta)
 DECLARED = scenarios.declarations()
 
-CEILING = 35
-"""The soft ceiling `scenarios.yaml` states, and what crossing it is for.
-
-Not a cap on coverage: crossing it reviews the split rule rather than refusing a
-row, because the likely cause is two removals differing cosmetically. Asserted so
-that the review happens rather than being remembered.
-"""
-
 FLOOR = {
     # One per gate step of ADR-0006's chain, in its order. The chain is the
     # security property, so a step with no falsifier is a step that can be
@@ -90,9 +82,17 @@ that decision should be visible.
 
 
 def test_the_declared_total_and_the_ceiling_hold() -> None:
-    """The index's headline number, against the rows it indexes."""
+    """The index's headline number, against the rows it indexes.
+
+    The ceiling is read from `meta` rather than typed here, so that the number
+    the suite is held to and the number the artifact declares are one number and
+    cannot disagree. Not a cap on coverage: crossing it reviews the split rule
+    rather than refusing a row, because the likely cause is two removals
+    differing cosmetically. Asserted so the review happens rather than being
+    remembered.
+    """
     assert META["total"] == len(SUITE.rows)
-    assert len(SUITE.rows) <= CEILING
+    assert len(SUITE.rows) <= META["ceiling"]
 
 
 def test_every_row_name_is_unique() -> None:
