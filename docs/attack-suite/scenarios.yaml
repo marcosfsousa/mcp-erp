@@ -65,6 +65,7 @@ meta:
   revision: "2026-07-28"
   total: 34
   floor: 11
+  ceiling: 35
   basis_split:
     clause: 19
     adr: 12
