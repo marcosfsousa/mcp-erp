@@ -21,3 +21,11 @@ The five canonical triage roles, each label string equal to its name. See `docs/
 ### Domain docs
 
 Single-context — one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Running the stack
+
+Every compose command selects the TLS profile, and the certificate is per-checkout. See `docs/agents/running-the-stack.md` before bringing the exhibit up, driving Claude Code against it, or minting a token.
+
+### Setup re-seeding
+
+The files under `docs/agents/` were seeded by a scaffolding tool and then hand-edited; regenerating them reverts the edits. See `docs/agents/setup-reseed.md`.
