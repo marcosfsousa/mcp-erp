@@ -11,6 +11,7 @@ Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all op
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
 - **Close on merge**: a PR body closes an issue only through a literal keyword — `close`/`closes`/`closed`, `fix`/`fixes`/`fixed`, `resolve`/`resolves`/`resolved` — followed by `#<n>`. Nothing else counts. Prose openers this repo favours (`Settles #11`, `Answers #9`, `Part of #2`) render as a plain mention and leave the issue open on merge. Keep the prose and add a bare `Closes #<n>` line, then verify before merge: `gh pr view <n> --json closingIssuesReferences` must be non-empty. An empty array means the merge will not close anything.
+- **A closing keyword fires even when it is negated.** The parser matches the keyword and ignores the words around it, so a PR body opening *"This does not close #93"* closes #93 on merge — the sentence written to prevent the close is what causes it. When a PR must reference an issue without closing it, keep every closing keyword away from the reference entirely and write `Part of #<n>, and does not complete it`. Grep the body before opening or editing a PR: `grep -n -i -E '(clos|fix|resolv)[a-z]*[[:space:]:]*#[0-9]'`. Commit messages are checked the same way.
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
