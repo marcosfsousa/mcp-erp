@@ -353,6 +353,9 @@ file a person edits, and there is nothing generated here to overwrite.
 *Added 2026-08-20 by [#46](https://github.com/marcosfsousa/mcp-erp/issues/46),
 which built the conformance client and found all of this by running it.*
 
+*Written up for a general reader at [A provisioned Keycloak client inherits no
+PKCE pin, and the obvious fix is inert](https://marcossousa.de/writing/keycloak-provisioned-client-no-pkce-pin/).*
+
 `--features=cimd` in the `Dockerfile` makes the discovery document advertise
 `"client_id_metadata_document_supported": true`, and that is where the free part
 ends. **The feature ships switched off in the realm.** An authorization request
