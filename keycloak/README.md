@@ -451,10 +451,17 @@ The obvious repair does not work, and the reason is worth stating because it
 generalises to every executor. Adding `pkce-enforcer` to the
 `client-identity-metadata-document` profile is inert: `ClientIdUriSchemeCondition`
 votes on `PRE_AUTHORIZATION_REQUEST` and **abstains on every other event**, while
-`PKCEEnforcerExecutor` does its work on `AUTHORIZATION_REQUEST` and
-`TOKEN_REQUEST`. The two never meet, so the executor sits in the profile looking
-like enforcement and enforcing nothing. **A profile is only as reachable as its
-policy's condition, and conditions are per-event.**
+`PKCEEnforcerExecutor` does its work on `REGISTER`, `UPDATE`,
+`AUTHORIZATION_REQUEST` and `TOKEN_REQUEST` — on the first two by running
+`auto-configure`, which stamps `S256` onto the proposed client, and then
+validating it. The two never meet — not at `REGISTER`, where the client is
+provisioned, and not at either request event — so the executor sits in the
+profile looking like enforcement and enforcing nothing. `client-access-type`
+abstains on `PRE_AUTHORIZATION_REQUEST`, because the condition votes on a
+resolved client or on `REGISTER`, and `PRE_AUTHORIZATION_REQUEST` offers neither.
+That is the one event `client-id-uri` votes on, so no single policy can be gated
+on both. **A profile is only as reachable as its policy's condition, and
+conditions are per-event.**
 
 So the pin is a second policy — `proof-key-for-code-exchange`, which is the name
 of both the profile and the policy that binds it, with `pkce-enforcer` as the
@@ -466,12 +473,12 @@ to a name:
 ```
 
 `ClientAccessTypeCondition` votes on any context that carries a resolved client,
-which covers both events the `pkce-enforcer` executor handles. Every client in
-this realm is public, so the pin now holds for the authored clients in this file,
-for the provisioned one that is not in it, and for any further client the realm
-gains — and `auto-configure` stamps `S256` onto the provisioned
-client as well, so the attribute and the policy agree rather than one standing in
-for the other.
+and at `REGISTER` on the proposed one, which covers all four events the
+`pkce-enforcer` executor handles. Every client in this realm is public, so the pin
+now holds for the authored clients in this file, for the provisioned one that is
+not in it, and for any further client the realm gains — and at `REGISTER`,
+`auto-configure` stamps `S256` onto the provisioned client as well, so the
+attribute and the policy agree rather than one standing in for the other.
 
 ## Two traps this directory pays for, beyond the three ADR-0007 banked
 
