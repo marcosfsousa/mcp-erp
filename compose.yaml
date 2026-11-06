@@ -33,8 +33,11 @@
 # the database holds is a function of what is committed, not of what happened to
 # it since.
 #
-# The cost is stated rather than discovered: `docker compose down` discards
-# everything, and there is nothing here worth keeping that is not in git.
+# The cost is stated rather than discovered: neither database survives into
+# the next `up`, and there is nothing in them worth keeping that is not in git.
+# Postgres's data directory is an anonymous volume the image declares;
+# `docker compose down -v` removes it, a plain `down` leaves it behind unused,
+# and the next `up` starts with a new empty one either way.
 #
 #
 # ONE HOSTNAME, TWO SIDES OF A CONTAINER BOUNDARY
