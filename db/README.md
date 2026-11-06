@@ -61,8 +61,10 @@ organisation loaded:
 
 ## Cold start every time
 
-There is no volume. `docker compose down` discards the data directory, so the
-next `up` re-runs both files — the same property Keycloak gets from an in-memory
+The data directory is an anonymous volume, which the postgres image declares at
+`/var/lib/postgresql`. `docker compose down -v` removes it; a plain `down` leaves
+it behind, unused. Either way the next `up` starts with a new empty one and
+re-runs both files — the same property Keycloak gets from an in-memory
 database, and for the same reason: what the database holds is a function of what
 is committed, not of what has happened to it since.
 

@@ -6,8 +6,10 @@ How to bring the exhibit up locally without hitting the three failures that look
 
 ```
 docker compose --env-file tls.env up -d
-docker compose --env-file tls.env down --remove-orphans
+docker compose --env-file tls.env down -v --remove-orphans
 ```
+
+The `-v` is there because the postgres image declares an anonymous volume at `/var/lib/postgresql`, and without it every `up` leaves one behind.
 
 Up and down alike, in every terminal, including a second one opened later. Run a profiled `down` before an `up` whenever the previous state is unknown.
 

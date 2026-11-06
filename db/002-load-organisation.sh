@@ -15,8 +15,8 @@
 # The translation from one to the other belongs here, next to the database that
 # needs it.
 #
-# This runs once, on an empty data directory. There is no volume, so `docker
-# compose up` after a `down` is a cold start every time — the same property the
+# This runs once, on an empty data directory. The next `up` after a `down` gets
+# a new, empty anonymous volume: a cold start every time — the same property the
 # authorization server gets from an in-memory database, and for the same reason:
 # what the database holds is a function of what is committed, not of what
 # happened to it since.
