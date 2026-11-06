@@ -25,7 +25,7 @@
 #
 # COLD START EVERY TIME, ON BOTH SERVICES
 # ---------------------------------------
-# Neither service has a volume, and that is the design rather than an omission.
+# Neither database carries data across a `down`; that is design, not omission.
 # Keycloak re-imports the realm from an empty in-memory database on every boot,
 # so it is a provable pure function of the committed files and its signing keys
 # are fresh — which turns key rotation from asserted into exercised. Postgres
